@@ -28,6 +28,7 @@ import { TurnNotifications } from './notifications';
 import { Store } from './store';
 import { UsageStore } from './usage';
 import { managedCodexPath, OnboardingRuntime } from './onboarding';
+import { discoverWorkspaceSkills } from './skill-registry';
 import type { ModelOption } from '../shared/usage';
 import type {
   AgentEvent,
@@ -867,6 +868,7 @@ async function snapshot(): Promise<AppSnapshot> {
     localUser: { name: localUserName },
     settings: store.data.settings,
     agents,
+    skills: await discoverWorkspaceSkills(store.data.settings.workspace),
     codexConnection,
     browser: browser.getState(),
     neo: neo?.getState(),
