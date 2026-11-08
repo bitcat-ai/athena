@@ -107,6 +107,7 @@ let preparingTurn: { cancelled: boolean } | undefined;
 let lastFrame: BrowserFrame | undefined;
 let demoServer: Server | undefined;
 let athenaMcp: AthenaMcpEndpoint | undefined;
+const externalRuns = new Map<string, Promise<unknown>>();
 let demoUrl = '';
 const sessions = new Map<string, AgentSession>();
 const readOnlyBrowserTools = new Set([
@@ -894,6 +895,7 @@ async function snapshot(): Promise<AppSnapshot> {
     recordings: store.data.recordings,
     browserFrame: lastFrame,
     pendingRequests: active?.requests ?? [],
+    pendingExternalConnections: athenaMcp?.connections() ?? [],
     share: sharing?.getState(),
   };
 }
@@ -943,7 +945,19 @@ async function invoke(action: string, payload: unknown) {
         throw new Error('首次准备操作不受支持');
     }
   }
-  if (action.startsWith('browser:'))
+  if (action === 'mcp:connection') {
+    if (!athenaMcp) throw new Error('MCP endpoint unavailable');
+    const data = record(payload);
+    const id = string(data.id, 100);
+    const operation = data.operation;
+    if (operation === 'approve') await athenaMcp.approve(id);
+    else if (operation === 'reject') await athenaMcp.reject(id);
+    else if (operation === 'revoke') await athenaMcp.revoke(id);
+    else throw new Error('连接操作无效');
+    emit({ type: 'mcp:connections', connections: athenaMcp.connections() });
+    return athenaMcp.connections();
+  }
+
     return sharing
       ? sharing.hostAction(action, payload)
       : dispatchBrowserAction(browser, action, payload);
@@ -1448,7 +1462,22 @@ async function launch() {
         available: agent.available,
         authenticated: agent.authentication === 'ready',
       })),
-      capabilities: ['workspace.read', 'conversation.read', 'thread.read'],
+      capabilities: ['workspace.read', 'conversation.read', 'thread.read', 'thread.start', 'thread.send', 'thread.stop'],
+    threads: {
+      start: async (input) => {
+        assertTaskEnvironment();
+        if (active || startingTurn) throw new Error('当前已有任务正在运行');
+        const conversation = createConversation('外部线程', (input.agent as AgentId | undefined) ?? store.data.settings.agent);
+        if (input.workspace && input.workspace !== store.data.settings.workspace) throw new Error('工作目录不匹配');
+        await prepareConversation(conversation);
+        return { conversationId: conversation.id, agentSessionId: sessions.get(conversation.id)?.sessionId };
+      },
+      send: async (thread, text) => {
+        const conversation = getConversation(thread.conversationId);
+        await runTurn(conversation, text, undefined, 'desktop', false, undefined, []);
+      },
+      stop: async () => { await stopTurn(); },
+    },
     }),
     configuration: {
       read: async (kind) => {

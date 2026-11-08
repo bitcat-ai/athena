@@ -22,9 +22,17 @@ export interface ConfigurationController {
 }
 interface ConnectionRequest { id: string; token: string; agent: { id: string; name: string }; requestedMode: AccessMode; status: 'pending' | 'approved' | 'rejected' | 'revoked'; mode?: AccessMode; }
 interface Thread { id: string; ref: ExternalThreadRef; status: 'running' | 'idle' | 'stopped' | 'failed' | 'unknown-result'; queue: string[]; busy: boolean; }
+export interface PendingConnection {
+  id: string;
+  agent: { id: string; name: string };
+  requestedMode: AccessMode;
+  status: ConnectionRequest['status'];
+  mode?: AccessMode;
+}
 export interface AthenaMcpEndpoint {
   readonly url: string;
   start(): Promise<void>; stop(): Promise<void>;
+  connections(): PendingConnection[];
   approve(id: string): Promise<{ id: string; mode: AccessMode }>;
   reject(id: string): Promise<{ id: string; rejected: true }>;
   revoke(id: string): Promise<{ id: string; revoked: true }>;
@@ -32,14 +40,17 @@ export interface AthenaMcpEndpoint {
 function json(response: ServerResponse, status: number, body: unknown) { response.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }); response.end(JSON.stringify(body)); }
 async function body(request: IncomingMessage): Promise<unknown> { let data = ''; for await (const chunk of request) data += chunk; if (data.length > 64 * 1024) throw new Error('request too large'); return JSON.parse(data || '{}'); }
 function text(value: unknown): string { if (typeof value !== 'string' || !value.trim() || value.length > 60_000) throw new Error('invalid text'); return value; }
-export function createAthenaMcpEndpoint(options: { getState: () => AthenaMcpState; threads?: ThreadController; configuration?: ConfigurationController }): AthenaMcpEndpoint {
+export function createAthenaMcpEndpoint(options: { getState: () => AthenaMcpState; threads?: ThreadController; configuration?: ConfigurationController; onConnections?: (connections: PendingConnection[]) => void }): AthenaMcpEndpoint {
   const connections = new Map<string, ConnectionRequest>(); const threads = new Map<string, Thread>(); let server: Server | undefined; let address = '';
   function authorized(request: IncomingMessage, operation = 'state.read') { const token = request.headers.authorization?.match(/^Bearer\s+(.+)$/)?.[1]; const connection = [...connections.values()].find((item) => item.token === token && item.status === 'approved'); if (!connection) throw Object.assign(new Error('approval_required'), { status: 401 }); if (!connection.mode || !canAccess(connection.mode, operation)) throw Object.assign(new Error('access_denied'), { status: 403 }); return connection; }
   async function drain(thread: Thread) { if (thread.busy || !thread.queue.length || !options.threads) return; const next = thread.queue.shift()!; thread.busy = true; thread.status = 'running'; try { await options.threads.send(thread.ref, next); thread.status = 'idle'; } catch { thread.status = 'failed'; } finally { thread.busy = false; if (thread.queue.length && thread.status === 'idle') void drain(thread); } }
   const endpoint: AthenaMcpEndpoint = {
     get url() { return address; },
+    connections() {
+      return [...connections.values()].map(({ token: _token, ...connection }) => ({ ...connection }));
+    },
     async start() { if (server) return; server = createServer(async (request, response) => { try { const url = new URL(request.url ?? '/', 'http://127.0.0.1');
-      if (request.method === 'POST' && url.pathname === '/api/v1/connections') { const value = await body(request) as any; if (!value.agent || typeof value.agent.id !== 'string' || typeof value.agent.name !== 'string' || !['read-only', 'supervised', 'full'].includes(value.requestedMode)) { json(response, 400, { error: 'invalid_connection_request' }); return; } const connection: ConnectionRequest = { id: randomUUID(), token: randomBytes(32).toString('hex'), agent: { id: value.agent.id, name: value.agent.name }, requestedMode: value.requestedMode, status: 'pending' }; connections.set(connection.id, connection); json(response, 202, { id: connection.id, token: connection.token, request: { agent: connection.agent, requestedMode: connection.requestedMode, status: connection.status } }); return; }
+      if (request.method === 'POST' && url.pathname === '/api/v1/connections') { const value = await body(request) as any; if (!value.agent || typeof value.agent.id !== 'string' || typeof value.agent.name !== 'string' || !['read-only', 'supervised', 'full'].includes(value.requestedMode)) { json(response, 400, { error: 'invalid_connection_request' }); return; } const connection: ConnectionRequest = { id: randomUUID(), token: randomBytes(32).toString('hex'), agent: { id: value.agent.id, name: value.agent.name }, requestedMode: value.requestedMode, status: 'pending' }; connections.set(connection.id, connection); options.onConnections?.(endpoint.connections()); json(response, 202, { id: connection.id, token: connection.token, request: { agent: connection.agent, requestedMode: connection.requestedMode, status: connection.status } }); return; }
       if (request.method === 'GET' && url.pathname === '/api/v1/state') { const connection = authorized(request, 'state.read'); json(response, 200, { ...options.getState(), accessMode: connection.mode }); return; }
       if (url.pathname === '/api/v1/configuration' || url.pathname.startsWith('/api/v1/configuration/')) { const kind = url.pathname.slice('/api/v1/configuration/'.length) as ConfigurationKind; if (!['skills', 'mcp', 'agents', 'workspace'].includes(kind)) { json(response, 404, { error: 'configuration_not_found' }); return; } if (request.method === 'GET') { authorized(request, 'configuration.read'); if (!options.configuration) { json(response, 501, { error: 'configuration_unavailable' }); return; } json(response, 200, { kind, value: await options.configuration.read(kind) }); return; } if (request.method === 'PUT') { authorized(request, 'configuration.write'); if (!options.configuration) { json(response, 501, { error: 'configuration_unavailable' }); return; } const value = await body(request); json(response, 200, { kind, value: await options.configuration.write(kind, value) }); return; } json(response, 405, { error: 'method_not_allowed' }); return; }
       if (url.pathname === '/api/v1/threads' || url.pathname.startsWith('/api/v1/threads/')) { const match = url.pathname.match(/^\/api\/v1\/threads\/([^/]+)(?:\/(messages|stop))?$/); const connection = authorized(request, request.method === 'GET' ? 'thread.read' : match?.[2] === 'stop' ? 'thread.stop' : match?.[2] === 'messages' ? 'thread.send' : 'thread.start'); if (!options.threads) { json(response, 501, { error: 'thread_control_unavailable' }); return; }
@@ -52,8 +63,8 @@ export function createAthenaMcpEndpoint(options: { getState: () => AthenaMcpStat
       json(response, 404, { error: 'not_found' });
     } catch (error) { json(response, (error as any).status ?? 400, { error: error instanceof Error ? error.message : 'malformed_request' }); } }); await new Promise<void>((resolve, reject) => { server!.once('error', reject); server!.listen(0, '127.0.0.1', resolve); }); const info = server.address() as { port: number }; address = `http://127.0.0.1:${info.port}`; },
     async stop() { if (!server) return; await new Promise<void>((resolve) => server!.close(() => resolve())); server = undefined; address = ''; },
-    async approve(id) { const connection = connections.get(id); if (!connection || connection.status !== 'pending') throw new Error('connection is not pending'); connection.status = 'approved'; connection.mode = connection.requestedMode; return { id, mode: connection.mode }; },
-    async reject(id) { const connection = connections.get(id); if (!connection || connection.status !== 'pending') throw new Error('connection is not pending'); connection.status = 'rejected'; return { id, rejected: true }; },
-    async revoke(id) { const connection = connections.get(id); if (!connection || connection.status !== 'approved') throw new Error('connection is not approved'); connection.status = 'revoked'; return { id, revoked: true }; },
+    async approve(id) { const connection = connections.get(id); if (!connection || connection.status !== 'pending') throw new Error('connection is not pending'); connection.status = 'approved'; connection.mode = connection.requestedMode; options.onConnections?.(endpoint.connections()); return { id, mode: connection.mode }; },
+    async reject(id) { const connection = connections.get(id); if (!connection || connection.status !== 'pending') throw new Error('connection is not pending'); connection.status = 'rejected'; options.onConnections?.(endpoint.connections()); return { id, rejected: true }; },
+    async revoke(id) { const connection = connections.get(id); if (!connection || connection.status !== 'approved') throw new Error('connection is not approved'); connection.status = 'revoked'; options.onConnections?.(endpoint.connections()); return { id, revoked: true }; },
   }; return endpoint;
 }

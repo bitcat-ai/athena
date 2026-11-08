@@ -168,6 +168,7 @@ export default function App() {
   const [showUsage, setShowUsage] = useState(false);
   const [settings, setSettings] = useState<Settings>({ workspace: '', agent: 'codex' });
   const [skills, setSkills] = useState<AppSnapshot['skills']>([]);
+  const [pendingExternalConnections, setPendingExternalConnections] = useState<AppSnapshot['pendingExternalConnections']>([]);
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
   const workspaceLabel =
     settings.workspaceMode === 'personal' ? '不绑定文件夹' : basename(settings.workspace);
@@ -330,6 +331,8 @@ export default function App() {
     const handle = (event: AppEvent) => {
       if (event.type === 'onboarding:state') {
         acceptOnboardingState(event.state);
+      } else if (event.type === 'mcp:connections') {
+        setPendingExternalConnections(event.connections ?? []);
       } else if (event.type === 'codex:state') {
         if (
           event.state.conversationId &&
@@ -485,6 +488,7 @@ export default function App() {
         if (!neoUpdated) setNeo(snapshot.neo ?? { status: 'stopped' });
         setAgents(snapshot.agents);
         setSkills(snapshot.skills ?? []);
+        setPendingExternalConnections(snapshot.pendingExternalConnections ?? []);
         if (!codexUpdated) setCodexConnection(snapshot.codexConnection ?? { status: 'idle' });
         if (!browserUpdated) {
           activeBrowserTab.current = snapshot.browser.activeTabId;
@@ -809,6 +813,7 @@ export default function App() {
       workspacePath = snapshot.settings.workspace;
       setSettings(snapshot.settings);
       setAgents(snapshot.agents);
+      setSkills(snapshot.skills ?? []);
       setBrowser(snapshot.browser);
       setNeo(snapshot.neo ?? { status: 'stopped' });
       lastFrame.current = snapshot.browserFrame ?? lastFrame.current;
@@ -1065,6 +1070,28 @@ export default function App() {
                   </ActionButton>
                 </Card.Content>
               </Card>
+              {pendingExternalConnections.length > 0 && (
+                <Card className="settings-workspace-card" aria-label="外部连接审批">
+                  <Card.Content>
+                    <div>
+                      <span>外部 Agent 连接</span>
+                      {pendingExternalConnections.map((connection) => (
+                        <div key={connection.id}>
+                          <strong>{connection.agent.name} · {connection.requestedMode}</strong>
+                          {connection.status === 'pending' ? (
+                            <>
+                              <ActionButton onPress={() => void action('mcp:connection', { id: connection.id, operation: 'approve' })}>批准</ActionButton>
+                              <ActionButton variant="secondary" onPress={() => void action('mcp:connection', { id: connection.id, operation: 'reject' })}>拒绝</ActionButton>
+                            </>
+                          ) : connection.status === 'approved' ? (
+                            <ActionButton variant="secondary" onPress={() => void action('mcp:connection', { id: connection.id, operation: 'revoke' })}>撤销</ActionButton>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  </Card.Content>
+                </Card>
+              )}
               <ActionButton
                 className="text-button onboarding-reopen"
                 isDisabled={openingOnboarding}
