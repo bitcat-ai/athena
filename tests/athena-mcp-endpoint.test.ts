@@ -58,6 +58,55 @@ test('rejects malformed requests and refuses write or sensitive routes', async (
   assert.equal((await request(server.url, '/api/v1/threads', { method: 'POST', headers: { authorization: `Bearer ${connection.token}` }, body: JSON.stringify({ text: 'run' }) })).status, 403);
 });
 
+test('executes initial thread input exactly once', async (t) => {
+  const calls: string[] = [];
+  const server = createAthenaMcpEndpoint({
+    getState: () => state,
+    threads: {
+      start: async () => ({ conversationId: 'conversation-1', agentSessionId: 'session-1' }),
+      send: async (_thread, text) => { calls.push(text); },
+      stop: async () => {},
+    },
+  });
+  await server.start();
+  t.after(() => server.stop());
+  const pending = await request(server.url, '/api/v1/connections', { method: 'POST', body: JSON.stringify({ agent: { name: 'Runner', id: 'runner-1' }, requestedMode: 'supervised' }) });
+  const connection = await pending.json();
+  await server.approve(connection.id);
+  const started = await request(server.url, '/api/v1/threads', { method: 'POST', headers: { authorization: `Bearer ${connection.token}` }, body: JSON.stringify({ text: 'initial', agent: 'codex', workspace: '/Users/test/project' }) });
+  assert.equal(started.status, 201);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepEqual(calls, ['initial']);
+});
+
+test('rejects stopping a thread owned by another external connection', async (t) => {
+  const calls: string[] = [];
+  const server = createAthenaMcpEndpoint({
+    getState: () => state,
+    threads: {
+      start: async () => ({ conversationId: 'conversation-1', agentSessionId: 'session-1' }),
+      send: async () => {},
+      stop: async () => { calls.push('stop'); },
+    },
+  });
+  await server.start();
+  t.after(() => server.stop());
+  const connect = async (id: string) => {
+    const response = await request(server.url, '/api/v1/connections', { method: 'POST', body: JSON.stringify({ agent: { name: id, id }, requestedMode: 'supervised' }) });
+    const connection = await response.json();
+    await server.approve(connection.id);
+    return connection;
+  };
+  const owner = await connect('owner');
+  const other = await connect('other');
+  const started = await request(server.url, '/api/v1/threads', { method: 'POST', headers: { authorization: `Bearer ${owner.token}` }, body: JSON.stringify({ text: 'initial' }) });
+  const thread = await started.json();
+  const stopped = await request(server.url, `/api/v1/threads/${thread.id}/stop`, { method: 'POST', headers: { authorization: `Bearer ${other.token}` } });
+  assert.equal(stopped.status, 403);
+  assert.deepEqual(await stopped.json(), { error: 'thread_ownership_mismatch' });
+  assert.deepEqual(calls, []);
+});
+
 test('stopping an in-flight external thread discards its queued messages', async (t) => {
   const calls: string[] = [];
   let release!: () => void;
@@ -68,7 +117,7 @@ test('stopping an in-flight external thread discards its queued messages', async
     getState: () => state,
     threads: {
       start: async (input) => { calls.push(`start:${input.text}`); return { conversationId: 'conversation-1', agentSessionId: 'session-1' }; },
-      send: async (_thread, text) => { calls.push(`send:${text}`); sendStarted.resolve(); await new Promise<void>((resolve) => { release = resolve; }); },
+      send: async (_thread, text) => { calls.push(`send:${text}`); if (text === 'second') { sendStarted.resolve(); await new Promise<void>((resolve) => { release = resolve; }); } },
       stop: async () => { calls.push('stop'); },
     },
   });

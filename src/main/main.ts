@@ -1477,7 +1477,11 @@ async function launch() {
         const conversation = getConversation(thread.conversationId);
         await runTurn(conversation, text, undefined, 'desktop', false, undefined, []);
       },
-      stop: async () => { await stopTurn(); },
+      stop: async (thread) => {
+        if (active && active.conversationId !== thread.conversationId)
+          throw new Error('thread_ownership_mismatch');
+        await stopTurn();
+      },
     },
     configuration: {
       read: async (kind) => {
