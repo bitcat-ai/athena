@@ -444,6 +444,8 @@ export interface Conversation {
   agentToolsFingerprint?: string;
   previousAgentSessionIds?: string[];
   workspace?: string;
+  selectedSkills?: string[];
+  skillUsage?: import('./skills').SkillUsage[];
   remoteChatId?: string;
   /** Explicit task capabilities; absent on legacy conversations. */
   selection?: TaskSelection;

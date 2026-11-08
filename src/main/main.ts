@@ -29,6 +29,7 @@ import { Store } from './store';
 import { UsageStore } from './usage';
 import { managedCodexPath, OnboardingRuntime } from './onboarding';
 import { discoverWorkspaceSkills } from './skill-registry';
+import { buildSkillContext, selectSkills } from './skill-injection';
 import type { ModelOption } from '../shared/usage';
 import type {
   AgentEvent,
@@ -520,9 +521,22 @@ async function runTurn(
   source: 'desktop' | 'feishu' = 'desktop',
   readonly = false,
   selectedElement?: ElementRef,
+  selectedSkillNames: string[] = [],
 ) {
   assertTaskEnvironment();
-  if (active || startingTurn) throw new Error('当前任务还在进行，请先停止或等待完成');
+  const rescannedSkills = await discoverWorkspaceSkills(store.data.settings.workspace);
+  const selectedSkills = selectSkills(rescannedSkills, selectedSkillNames);
+  const skillContext = buildSkillContext(selectedSkills);
+  if (selectedSkills.length) {
+    conversation.selectedSkills = selectedSkills.map((skill) => skill.name);
+    conversation.skillUsage = selectedSkills.map((skill) => ({
+      name: skill.name,
+      source: skill.source,
+      contentHash: skill.contentHash,
+      injectionStatus: 'injected' as const,
+    }));
+  }
+
   if (conversation.workspace && conversation.workspace !== store.data.settings.workspace)
     throw new Error('这段对话属于另一个工作目录。请切换回原目录，或新建对话。');
   const info = agentInfo(conversationAgent(conversation));
@@ -633,7 +647,7 @@ async function runTurn(
     }
     await session.send(
       text,
-      [context, nativeContext].filter(Boolean).join('\n\n') || undefined,
+      [context, skillContext, nativeContext].filter(Boolean).join('\n\n') || undefined,
       selectedElement,
       modelSelection,
     );
@@ -732,10 +746,11 @@ function startTurn(
   context?: string,
   readonly = false,
   selectedElement?: ElementRef,
+  selectedSkillNames: string[] = [],
 ) {
   assertTaskEnvironment();
   if (active || startingTurn) throw new Error('当前任务还在进行，请先停止');
-  void runTurn(conversation, text, context, 'desktop', readonly, selectedElement).catch((error) =>
+  void runTurn(conversation, text, context, 'desktop', readonly, selectedElement, selectedSkillNames).catch((error) =>
     notice(error instanceof Error ? error.message : '任务失败', 'error'),
   );
   return { conversationId: conversation.id };
@@ -1076,11 +1091,14 @@ async function invoke(action: string, payload: unknown) {
       const context = data.context === undefined ? undefined : string(data.context, 60_000);
       const selectedRef =
         data.selectedRef === undefined ? undefined : string(data.selectedRef, 1500);
+      const selectedSkillNames = Array.isArray(data.selectedSkills)
+        ? data.selectedSkills.map((name) => string(name, 100))
+        : [];
       const selected = selectedRef ? browser.getState().selectedElement : undefined;
       if (selectedRef && selected?.ref !== selectedRef)
         throw new Error('选中的元素已变化，请重新选取后发送。');
       const conversation = data.id ? getConversation(data.id) : createConversation();
-      return startTurn(conversation, string(data.text), context, false, selected);
+      return startTurn(conversation, string(data.text), context, false, selected, selectedSkillNames);
     }
     case 'conversation:stop':
       await stopTurn();
