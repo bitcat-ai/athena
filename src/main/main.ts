@@ -1463,6 +1463,7 @@ async function launch() {
         authenticated: agent.authentication === 'ready',
       })),
       capabilities: ['workspace.read', 'conversation.read', 'thread.read', 'thread.start', 'thread.send', 'thread.stop'],
+    }),
     threads: {
       start: async (input) => {
         assertTaskEnvironment();
