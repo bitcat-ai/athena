@@ -1470,6 +1470,12 @@ async function launch() {
         if (active || startingTurn) throw new Error('当前已有任务正在运行');
         const conversation = createConversation('外部线程', (input.agent as AgentId | undefined) ?? store.data.settings.agent);
         if (input.workspace && input.workspace !== store.data.settings.workspace) throw new Error('工作目录不匹配');
+        if (input.model !== undefined) {
+          const catalog = await listModels(false, conversation);
+          const option = catalog.find((item) => item.model === input.model);
+          if (!option) throw new Error('所选模型不在 CLI 可用列表中，请刷新后重试');
+          conversation.modelSelection = { model: option.model, effort: option.defaultEffort };
+        }
         await prepareConversation(conversation);
         return { conversationId: conversation.id, agentSessionId: sessions.get(conversation.id)?.sessionId };
       },
