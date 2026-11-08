@@ -192,7 +192,36 @@ test('passes an external model selection to the thread controller', async (t) =>
   assert.equal(receivedModel, 'gpt-5-mini');
 });
 
-test('stopping an in-flight external thread discards its queued messages', async (t) => {
+test('serializes external thread operations so starts cannot overlap', async (t) => {
+  let inFlight = 0;
+  let maxInFlight = 0;
+  const server = createAthenaMcpEndpoint({
+    getState: () => state,
+    threads: {
+      start: async (input) => {
+        inFlight += 1;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        inFlight -= 1;
+        return { conversationId: input.text };
+      },
+      send: async () => {},
+      stop: async () => {},
+    },
+  });
+  await server.start();
+  t.after(() => server.stop());
+  const response = await request(server.url, '/api/v1/connections', { method: 'POST', body: JSON.stringify({ agent: { name: 'Runner', id: 'runner-1' }, requestedMode: 'supervised' }) });
+  const connection = await response.json();
+  await server.approve(connection.id);
+  const auth = { authorization: `Bearer ${connection.token}` };
+  await Promise.all([
+    request(server.url, '/api/v1/threads', { method: 'POST', headers: auth, body: JSON.stringify({ text: 'one' }) }),
+    request(server.url, '/api/v1/threads', { method: 'POST', headers: auth, body: JSON.stringify({ text: 'two' }) }),
+  ]);
+  assert.equal(maxInFlight, 1);
+});
+
   const calls: string[] = [];
   let release!: () => void;
   const sendStarted = new Promise<void>((resolve) => {
