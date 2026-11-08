@@ -28,6 +28,9 @@ import { TurnNotifications } from './notifications';
 import { Store } from './store';
 import { UsageStore } from './usage';
 import { managedCodexPath, OnboardingRuntime } from './onboarding';
+import { discoverWorkspaceSkills } from './skill-registry';
+import { buildSkillContext, selectSkills } from './skill-injection';
+import { createAthenaMcpEndpoint, type AthenaMcpEndpoint } from './athena-mcp-endpoint';
 import type { ModelOption } from '../shared/usage';
 import type {
   AgentEvent,
@@ -100,9 +103,20 @@ let active:
     }
   | undefined;
 let startingTurn = false;
-let preparingTurn: { cancelled: boolean } | undefined;
+let preparingTurn:
+  | { cancelled: boolean; done: Promise<void>; resolve: () => void }
+  | undefined;
+let externalTurnQueue = Promise.resolve();
+
+function queueExternalTurn<T>(operation: () => Promise<T>): Promise<T> {
+  const result = externalTurnQueue.then(operation, operation);
+  externalTurnQueue = result.then(() => undefined, () => undefined);
+  return result;
+}
 let lastFrame: BrowserFrame | undefined;
 let demoServer: Server | undefined;
+let athenaMcp: AthenaMcpEndpoint | undefined;
+const externalRuns = new Map<string, Promise<unknown>>();
 let demoUrl = '';
 const sessions = new Map<string, AgentSession>();
 const readOnlyBrowserTools = new Set([
@@ -519,9 +533,22 @@ async function runTurn(
   source: 'desktop' | 'feishu' = 'desktop',
   readonly = false,
   selectedElement?: ElementRef,
+  selectedSkillNames: string[] = [],
 ) {
   assertTaskEnvironment();
-  if (active || startingTurn) throw new Error('当前任务还在进行，请先停止或等待完成');
+  const rescannedSkills = await discoverWorkspaceSkills(store.data.settings.workspace);
+  const selectedSkills = selectSkills(rescannedSkills, selectedSkillNames);
+  const skillContext = buildSkillContext(selectedSkills);
+  if (selectedSkills.length) {
+    conversation.selectedSkills = selectedSkills.map((skill) => skill.name);
+    conversation.skillUsage = selectedSkills.map((skill) => ({
+      name: skill.name,
+      source: skill.source,
+      contentHash: skill.contentHash,
+      injectionStatus: 'injected' as const,
+    }));
+  }
+
   if (conversation.workspace && conversation.workspace !== store.data.settings.workspace)
     throw new Error('这段对话属于另一个工作目录。请切换回原目录，或新建对话。');
   const info = agentInfo(conversationAgent(conversation));
@@ -553,10 +580,15 @@ async function runTurn(
   conversation.messages.push(user, assistant);
   conversation.updatedAt = Date.now();
   startingTurn = true;
-  const preparing = { cancelled: false };
+  let resolvePreparation!: () => void;
+  const preparationDone = new Promise<void>((resolve) => {
+    resolvePreparation = resolve;
+  });
+  const preparing = { cancelled: false, done: preparationDone, resolve: resolvePreparation };
   preparingTurn = preparing;
   await store.save().catch((error) => {
     startingTurn = false;
+    preparing.resolve();
     preparingTurn = undefined;
     throw error;
   });
@@ -570,6 +602,7 @@ async function runTurn(
   }
   if (preparing.cancelled) {
     startingTurn = false;
+    preparing.resolve();
     preparingTurn = undefined;
     assistant.status = 'error';
     assistant.text = '任务已停止';
@@ -584,6 +617,7 @@ async function runTurn(
     session = getSession(conversation, info.path, toolsFor(conversation), visibleHistory);
   } catch (error) {
     startingTurn = false;
+    preparing.resolve();
     preparingTurn = undefined;
     assistant.status = 'error';
     assistant.failure = error instanceof Error ? error.message : 'CLI 会话配置无效';
@@ -610,6 +644,7 @@ async function runTurn(
     nativeApprovals: new Map(),
   };
   startingTurn = false;
+  preparing.resolve();
   preparingTurn = undefined;
   try {
     if (!session.isReady) connectionState({ status: 'starting', conversationId: conversation.id });
@@ -632,7 +667,7 @@ async function runTurn(
     }
     await session.send(
       text,
-      [context, nativeContext].filter(Boolean).join('\n\n') || undefined,
+      [context, skillContext, nativeContext].filter(Boolean).join('\n\n') || undefined,
       selectedElement,
       modelSelection,
     );
@@ -686,7 +721,11 @@ async function runTurn(
   }
 }
 async function stopTurn() {
-  if (preparingTurn) preparingTurn.cancelled = true;
+  const preparing = preparingTurn;
+  if (preparing) {
+    preparing.cancelled = true;
+    await preparing.done;
+  }
   if (!active) return;
   active.cancelled = true;
   browser.revokeAgentControl();
@@ -731,10 +770,11 @@ function startTurn(
   context?: string,
   readonly = false,
   selectedElement?: ElementRef,
+  selectedSkillNames: string[] = [],
 ) {
   assertTaskEnvironment();
   if (active || startingTurn) throw new Error('当前任务还在进行，请先停止');
-  void runTurn(conversation, text, context, 'desktop', readonly, selectedElement).catch((error) =>
+  void runTurn(conversation, text, context, 'desktop', readonly, selectedElement, selectedSkillNames).catch((error) =>
     notice(error instanceof Error ? error.message : '任务失败', 'error'),
   );
   return { conversationId: conversation.id };
@@ -867,6 +907,7 @@ async function snapshot(): Promise<AppSnapshot> {
     localUser: { name: localUserName },
     settings: store.data.settings,
     agents,
+    skills: await discoverWorkspaceSkills(store.data.settings.workspace),
     codexConnection,
     browser: browser.getState(),
     neo: neo?.getState(),
@@ -875,6 +916,7 @@ async function snapshot(): Promise<AppSnapshot> {
     recordings: store.data.recordings,
     browserFrame: lastFrame,
     pendingRequests: active?.requests ?? [],
+    pendingExternalConnections: athenaMcp?.connections() ?? [],
     share: sharing?.getState(),
   };
 }
@@ -924,7 +966,19 @@ async function invoke(action: string, payload: unknown) {
         throw new Error('首次准备操作不受支持');
     }
   }
-  if (action.startsWith('browser:'))
+  if (action === 'mcp:connection') {
+    if (!athenaMcp) throw new Error('MCP endpoint unavailable');
+    const data = record(payload);
+    const id = string(data.id, 100);
+    const operation = data.operation;
+    if (operation === 'approve') await athenaMcp.approve(id);
+    else if (operation === 'reject') await athenaMcp.reject(id);
+    else if (operation === 'revoke') await athenaMcp.revoke(id);
+    else throw new Error('连接操作无效');
+    emit({ type: 'mcp:connections', connections: athenaMcp.connections() });
+    return athenaMcp.connections();
+  }
+
     return sharing
       ? sharing.hostAction(action, payload)
       : dispatchBrowserAction(browser, action, payload);
@@ -1074,11 +1128,14 @@ async function invoke(action: string, payload: unknown) {
       const context = data.context === undefined ? undefined : string(data.context, 60_000);
       const selectedRef =
         data.selectedRef === undefined ? undefined : string(data.selectedRef, 1500);
+      const selectedSkillNames = Array.isArray(data.selectedSkills)
+        ? data.selectedSkills.map((name) => string(name, 100))
+        : [];
       const selected = selectedRef ? browser.getState().selectedElement : undefined;
       if (selectedRef && selected?.ref !== selectedRef)
         throw new Error('选中的元素已变化，请重新选取后发送。');
       const conversation = data.id ? getConversation(data.id) : createConversation();
-      return startTurn(conversation, string(data.text), context, false, selected);
+      return startTurn(conversation, string(data.text), context, false, selected, selectedSkillNames);
     }
     case 'conversation:stop':
       await stopTurn();
@@ -1408,6 +1465,65 @@ async function launch() {
     onState: (state) => emit({ type: 'onboarding:state', state }),
   });
   await onboarding.initialize();
+  athenaMcp = createAthenaMcpEndpoint({
+    getState: () => ({
+      workspace: {
+        path: store.data.settings.workspace,
+        mode: store.data.settings.workspaceMode === 'personal' ? 'personal' : 'project',
+      },
+      conversations: store.data.conversations.map((conversation) => ({
+        id: conversation.id,
+        title: conversation.title,
+        status: conversation.messages.some((message) => message.status === 'streaming') ? 'running' : 'idle',
+        agent: conversation.agent,
+        model: conversation.modelSelection?.model,
+      })),
+      providers: agents.map((agent) => ({
+        id: agent.id,
+        available: agent.available,
+        authenticated: agent.authentication === 'ready',
+      })),
+      capabilities: ['workspace.read', 'conversation.read', 'thread.read', 'thread.start', 'thread.send', 'thread.stop'],
+    }),
+    threads: {
+      start: async (input) => {
+        assertTaskEnvironment();
+        if (active || startingTurn) throw new Error('当前已有任务正在运行');
+        const conversation = createConversation('外部线程', (input.agent as AgentId | undefined) ?? store.data.settings.agent);
+        if (input.workspace && input.workspace !== store.data.settings.workspace) throw new Error('工作目录不匹配');
+        if (input.model !== undefined) {
+          const catalog = await listModels(false, conversation);
+          const option = catalog.find((item) => item.model === input.model);
+          if (!option) throw new Error('所选模型不在 CLI 可用列表中，请刷新后重试');
+          conversation.modelSelection = { model: option.model, effort: option.defaultEffort };
+        }
+        await prepareConversation(conversation);
+        return { conversationId: conversation.id, agentSessionId: sessions.get(conversation.id)?.sessionId };
+      },
+      send: async (thread, text) => {
+        const conversation = getConversation(thread.conversationId);
+        return queueExternalTurn(() =>
+          runTurn(conversation, text, undefined, 'desktop', false, undefined),
+        );
+      },
+      stop: async (thread) => {
+        if (active && active.conversationId !== thread.conversationId)
+          throw new Error('thread_ownership_mismatch');
+        await stopTurn();
+      },
+    },
+    configuration: {
+      read: async (kind) => {
+        if (kind === 'skills') return discoverWorkspaceSkills(store.data.settings.workspace);
+        if (kind === 'workspace') return store.data.settings;
+        return {};
+      },
+      write: async () => {
+        throw new Error('configuration_write_not_supported');
+      },
+    },
+  });
+  await athenaMcp.start();
   feishu = new FeishuConnector({
     storageDir: path.join(app.getPath('userData'), 'feishu'),
     deferRestore: true,
@@ -1483,6 +1599,7 @@ app.on('before-quit', (event) => {
   browser?.revokeAgentControl();
   demoServer?.close();
   void Promise.allSettled([
+    athenaMcp?.stop(),
     onboarding?.dispose(),
     sharing
       ?.stop()
