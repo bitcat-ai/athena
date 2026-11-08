@@ -143,6 +143,55 @@ test('rejects messages for stopped, failed, and unknown-result threads', async (
   assert.deepEqual(await failedMessage.json(), { error: 'thread_not_accepting_messages' });
 });
 
+test('failed external stop remains retryable and does not report a misleading gone thread', async (t) => {
+  let stopAttempts = 0;
+  const server = createAthenaMcpEndpoint({
+    getState: () => state,
+    threads: {
+      start: async () => ({ conversationId: 'conversation-1', agentSessionId: 'session-1' }),
+      send: async () => {},
+      stop: async () => { stopAttempts += 1; throw new Error('stop unavailable'); },
+    },
+  });
+  await server.start();
+  t.after(() => server.stop());
+  const pending = await request(server.url, '/api/v1/connections', { method: 'POST', body: JSON.stringify({ agent: { name: 'Runner', id: 'runner-1' }, requestedMode: 'supervised' }) });
+  const connection = await pending.json();
+  await server.approve(connection.id);
+  const auth = { authorization: `Bearer ${connection.token}` };
+  const started = await request(server.url, '/api/v1/threads', { method: 'POST', headers: auth, body: JSON.stringify({ text: 'initial' }) });
+  const thread = await started.json();
+  const stopped = await request(server.url, `/api/v1/threads/${thread.id}/stop`, { method: 'POST', headers: auth });
+  assert.equal(stopped.status, 502);
+  assert.deepEqual(await stopped.json(), { error: 'stop unavailable' });
+  const status = await request(server.url, `/api/v1/threads/${thread.id}`, { headers: auth });
+  assert.equal((await status.json()).status, 'unknown-result');
+  const message = await request(server.url, `/api/v1/threads/${thread.id}/messages`, { method: 'POST', headers: auth, body: JSON.stringify({ text: 'retry' }) });
+  assert.equal(message.status, 409);
+  assert.deepEqual(await message.json(), { error: 'thread_stop_unknown' });
+  assert.equal(stopAttempts, 1);
+});
+
+test('passes an external model selection to the thread controller', async (t) => {
+  let receivedModel: string | undefined;
+  const server = createAthenaMcpEndpoint({
+    getState: () => state,
+    threads: {
+      start: async (input) => { receivedModel = input.model; return { conversationId: 'conversation-1' }; },
+      send: async () => {},
+      stop: async () => {},
+    },
+  });
+  await server.start();
+  t.after(() => server.stop());
+  const pending = await request(server.url, '/api/v1/connections', { method: 'POST', body: JSON.stringify({ agent: { name: 'Runner', id: 'runner-1' }, requestedMode: 'supervised' }) });
+  const connection = await pending.json();
+  await server.approve(connection.id);
+  const started = await request(server.url, '/api/v1/threads', { method: 'POST', headers: { authorization: `Bearer ${connection.token}` }, body: JSON.stringify({ text: 'initial', model: 'gpt-5-mini' }) });
+  assert.equal(started.status, 201);
+  assert.equal(receivedModel, 'gpt-5-mini');
+});
+
 test('stopping an in-flight external thread discards its queued messages', async (t) => {
   const calls: string[] = [];
   let release!: () => void;
