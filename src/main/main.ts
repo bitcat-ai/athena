@@ -103,7 +103,16 @@ let active:
     }
   | undefined;
 let startingTurn = false;
-let preparingTurn: { cancelled: boolean } | undefined;
+let preparingTurn:
+  | { cancelled: boolean; done: Promise<void>; resolve: () => void }
+  | undefined;
+let externalTurnQueue = Promise.resolve();
+
+function queueExternalTurn<T>(operation: () => Promise<T>): Promise<T> {
+  const result = externalTurnQueue.then(operation, operation);
+  externalTurnQueue = result.then(() => undefined, () => undefined);
+  return result;
+}
 let lastFrame: BrowserFrame | undefined;
 let demoServer: Server | undefined;
 let athenaMcp: AthenaMcpEndpoint | undefined;
@@ -571,10 +580,15 @@ async function runTurn(
   conversation.messages.push(user, assistant);
   conversation.updatedAt = Date.now();
   startingTurn = true;
-  const preparing = { cancelled: false };
+  let resolvePreparation!: () => void;
+  const preparationDone = new Promise<void>((resolve) => {
+    resolvePreparation = resolve;
+  });
+  const preparing = { cancelled: false, done: preparationDone, resolve: resolvePreparation };
   preparingTurn = preparing;
   await store.save().catch((error) => {
     startingTurn = false;
+    preparing.resolve();
     preparingTurn = undefined;
     throw error;
   });
@@ -588,6 +602,7 @@ async function runTurn(
   }
   if (preparing.cancelled) {
     startingTurn = false;
+    preparing.resolve();
     preparingTurn = undefined;
     assistant.status = 'error';
     assistant.text = '任务已停止';
@@ -602,6 +617,7 @@ async function runTurn(
     session = getSession(conversation, info.path, toolsFor(conversation), visibleHistory);
   } catch (error) {
     startingTurn = false;
+    preparing.resolve();
     preparingTurn = undefined;
     assistant.status = 'error';
     assistant.failure = error instanceof Error ? error.message : 'CLI 会话配置无效';
@@ -628,6 +644,7 @@ async function runTurn(
     nativeApprovals: new Map(),
   };
   startingTurn = false;
+  preparing.resolve();
   preparingTurn = undefined;
   try {
     if (!session.isReady) connectionState({ status: 'starting', conversationId: conversation.id });
@@ -704,7 +721,11 @@ async function runTurn(
   }
 }
 async function stopTurn() {
-  if (preparingTurn) preparingTurn.cancelled = true;
+  const preparing = preparingTurn;
+  if (preparing) {
+    preparing.cancelled = true;
+    await preparing.done;
+  }
   if (!active) return;
   active.cancelled = true;
   browser.revokeAgentControl();
@@ -1481,7 +1502,9 @@ async function launch() {
       },
       send: async (thread, text) => {
         const conversation = getConversation(thread.conversationId);
-        await runTurn(conversation, text, undefined, 'desktop', false, undefined, []);
+        return queueExternalTurn(() =>
+          runTurn(conversation, text, undefined, 'desktop', false, undefined),
+        );
       },
       stop: async (thread) => {
         if (active && active.conversationId !== thread.conversationId)

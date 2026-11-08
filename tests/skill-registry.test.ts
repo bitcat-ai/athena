@@ -60,6 +60,7 @@ test('rejects a skills root symlink that escapes the workspace', async () => {
   await assert.rejects(() => discoverWorkspaceSkills(root), /outside the workspace boundary/);
 });
 
+test('updates the content hash when a skill changes', async () => {
   const root = await workspace();
   await skill(root, 'changing', '---\nname: changing\ndescription: Change\n---\none\n');
   const before = (await discoverWorkspaceSkills(root))[0].contentHash;
