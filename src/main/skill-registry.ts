@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { readdir, readFile, stat } from 'node:fs/promises';
+import { readdir, readFile, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { SkillDiagnostic, WorkspaceSkill } from '../shared/skills';
 
@@ -24,6 +24,13 @@ function metadata(header: string): { name: string; description: string } | undef
 
 export async function discoverWorkspaceSkills(workspace: string): Promise<WorkspaceSkill[]> {
   const root = path.resolve(workspace, '.agents', 'skills');
+  let realRoot: string;
+  try {
+    realRoot = await realpath(root);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    throw error;
+  }
   let entries;
   try {
     entries = await readdir(root, { withFileTypes: true });
@@ -51,7 +58,17 @@ export async function discoverWorkspaceSkills(workspace: string): Promise<Worksp
     }
     let content: Buffer;
     try {
-      const info = await stat(entryPath);
+      const realPackagePath = await realpath(packagePath);
+      const realEntryPath = await realpath(entryPath);
+      if (
+        (realPackagePath !== realRoot && !realPackagePath.startsWith(`${realRoot}${path.sep}`)) ||
+        !realEntryPath.startsWith(`${realRoot}${path.sep}`)
+      ) {
+        base.diagnostics.push(diagnostic('unsafe-path', 'Skill entry path is outside the workspace boundary.'));
+        skills.push(base);
+        continue;
+      }
+      const info = await stat(realEntryPath);
       if (!info.isFile()) throw Object.assign(new Error(), { code: 'ENOENT' });
       if (info.size > MAX_ENTRY_BYTES) {
         base.diagnostics.push(diagnostic('oversized-entry', 'SKILL.md exceeds the 12KB limit.'));

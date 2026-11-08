@@ -30,6 +30,7 @@ import { UsageStore } from './usage';
 import { managedCodexPath, OnboardingRuntime } from './onboarding';
 import { discoverWorkspaceSkills } from './skill-registry';
 import { buildSkillContext, selectSkills } from './skill-injection';
+import { createAthenaMcpEndpoint, type AthenaMcpEndpoint } from './athena-mcp-endpoint';
 import type { ModelOption } from '../shared/usage';
 import type {
   AgentEvent,
@@ -105,6 +106,7 @@ let startingTurn = false;
 let preparingTurn: { cancelled: boolean } | undefined;
 let lastFrame: BrowserFrame | undefined;
 let demoServer: Server | undefined;
+let athenaMcp: AthenaMcpEndpoint | undefined;
 let demoUrl = '';
 const sessions = new Map<string, AgentSession>();
 const readOnlyBrowserTools = new Set([
@@ -1428,6 +1430,38 @@ async function launch() {
     onState: (state) => emit({ type: 'onboarding:state', state }),
   });
   await onboarding.initialize();
+  athenaMcp = createAthenaMcpEndpoint({
+    getState: () => ({
+      workspace: {
+        path: store.data.settings.workspace,
+        mode: store.data.settings.workspaceMode === 'personal' ? 'personal' : 'project',
+      },
+      conversations: store.data.conversations.map((conversation) => ({
+        id: conversation.id,
+        title: conversation.title,
+        status: conversation.messages.some((message) => message.status === 'streaming') ? 'running' : 'idle',
+        agent: conversation.agent,
+        model: conversation.modelSelection?.model,
+      })),
+      providers: agents.map((agent) => ({
+        id: agent.id,
+        available: agent.available,
+        authenticated: agent.authentication === 'ready',
+      })),
+      capabilities: ['workspace.read', 'conversation.read', 'thread.read'],
+    }),
+    configuration: {
+      read: async (kind) => {
+        if (kind === 'skills') return discoverWorkspaceSkills(store.data.settings.workspace);
+        if (kind === 'workspace') return store.data.settings;
+        return {};
+      },
+      write: async () => {
+        throw new Error('configuration_write_not_supported');
+      },
+    },
+  });
+  await athenaMcp.start();
   feishu = new FeishuConnector({
     storageDir: path.join(app.getPath('userData'), 'feishu'),
     deferRestore: true,
@@ -1503,6 +1537,7 @@ app.on('before-quit', (event) => {
   browser?.revokeAgentControl();
   demoServer?.close();
   void Promise.allSettled([
+    athenaMcp?.stop(),
     onboarding?.dispose(),
     sharing
       ?.stop()

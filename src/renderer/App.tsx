@@ -743,7 +743,12 @@ export default function App() {
   const workspace = async () => {
     const result = await action<Settings>('settings:workspace');
     if (result) {
-      if (result.workspace !== settings.workspace) setDraft('');
+      if (result.workspace !== settings.workspace) {
+        setDraft('');
+        setSelectedSkills([]);
+        const snapshot = await action<AppSnapshot>('app:snapshot');
+        if (snapshot) setSkills(snapshot.skills ?? []);
+      }
       setSettings(result);
       await newConversation();
     }
