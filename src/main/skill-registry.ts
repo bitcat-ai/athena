@@ -31,6 +31,10 @@ export async function discoverWorkspaceSkills(workspace: string): Promise<Worksp
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
     throw error;
   }
+  const workspaceRoot = await realpath(path.resolve(workspace));
+  if (!realRoot.startsWith(`${workspaceRoot}${path.sep}`)) {
+    throw new Error('Skill root is outside the workspace boundary.');
+  }
   let entries;
   try {
     entries = await readdir(root, { withFileTypes: true });

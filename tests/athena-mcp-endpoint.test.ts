@@ -107,6 +107,42 @@ test('rejects stopping a thread owned by another external connection', async (t)
   assert.deepEqual(calls, []);
 });
 
+test('rejects messages for stopped, failed, and unknown-result threads', async (t) => {
+  let failSend = false;
+  const server = createAthenaMcpEndpoint({
+    getState: () => state,
+    threads: {
+      start: async () => ({ conversationId: 'conversation-1', agentSessionId: 'session-1' }),
+      send: async () => { if (failSend) throw new Error('send failed'); },
+      stop: async () => {},
+    },
+  });
+  await server.start();
+  t.after(() => server.stop());
+  const pending = await request(server.url, '/api/v1/connections', { method: 'POST', body: JSON.stringify({ agent: { name: 'Runner', id: 'runner-1' }, requestedMode: 'supervised' }) });
+  const connection = await pending.json();
+  await server.approve(connection.id);
+  const auth = { authorization: `Bearer ${connection.token}` };
+  const start = async () => {
+    const response = await request(server.url, '/api/v1/threads', { method: 'POST', headers: auth, body: JSON.stringify({ text: 'initial' }) });
+    return response.json();
+  };
+  const send = (id: string) => request(server.url, `/api/v1/threads/${id}/messages`, { method: 'POST', headers: auth, body: JSON.stringify({ text: 'late' }) });
+
+  const stopped = await start();
+  await request(server.url, `/api/v1/threads/${stopped.id}/stop`, { method: 'POST', headers: auth });
+  const stoppedMessage = await send(stopped.id);
+  assert.equal(stoppedMessage.status, 410);
+  assert.deepEqual(await stoppedMessage.json(), { error: 'thread_gone' });
+
+  failSend = true;
+  const failed = await start();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const failedMessage = await send(failed.id);
+  assert.equal(failedMessage.status, 409);
+  assert.deepEqual(await failedMessage.json(), { error: 'thread_not_accepting_messages' });
+});
+
 test('stopping an in-flight external thread discards its queued messages', async (t) => {
   const calls: string[] = [];
   let release!: () => void;
