@@ -222,16 +222,18 @@ test('serializes external thread operations so starts cannot overlap', async (t)
   assert.equal(maxInFlight, 1);
 });
 
+test('stopping an in-flight external thread discards its queued messages', async (t) => {
   const calls: string[] = [];
-  let release!: () => void;
+  let releaseSend!: () => void;
+  let resolveSendStarted!: () => void;
   const sendStarted = new Promise<void>((resolve) => {
-    release = resolve;
+    resolveSendStarted = resolve;
   });
   const server = createAthenaMcpEndpoint({
     getState: () => state,
     threads: {
       start: async (input) => { calls.push(`start:${input.text}`); return { conversationId: 'conversation-1', agentSessionId: 'session-1' }; },
-      send: async (_thread, text) => { calls.push(`send:${text}`); if (text === 'second') { sendStarted.resolve(); await new Promise<void>((resolve) => { release = resolve; }); } },
+      send: async (_thread, text) => { calls.push(`send:${text}`); if (text === 'second') { resolveSendStarted(); await new Promise<void>((resolve) => { releaseSend = resolve; }); } },
       stop: async () => { calls.push('stop'); },
     },
   });
@@ -249,10 +251,10 @@ test('serializes external thread operations so starts cannot overlap', async (t)
   assert.equal(queued.status, 202);
   const stopped = request(server.url, `/api/v1/threads/${thread.id}/stop`, { method: 'POST', headers: auth });
   await sendStarted;
-  release();
+  releaseSend();
   assert.equal((await stopped).status, 200);
   await new Promise((resolve) => setTimeout(resolve, 0));
-  assert.deepEqual(calls, ['start:first', 'send:second', 'stop']);
+  assert.deepEqual(calls, ['start:first', 'send:first', 'send:second', 'stop']);
   const threadState = await request(server.url, `/api/v1/threads/${thread.id}`, { headers: auth });
   assert.equal((await threadState.json()).status, 'stopped');
 });
