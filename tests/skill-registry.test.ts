@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, symlink, unlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -50,7 +50,16 @@ test('rejects invalid metadata and path traversal without reading outside the bo
   assert.equal(found.some((item) => item.entryPath.includes('..')), false);
 });
 
-test('content changes produce a new hash on the next scan', async () => {
+test('rejects a skills root symlink that escapes the workspace', async () => {
+  const root = await workspace();
+  const outside = await mkdtemp(path.join(os.tmpdir(), 'athena-outside-'));
+  await mkdir(path.join(outside, 'skill'), { recursive: true });
+  await writeFile(path.join(outside, 'skill', 'SKILL.md'), '---\nname: escaped\ndescription: Escaped\n---\n');
+  await unlink(path.join(root, '.agents', 'skills'));
+  await symlink(outside, path.join(root, '.agents', 'skills'));
+  await assert.rejects(() => discoverWorkspaceSkills(root), /outside the workspace boundary/);
+});
+
   const root = await workspace();
   await skill(root, 'changing', '---\nname: changing\ndescription: Change\n---\none\n');
   const before = (await discoverWorkspaceSkills(root))[0].contentHash;
