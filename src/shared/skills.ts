@@ -12,6 +12,14 @@ export interface SkillDiagnostic {
   message: string;
 }
 
+export interface SkillUsage {
+  name: string;
+  source: 'workspace';
+  contentHash?: string;
+  injectionStatus: 'injected' | 'degraded' | 'failed';
+  capabilityDegradation?: string;
+}
+
 export interface WorkspaceSkill {
   name: string;
   description?: string;

@@ -59,9 +59,9 @@ import {
   conversationModelSelection,
   supportsBrowser,
 } from '../shared/agents';
+import type { WorkspaceSkill } from '../shared/skills';
 import type {
   AgentInfo,
-  AppEvent,
   AppSnapshot,
   BrowserFrame,
   BrowserState,
@@ -78,6 +78,38 @@ import type {
   Settings,
   NativeNeoState,
 } from '../shared/types';
+
+function SkillPicker({
+  skills,
+  selected,
+  disabled,
+  onChange,
+}: {
+  skills: WorkspaceSkill[];
+  selected: string[];
+  disabled: boolean;
+  onChange: (names: string[]) => void;
+}) {
+  return (
+    <div aria-label="选择任务 Skill" role="group" className="skill-picker">
+      {skills.filter((skill) => skill.availability === 'usable').map((skill) => {
+        const active = selected.includes(skill.name);
+        return (
+          <button
+            key={skill.name}
+            type="button"
+            aria-pressed={active}
+            disabled={disabled || (!active && selected.length >= 3)}
+            title={skill.description}
+            onClick={() => onChange(active ? selected.filter((name) => name !== skill.name) : [...selected, skill.name])}
+          >
+            {skill.name}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 const emptyBrowser: BrowserState = {
   status: 'starting',
@@ -135,6 +167,8 @@ export default function App() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [showUsage, setShowUsage] = useState(false);
   const [settings, setSettings] = useState<Settings>({ workspace: '', agent: 'codex' });
+  const [skills, setSkills] = useState<AppSnapshot['skills']>([]);
+  const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
   const workspaceLabel =
     settings.workspaceMode === 'personal' ? '不绑定文件夹' : basename(settings.workspace);
   const [agents, setAgents] = useState<AgentInfo[]>([]);
@@ -450,6 +484,7 @@ export default function App() {
         setLocalUserName(snapshot.localUser?.name || '');
         if (!neoUpdated) setNeo(snapshot.neo ?? { status: 'stopped' });
         setAgents(snapshot.agents);
+        setSkills(snapshot.skills ?? []);
         if (!codexUpdated) setCodexConnection(snapshot.codexConnection ?? { status: 'idle' });
         if (!browserUpdated) {
           activeBrowserTab.current = snapshot.browser.activeTabId;
@@ -666,6 +701,7 @@ export default function App() {
       text: draft.trim(),
       context,
       selectedRef: selected?.ref,
+      selectedSkills,
     });
     if (!result?.conversationId) return;
     setDrafts((previous) => {
@@ -1828,6 +1864,12 @@ export default function App() {
                                   </Dropdown.Menu>
                                 </Dropdown.Popover>
                               </Dropdown>
+                              <SkillPicker
+                                skills={skills ?? []}
+                                selected={selectedSkills}
+                                disabled={busy}
+                                onChange={setSelectedSkills}
+                              />
                               <ModelPicker
                                 settings={conversationSettings}
                                 conversationId={conversationId}
