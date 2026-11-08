@@ -52,6 +52,41 @@ test('rejects malformed requests and refuses write or sensitive routes', async (
   const server = await endpoint();
   t.after(() => server.stop());
   assert.equal((await request(server.url, '/api/v1/connections', { method: 'POST', body: '{}' })).status, 400);
-  const pending = await request(server.url, '/api/v1/connections', { method: 'POST', body: JSON.stringify({ agent: { name: 'Agent', id: 'agent-1' }, requestedMode: 'full' }) });
-  assert.equal(pending.status, 400);
+  const pending = await request(server.url, '/api/v1/connections', { method: 'POST', body: JSON.stringify({ agent: { name: 'Agent', id: 'agent-1' }, requestedMode: 'read-only' }) });
+  const connection = await pending.json();
+  await server.approve(connection.id);
+  assert.equal((await request(server.url, '/api/v1/threads', { method: 'POST', headers: { authorization: `Bearer ${connection.token}` }, body: JSON.stringify({ text: 'run' }) })).status, 403);
+});
+
+test('starts, reports, queues and stops an authorized external thread', async (t) => {
+  const calls: string[] = [];
+  let release!: () => void;
+  const server = createAthenaMcpEndpoint({
+    getState: () => state,
+    threads: {
+      start: async (input) => { calls.push(`start:${input.text}`); return { conversationId: 'conversation-1', agentSessionId: 'session-1' }; },
+      send: async (_thread, text) => { calls.push(`send:${text}`); await new Promise<void>((resolve) => { release = resolve; }); },
+      stop: async () => { calls.push('stop'); },
+    },
+  });
+  await server.start();
+  t.after(() => server.stop());
+  const pending = await request(server.url, '/api/v1/connections', { method: 'POST', body: JSON.stringify({ agent: { name: 'Runner', id: 'runner-1' }, requestedMode: 'supervised' }) });
+  const connection = await pending.json();
+  await server.approve(connection.id);
+  const auth = { authorization: `Bearer ${connection.token}` };
+  const started = await request(server.url, '/api/v1/threads', { method: 'POST', headers: auth, body: JSON.stringify({ text: 'first', agent: 'codex', workspace: '/Users/test/project' }) });
+  assert.equal(started.status, 201);
+  const thread = await started.json();
+  assert.equal(thread.conversationId, 'conversation-1');
+  const queued = await request(server.url, `/api/v1/threads/${thread.id}/messages`, { method: 'POST', headers: auth, body: JSON.stringify({ text: 'second' }) });
+  assert.equal(queued.status, 202);
+  assert.deepEqual(await queued.json(), { queued: true, position: 1 });
+  assert.equal((await request(server.url, `/api/v1/threads/${thread.id}`, { headers: auth })).status, 200);
+  release();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepEqual(calls, ['start:first', 'send:second']);
+  const stopped = await request(server.url, `/api/v1/threads/${thread.id}/stop`, { method: 'POST', headers: auth });
+  assert.equal(stopped.status, 200);
+  assert.equal(calls.at(-1), 'stop');
 });
