@@ -1,4 +1,5 @@
 import type { ElementControlSurface } from './element-controls';
+import type { WorkspaceSkill } from './skills';
 export type AgentId = 'codex' | 'claude' | 'opencode' | 'gemini' | 'pi' | 'cursor';
 export interface AgentInfo {
   id: AgentId;
@@ -483,6 +484,7 @@ export interface AppSnapshot {
   localUser?: { name: string };
   settings: Settings;
   agents: AgentInfo[];
+  skills?: WorkspaceSkill[];
   codexConnection?: CodexConnectionState;
   browser: BrowserState;
   neo?: NativeNeoState;
