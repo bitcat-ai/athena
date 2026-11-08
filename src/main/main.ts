@@ -1479,7 +1479,6 @@ async function launch() {
       },
       stop: async () => { await stopTurn(); },
     },
-    }),
     configuration: {
       read: async (kind) => {
         if (kind === 'skills') return discoverWorkspaceSkills(store.data.settings.workspace);

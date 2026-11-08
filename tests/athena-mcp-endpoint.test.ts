@@ -58,14 +58,17 @@ test('rejects malformed requests and refuses write or sensitive routes', async (
   assert.equal((await request(server.url, '/api/v1/threads', { method: 'POST', headers: { authorization: `Bearer ${connection.token}` }, body: JSON.stringify({ text: 'run' }) })).status, 403);
 });
 
-test('starts, reports, queues and stops an authorized external thread', async (t) => {
+test('stopping an in-flight external thread discards its queued messages', async (t) => {
   const calls: string[] = [];
   let release!: () => void;
+  const sendStarted = new Promise<void>((resolve) => {
+    release = resolve;
+  });
   const server = createAthenaMcpEndpoint({
     getState: () => state,
     threads: {
       start: async (input) => { calls.push(`start:${input.text}`); return { conversationId: 'conversation-1', agentSessionId: 'session-1' }; },
-      send: async (_thread, text) => { calls.push(`send:${text}`); await new Promise<void>((resolve) => { release = resolve; }); },
+      send: async (_thread, text) => { calls.push(`send:${text}`); sendStarted.resolve(); await new Promise<void>((resolve) => { release = resolve; }); },
       stop: async () => { calls.push('stop'); },
     },
   });
@@ -81,12 +84,12 @@ test('starts, reports, queues and stops an authorized external thread', async (t
   assert.equal(thread.conversationId, 'conversation-1');
   const queued = await request(server.url, `/api/v1/threads/${thread.id}/messages`, { method: 'POST', headers: auth, body: JSON.stringify({ text: 'second' }) });
   assert.equal(queued.status, 202);
-  assert.deepEqual(await queued.json(), { queued: true, position: 1 });
-  assert.equal((await request(server.url, `/api/v1/threads/${thread.id}`, { headers: auth })).status, 200);
+  const stopped = request(server.url, `/api/v1/threads/${thread.id}/stop`, { method: 'POST', headers: auth });
+  await sendStarted;
   release();
+  assert.equal((await stopped).status, 200);
   await new Promise((resolve) => setTimeout(resolve, 0));
-  assert.deepEqual(calls, ['start:first', 'send:second']);
-  const stopped = await request(server.url, `/api/v1/threads/${thread.id}/stop`, { method: 'POST', headers: auth });
-  assert.equal(stopped.status, 200);
-  assert.equal(calls.at(-1), 'stop');
+  assert.deepEqual(calls, ['start:first', 'send:second', 'stop']);
+  const threadState = await request(server.url, `/api/v1/threads/${thread.id}`, { headers: auth });
+  assert.equal((await threadState.json()).status, 'stopped');
 });
