@@ -1,5 +1,6 @@
 import type { ElementControlSurface } from './element-controls';
 import type { WorkspaceSkill } from './skills';
+import type { TaskSelection } from './access';
 export type AgentId = 'codex' | 'claude' | 'opencode' | 'gemini' | 'pi' | 'cursor';
 export interface AgentInfo {
   id: AgentId;
@@ -446,6 +447,10 @@ export interface Conversation {
   selectedSkills?: string[];
   skillUsage?: import('./skills').SkillUsage[];
   remoteChatId?: string;
+  /** Explicit task capabilities; absent on legacy conversations. */
+  selection?: TaskSelection;
+  /** MCP capabilities selected independently from Skills. */
+  mcpSelection?: string[];
 }
 export interface FeishuState {
   status: 'restoring' | 'disconnected' | 'configuring' | 'connecting' | 'connected' | 'error';
