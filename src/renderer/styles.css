@@ -2232,10 +2232,16 @@ select {
   border-radius: 12px;
   box-shadow: 0 1px 3px rgb(0 0 0 / 5%);
 }
+.composer [data-slot='prompt-input-shell'],
+.composer [data-slot='prompt-input-content'] {
+  position: relative;
+  overflow: visible;
+}
+
 .skill-slash-menu {
   position: absolute;
   inset: auto 12px calc(100% - 8px);
-  z-index: 4;
+  z-index: 1000;
   max-width: calc(100% - 24px);
   max-height: 220px;
   overflow: auto;
