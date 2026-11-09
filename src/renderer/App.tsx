@@ -119,6 +119,7 @@ export function SkillSlashMenu({
   activeIndex,
   onActiveChange,
   onSelect,
+  discoveryStatus,
 }: {
   draft: string;
   skills: Array<WorkspaceSkill | ProviderSkill>;
@@ -126,11 +127,15 @@ export function SkillSlashMenu({
   activeIndex: number;
   onActiveChange: (index: number) => void;
   onSelect: (skill: WorkspaceSkill | ProviderSkill) => void;
+  discoveryStatus?: AppSnapshot['providerSkillDiscovery'];
 }) {
   const usable = skills.filter((skill) => ('availability' in skill ? skill.availability === 'usable' : skill.userInvocable));
   const query = draft.slice(draft.lastIndexOf('/') + 1).toLowerCase();
   const options = usable.filter((skill) => skill.name.toLowerCase().startsWith(query));
   if (!draft.startsWith('/') || draft.includes('\n') || !draft.slice(draft.lastIndexOf(' ') + 1).startsWith('/')) return null;
+  const statusText = discoveryStatus && discoveryStatus.status !== 'ready'
+    ? discoveryStatus.status === 'unsupported' ? '当前 Agent 不支持 Skill 发现' : '当前 Agent 暂无可用 Skill'
+    : '当前工作区没有可用 Skill';
   return (
     <div
       id="skill-slash-menu"
@@ -153,7 +158,7 @@ export function SkillSlashMenu({
             onClick={() => onSelect(skill)}
           ><strong>/{skill.name}</strong><span>{skill.description}</span></button>
         );
-      }) : <p role="status">{usable.length ? '没有匹配的 Skill' : '当前工作区没有可用 Skill'}</p>}
+      }) : <p role="status">{usable.length ? '没有匹配的 Skill' : statusText}</p>}
     </div>
   );
 }
@@ -284,7 +289,16 @@ export default function App() {
     setDrafts((previous) => ({ ...previous, [draftKey]: { text } }));
   };
   const slashSkillMenuOpen = skillMenuDismissed !== draft && /^(?:\/[a-z0-9]+(?:-[a-z0-9]+)*\s+)*\/[^\s/]*$/i.test(draft);
-  const slashSkillOptions = [...(providerSkillDiscovery?.status === 'ready' ? providerSkills : []), ...((skills ?? []))].filter((skill) => 'availability' in skill ? skill.availability === 'usable' : skill.userInvocable)
+  const selectedProviderSkillMetadata = selectedSkills
+    .map((name) => providerSkills.find((skill) => skill.name === name))
+    .filter((skill): skill is ProviderSkill => Boolean(skill))
+    .map((skill) => ({
+      name: skill.name,
+      providerId: skill.provider.id,
+      ...(skill.providerPath === undefined ? {} : { providerPath: skill.providerPath }),
+      ...(skill.contentHash === undefined ? {} : { contentHash: skill.contentHash }),
+    }));
+  const slashSkillOptions = [...(providerSkillDiscovery?.status === 'ready' ? providerSkills : [])].filter((skill) => skill.userInvocable)
     .filter((skill, index, all) => all.findIndex((item) => item.name === skill.name) === index)
     .filter((skill) => skill.name.toLowerCase().startsWith(draft.slice(draft.lastIndexOf('/') + 1).toLowerCase()));
   const selectSlashSkill = (skill: WorkspaceSkill | ProviderSkill) => {
@@ -774,6 +788,7 @@ export default function App() {
       context,
       selectedRef: selected?.ref,
       selectedSkills,
+      selectedSkillMetadata: selectedProviderSkillMetadata,
     });
     if (!result?.conversationId) return;
     setDrafts((previous) => {
@@ -850,6 +865,8 @@ export default function App() {
     if (result) {
       upsert(result);
       setConversationId(result.id);
+      setSelectedSkills([]);
+      setProviderSkillDiscovery(undefined);
       setSelected(undefined);
       setSelectedEdit(undefined);
       setInspectorOpen(false);
@@ -1877,6 +1894,7 @@ export default function App() {
                                 activeIndex={skillMenuActive}
                                 onActiveChange={setSkillMenuActive}
                                 onSelect={selectSlashSkill}
+                                discoveryStatus={providerSkillDiscovery}
                               />
                             )}
                             <PromptInput.TextArea

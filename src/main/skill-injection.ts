@@ -17,9 +17,31 @@ export function selectSkills(available: SelectableSkill[], names: string[]): Sel
 }
 
 /** Revalidates provider identity and optional trace metadata at the send boundary. */
-export function selectProviderSkills(available: ProviderSkill[], names: string[], providerId: string): ProviderSkill[] {
+export interface ProviderSkillExpectation {
+  name: string;
+  providerId: string;
+  providerPath?: string;
+  contentHash?: string;
+}
+
+/** Revalidates identity and the optional trace metadata captured by the renderer. */
+export function selectProviderSkills(
+  available: ProviderSkill[],
+  names: string[],
+  providerId: string,
+  expectations: ProviderSkillExpectation[] = [],
+): ProviderSkill[] {
   const selected = selectSkills(available, names).filter((skill): skill is ProviderSkill => skill.source === 'provider');
-  for (const skill of selected) if (skill.source === 'provider' && skill.provider.id !== providerId) throw new Error(`Skill provider 已改变：${skill.name}`);
+  for (const skill of selected) {
+    if (skill.provider.id !== providerId) throw new Error(`Skill provider 已改变：${skill.name}`);
+    const expected = expectations.find((item) => item.name === skill.name);
+    if (!expected) continue;
+    if (expected.providerId !== skill.provider.id) throw new Error(`Skill provider 已改变：${skill.name}`);
+    if (expected.providerPath !== undefined && expected.providerPath !== skill.providerPath)
+      throw new Error(`Skill 路径已改变：${skill.name}`);
+    if (expected.contentHash !== undefined && expected.contentHash !== skill.contentHash)
+      throw new Error(`Skill 内容已改变：${skill.name}`);
+  }
   return selected;
 }
 

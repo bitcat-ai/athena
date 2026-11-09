@@ -535,13 +535,14 @@ async function runTurn(
   readonly = false,
   selectedElement?: ElementRef,
   selectedSkillNames: string[] = [],
+  selectedSkillExpectations: Array<{ name: string; providerId: string; providerPath?: string; contentHash?: string }> = [],
 ) {
   assertTaskEnvironment();
   const info = agentInfo(conversationAgent(conversation));
   const providerSkills = await getSession(conversation, info.path, toolsFor(conversation)).discoverProviderSkills();
   const providerNames = selectedSkillNames.filter((name) => providerSkills.skills.some((skill) => skill.name === name));
   const localNames = selectedSkillNames.filter((name) => !providerNames.includes(name));
-  const selectedProviderSkills = selectProviderSkills(providerSkills.skills, providerNames, providerSkills.provider.id);
+  const selectedProviderSkills = selectProviderSkills(providerSkills.skills, providerNames, providerSkills.provider.id, selectedSkillExpectations);
   const rescannedSkills = (await discoverSkills(store.data.settings.workspace)).skills;
   const selectedSkills = [...selectSkills(rescannedSkills, localNames), ...selectedProviderSkills];
   const skillContext = buildSkillContext(selectedSkills);
@@ -778,10 +779,11 @@ function startTurn(
   readonly = false,
   selectedElement?: ElementRef,
   selectedSkillNames: string[] = [],
+  selectedSkillExpectations: Array<{ name: string; providerId: string; providerPath?: string; contentHash?: string }> = [],
 ) {
   assertTaskEnvironment();
   if (active || startingTurn) throw new Error('当前任务还在进行，请先停止');
-  void runTurn(conversation, text, context, 'desktop', readonly, selectedElement, selectedSkillNames).catch((error) =>
+  void runTurn(conversation, text, context, 'desktop', readonly, selectedElement, selectedSkillNames, selectedSkillExpectations).catch((error) =>
     notice(error instanceof Error ? error.message : '任务失败', 'error'),
   );
   return { conversationId: conversation.id };
@@ -1151,6 +1153,17 @@ async function invoke(action: string, payload: unknown) {
       const selectedSkillNames: string[] = Array.isArray(data.selectedSkills)
         ? data.selectedSkills.map((name: unknown) => string(name, 100))
         : [];
+      const selectedSkillExpectations = Array.isArray(data.selectedSkillMetadata)
+        ? data.selectedSkillMetadata.map((item: unknown) => {
+            const value = record(item);
+            return {
+              name: string(value.name, 100),
+              providerId: string(value.providerId, 100),
+              ...(value.providerPath === undefined ? {} : { providerPath: string(value.providerPath, 4000) }),
+              ...(value.contentHash === undefined ? {} : { contentHash: string(value.contentHash, 512) }),
+            };
+          })
+        : [];
       const selected = selectedRef ? browser.getState().selectedElement : undefined;
       if (selectedRef && selected?.ref !== selectedRef)
         throw new Error('选中的元素已变化，请重新选取后发送。');
@@ -1158,7 +1171,7 @@ async function invoke(action: string, payload: unknown) {
       const explicitSkills = [...selectedSkillNames, ...parsed.names];
       const taskText = parsed.names.length ? parsed.text : string(data.text);
       const conversation = data.id ? getConversation(data.id) : createConversation();
-      return startTurn(conversation, taskText, context, false, selected, explicitSkills);
+      return startTurn(conversation, taskText, context, false, selected, explicitSkills, selectedSkillExpectations);
     }
     case 'conversation:stop':
       await stopTurn();
