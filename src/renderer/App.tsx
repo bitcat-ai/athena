@@ -59,9 +59,9 @@ import {
   conversationModelSelection,
   supportsBrowser,
 } from '../shared/agents';
+import type { WorkspaceSkill } from '../shared/skills';
 import type {
   AgentInfo,
-  AppEvent,
   AppSnapshot,
   BrowserFrame,
   BrowserState,
@@ -78,6 +78,38 @@ import type {
   Settings,
   NativeNeoState,
 } from '../shared/types';
+
+function SkillPicker({
+  skills,
+  selected,
+  disabled,
+  onChange,
+}: {
+  skills: WorkspaceSkill[];
+  selected: string[];
+  disabled: boolean;
+  onChange: (names: string[]) => void;
+}) {
+  return (
+    <div aria-label="选择任务 Skill" role="group" className="skill-picker">
+      {skills.filter((skill) => skill.availability === 'usable').map((skill) => {
+        const active = selected.includes(skill.name);
+        return (
+          <button
+            key={skill.name}
+            type="button"
+            aria-pressed={active}
+            disabled={disabled || (!active && selected.length >= 3)}
+            title={skill.description}
+            onClick={() => onChange(active ? selected.filter((name) => name !== skill.name) : [...selected, skill.name])}
+          >
+            {skill.name}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 const emptyBrowser: BrowserState = {
   status: 'starting',
@@ -135,6 +167,9 @@ export default function App() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [showUsage, setShowUsage] = useState(false);
   const [settings, setSettings] = useState<Settings>({ workspace: '', agent: 'codex' });
+  const [skills, setSkills] = useState<AppSnapshot['skills']>([]);
+  const [pendingExternalConnections, setPendingExternalConnections] = useState<AppSnapshot['pendingExternalConnections']>([]);
+  const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
   const workspaceLabel =
     settings.workspaceMode === 'personal' ? '不绑定文件夹' : basename(settings.workspace);
   const [agents, setAgents] = useState<AgentInfo[]>([]);
@@ -296,6 +331,8 @@ export default function App() {
     const handle = (event: AppEvent) => {
       if (event.type === 'onboarding:state') {
         acceptOnboardingState(event.state);
+      } else if (event.type === 'mcp:connections') {
+        setPendingExternalConnections(event.connections ?? []);
       } else if (event.type === 'codex:state') {
         if (
           event.state.conversationId &&
@@ -450,6 +487,8 @@ export default function App() {
         setLocalUserName(snapshot.localUser?.name || '');
         if (!neoUpdated) setNeo(snapshot.neo ?? { status: 'stopped' });
         setAgents(snapshot.agents);
+        setSkills(snapshot.skills ?? []);
+        setPendingExternalConnections(snapshot.pendingExternalConnections ?? []);
         if (!codexUpdated) setCodexConnection(snapshot.codexConnection ?? { status: 'idle' });
         if (!browserUpdated) {
           activeBrowserTab.current = snapshot.browser.activeTabId;
@@ -666,6 +705,7 @@ export default function App() {
       text: draft.trim(),
       context,
       selectedRef: selected?.ref,
+      selectedSkills,
     });
     if (!result?.conversationId) return;
     setDrafts((previous) => {
@@ -707,7 +747,12 @@ export default function App() {
   const workspace = async () => {
     const result = await action<Settings>('settings:workspace');
     if (result) {
-      if (result.workspace !== settings.workspace) setDraft('');
+      if (result.workspace !== settings.workspace) {
+        setDraft('');
+        setSelectedSkills([]);
+        const snapshot = await action<AppSnapshot>('app:snapshot');
+        if (snapshot) setSkills(snapshot.skills ?? []);
+      }
       setSettings(result);
       await newConversation();
     }
@@ -768,6 +813,7 @@ export default function App() {
       workspacePath = snapshot.settings.workspace;
       setSettings(snapshot.settings);
       setAgents(snapshot.agents);
+      setSkills(snapshot.skills ?? []);
       setBrowser(snapshot.browser);
       setNeo(snapshot.neo ?? { status: 'stopped' });
       lastFrame.current = snapshot.browserFrame ?? lastFrame.current;
@@ -1024,6 +1070,28 @@ export default function App() {
                   </ActionButton>
                 </Card.Content>
               </Card>
+              {pendingExternalConnections.length > 0 && (
+                <Card className="settings-workspace-card" aria-label="外部连接审批">
+                  <Card.Content>
+                    <div>
+                      <span>外部 Agent 连接</span>
+                      {pendingExternalConnections.map((connection) => (
+                        <div key={connection.id}>
+                          <strong>{connection.agent.name} · {connection.requestedMode}</strong>
+                          {connection.status === 'pending' ? (
+                            <>
+                              <ActionButton onPress={() => void action('mcp:connection', { id: connection.id, operation: 'approve' })}>批准</ActionButton>
+                              <ActionButton variant="secondary" onPress={() => void action('mcp:connection', { id: connection.id, operation: 'reject' })}>拒绝</ActionButton>
+                            </>
+                          ) : connection.status === 'approved' ? (
+                            <ActionButton variant="secondary" onPress={() => void action('mcp:connection', { id: connection.id, operation: 'revoke' })}>撤销</ActionButton>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  </Card.Content>
+                </Card>
+              )}
               <ActionButton
                 className="text-button onboarding-reopen"
                 isDisabled={openingOnboarding}
@@ -1828,6 +1896,12 @@ export default function App() {
                                   </Dropdown.Menu>
                                 </Dropdown.Popover>
                               </Dropdown>
+                              <SkillPicker
+                                skills={skills ?? []}
+                                selected={selectedSkills}
+                                disabled={busy}
+                                onChange={setSelectedSkills}
+                              />
                               <ModelPicker
                                 settings={conversationSettings}
                                 conversationId={conversationId}
