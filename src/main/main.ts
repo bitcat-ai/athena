@@ -29,7 +29,7 @@ import { Store } from './store';
 import { UsageStore } from './usage';
 import { managedCodexPath, OnboardingRuntime } from './onboarding';
 import { discoverSkills } from './skill-registry';
-import { buildSkillContext, selectSkills } from './skill-injection';
+import { buildSkillContext, selectProviderSkills, selectSkills } from './skill-injection';
 import { parseLeadingSkillReferences } from '../shared/skill-references';
 import { createAthenaMcpEndpoint, type AthenaMcpEndpoint } from './athena-mcp-endpoint';
 import type { ModelOption } from '../shared/usage';
@@ -537,15 +537,20 @@ async function runTurn(
   selectedSkillNames: string[] = [],
 ) {
   assertTaskEnvironment();
+  const info = agentInfo(conversationAgent(conversation));
+  const providerSkills = await getSession(conversation, info.path, toolsFor(conversation)).discoverProviderSkills();
+  const providerNames = selectedSkillNames.filter((name) => providerSkills.skills.some((skill) => skill.name === name));
+  const localNames = selectedSkillNames.filter((name) => !providerNames.includes(name));
+  const selectedProviderSkills = selectProviderSkills(providerSkills.skills, providerNames, providerSkills.provider.id);
   const rescannedSkills = (await discoverSkills(store.data.settings.workspace)).skills;
-  const selectedSkills = selectSkills(rescannedSkills, selectedSkillNames);
+  const selectedSkills = [...selectSkills(rescannedSkills, localNames), ...selectedProviderSkills];
   const skillContext = buildSkillContext(selectedSkills);
   if (selectedSkills.length) {
     conversation.selectedSkills = selectedSkills.map((skill) => skill.name);
     conversation.skillUsage = selectedSkills.map((skill) => ({
       name: skill.name,
       source: skill.source,
-      packagePath: skill.packagePath,
+      ...(skill.source === 'provider' && 'provider' in skill ? { provider: skill.provider, providerPath: skill.providerPath } : { packagePath: 'packagePath' in skill ? skill.packagePath : undefined }),
       contentHash: skill.contentHash,
       injectionStatus: 'injected' as const,
     }));
@@ -553,8 +558,8 @@ async function runTurn(
 
   if (conversation.workspace && conversation.workspace !== store.data.settings.workspace)
     throw new Error('这段对话属于另一个工作目录。请切换回原目录，或新建对话。');
-  const info = agentInfo(conversationAgent(conversation));
-  if (!supportsBrowser(info.id) && selectedElement)
+  const activeInfo = agentInfo(conversationAgent(conversation));
+  if (!supportsBrowser(activeInfo.id) && selectedElement)
     throw new Error('当前 CLI 尚未接通网页元素工具，请移除元素上下文后发送');
   if (!text.trim()) throw new Error('请输入任务');
   if (resetAfterTurn) resetConnections();
@@ -904,12 +909,25 @@ async function createBrowserRuntime(binaryPath?: string) {
   });
 }
 async function snapshot(): Promise<AppSnapshot> {
+  let providerSkillDiscovery: AppSnapshot['providerSkillDiscovery'];
+  try {
+    const conversation = selectedConversation();
+    const info = agentInfo(conversationAgent(conversation));
+    providerSkillDiscovery = await getSession(conversation, info.path, toolsFor(conversation)).discoverProviderSkills();
+  } catch {
+    providerSkillDiscovery = {
+      status: 'unavailable', source: 'provider', provider: { id: store.data.settings.agent, name: store.data.settings.agent }, skills: [],
+      diagnostics: [{ code: 'capability-degraded', message: 'Provider Skill discovery is unavailable.' }],
+    };
+  }
   return {
     onboarding: onboarding?.getState(),
     localUser: { name: localUserName },
     settings: store.data.settings,
     agents,
     skills: (await discoverSkills(store.data.settings.workspace)).skills,
+    providerSkills: providerSkillDiscovery.skills,
+    providerSkillDiscovery,
     codexConnection,
     browser: browser.getState(),
     neo: neo?.getState(),
@@ -993,7 +1011,7 @@ async function invoke(action: string, payload: unknown) {
       address: string(data.address, 100),
       name: string(data.name, 40),
     });
-    if (lastFrame) sharing!.onFrame(lastFrame);
+  if (lastFrame) sharing!.onFrame(lastFrame);
     return state;
   }
   if (action === 'share:stop') return sharing!.stop();

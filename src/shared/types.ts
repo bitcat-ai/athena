@@ -492,6 +492,8 @@ export interface AppSnapshot {
   settings: Settings;
   agents: AgentInfo[];
   skills?: WorkspaceSkill[];
+  providerSkills?: import('./skills').ProviderSkill[];
+  providerSkillDiscovery?: import('./skills').ProviderSkillDiscovery;
   codexConnection?: CodexConnectionState;
   browser: BrowserState;
   neo?: NativeNeoState;

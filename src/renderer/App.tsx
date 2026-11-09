@@ -59,7 +59,7 @@ import {
   conversationModelSelection,
   supportsBrowser,
 } from '../shared/agents';
-import type { WorkspaceSkill } from '../shared/skills';
+import type { ProviderSkill, WorkspaceSkill } from '../shared/skills';
 import { parseLeadingSkillReferences } from '../shared/skill-references';
 import type {
   AgentInfo,
@@ -86,14 +86,14 @@ function SkillPicker({
   disabled,
   onChange,
 }: {
-  skills: WorkspaceSkill[];
+  skills: Array<WorkspaceSkill | ProviderSkill>;
   selected: string[];
   disabled: boolean;
   onChange: (names: string[]) => void;
 }) {
   return (
     <div aria-label="选择任务 Skill" role="group" className="skill-picker">
-      {skills.filter((skill) => skill.availability === 'usable').map((skill) => {
+      {skills.filter((skill) => 'availability' in skill ? skill.availability === 'usable' : skill.userInvocable).map((skill) => {
         const active = selected.includes(skill.name);
         return (
           <button
@@ -121,13 +121,13 @@ export function SkillSlashMenu({
   onSelect,
 }: {
   draft: string;
-  skills: WorkspaceSkill[];
+  skills: Array<WorkspaceSkill | ProviderSkill>;
   selected: string[];
   activeIndex: number;
   onActiveChange: (index: number) => void;
-  onSelect: (skill: WorkspaceSkill) => void;
+  onSelect: (skill: WorkspaceSkill | ProviderSkill) => void;
 }) {
-  const usable = skills.filter((skill) => skill.availability === 'usable');
+  const usable = skills.filter((skill) => ('availability' in skill ? skill.availability === 'usable' : skill.userInvocable));
   const query = draft.slice(draft.lastIndexOf('/') + 1).toLowerCase();
   const options = usable.filter((skill) => skill.name.toLowerCase().startsWith(query));
   if (!draft.startsWith('/') || draft.includes('\n') || !draft.slice(draft.lastIndexOf(' ') + 1).startsWith('/')) return null;
@@ -215,6 +215,8 @@ export default function App() {
   const [showUsage, setShowUsage] = useState(false);
   const [settings, setSettings] = useState<Settings>({ workspace: '', agent: 'codex' });
   const [skills, setSkills] = useState<AppSnapshot['skills']>([]);
+  const [providerSkills, setProviderSkills] = useState<ProviderSkill[]>([]);
+  const [providerSkillDiscovery, setProviderSkillDiscovery] = useState<AppSnapshot['providerSkillDiscovery']>();
   const [pendingExternalConnections, setPendingExternalConnections] = useState<AppSnapshot['pendingExternalConnections']>([]);
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
   const workspaceLabel =
@@ -282,9 +284,10 @@ export default function App() {
     setDrafts((previous) => ({ ...previous, [draftKey]: { text } }));
   };
   const slashSkillMenuOpen = skillMenuDismissed !== draft && /^(?:\/[a-z0-9]+(?:-[a-z0-9]+)*\s+)*\/[^\s/]*$/i.test(draft);
-  const slashSkillOptions = (skills ?? []).filter((skill) => skill.availability === 'usable')
+  const slashSkillOptions = [...(providerSkillDiscovery?.status === 'ready' ? providerSkills : []), ...((skills ?? []))].filter((skill) => 'availability' in skill ? skill.availability === 'usable' : skill.userInvocable)
+    .filter((skill, index, all) => all.findIndex((item) => item.name === skill.name) === index)
     .filter((skill) => skill.name.toLowerCase().startsWith(draft.slice(draft.lastIndexOf('/') + 1).toLowerCase()));
-  const selectSlashSkill = (skill: WorkspaceSkill) => {
+  const selectSlashSkill = (skill: WorkspaceSkill | ProviderSkill) => {
     const selected = [...new Set([...selectedSkills, ...parseLeadingSkillReferences(draft).names])];
     if (selected.includes(skill.name) || selected.length >= 3) return;
     const prefix = draft.slice(0, draft.lastIndexOf('/') + 1);
@@ -550,6 +553,8 @@ export default function App() {
         if (!neoUpdated) setNeo(snapshot.neo ?? { status: 'stopped' });
         setAgents(snapshot.agents);
         setSkills(snapshot.skills ?? []);
+        setProviderSkills(snapshot.providerSkills ?? []);
+        setProviderSkillDiscovery(snapshot.providerSkillDiscovery);
         setPendingExternalConnections(snapshot.pendingExternalConnections ?? []);
         if (!codexUpdated) setCodexConnection(snapshot.codexConnection ?? { status: 'idle' });
         if (!browserUpdated) {
@@ -1867,7 +1872,7 @@ export default function App() {
                             {slashSkillMenuOpen && (
                               <SkillSlashMenu
                                 draft={draft}
-                                skills={skills ?? []}
+                                skills={slashSkillOptions}
                                 selected={parseLeadingSkillReferences(draft).names}
                                 activeIndex={skillMenuActive}
                                 onActiveChange={setSkillMenuActive}
