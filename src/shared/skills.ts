@@ -1,5 +1,32 @@
 export type SkillAvailability = 'usable' | 'unavailable';
-export type SkillSource = 'workspace' | 'global';
+export type SkillSource = 'workspace' | 'global' | 'provider';
+
+export type ProviderSkillCapability = 'supported' | 'unsupported' | 'unavailable';
+export type ProviderSkillDiscoveryStatus = 'ready' | 'empty' | 'unsupported' | 'unavailable' | 'malformed';
+
+export interface ProviderIdentity {
+  id: string;
+  name: string;
+}
+
+export interface ProviderSkill {
+  name: string;
+  description: string;
+  shortDescription?: string;
+  providerPath?: string;
+  contentHash?: string;
+  userInvocable: boolean;
+  source: 'provider';
+  provider: ProviderIdentity;
+}
+
+export interface ProviderSkillDiscovery {
+  status: ProviderSkillDiscoveryStatus;
+  source: 'provider';
+  provider: ProviderIdentity;
+  skills: ProviderSkill[];
+  diagnostics: SkillDiagnostic[];
+}
 
 export type SkillDiagnosticCode =
   | 'missing-root'
@@ -17,6 +44,8 @@ export interface SkillDiagnostic {
 export interface SkillUsage {
   name: string;
   source: SkillSource;
+  provider?: ProviderIdentity;
+  providerPath?: string;
   packagePath?: string;
   contentHash?: string;
   injectionStatus: 'injected' | 'degraded' | 'failed';

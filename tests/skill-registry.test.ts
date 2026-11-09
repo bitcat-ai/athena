@@ -93,3 +93,39 @@ test('updates the content hash when a skill changes', async () => {
   const after = (await discoverWorkspaceSkills(root))[0].contentHash;
   assert.notEqual(before, after);
 });
+
+test('normalizes a provider discovery response without applying local Skill file rules', async () => {
+  const { normalizeProviderSkillDiscovery } = await import('../src/shared/provider-skills');
+  const result = normalizeProviderSkillDiscovery({
+    provider: { id: 'codex', name: 'Codex' },
+    capability: 'supported',
+    skills: [{ name: 'long-guide', description: '', shortDescription: 'Quick help', path: '/workspace/long-guide/SKILL.md', userInvocable: true, contentHash: 'abc' }],
+  }, { approvedRoot: '/workspace' });
+  assert.equal(result.status, 'ready');
+  assert.equal(result.source, 'provider');
+  assert.equal(result.provider.id, 'codex');
+  assert.equal(result.skills[0]?.description, '未提供描述');
+  assert.equal(result.skills[0]?.shortDescription, 'Quick help');
+  assert.equal(result.skills[0]?.providerPath, '/workspace/long-guide/SKILL.md');
+  assert.equal(result.skills[0]?.contentHash, 'abc');
+});
+
+test('reports explicit provider capability and malformed states', async () => {
+  const { normalizeProviderSkillDiscovery } = await import('../src/shared/provider-skills');
+  assert.equal(normalizeProviderSkillDiscovery({ provider: { id: 'gemini', name: 'Gemini' }, capability: 'unsupported' }).status, 'unsupported');
+  assert.equal(normalizeProviderSkillDiscovery({ provider: { id: 'gemini', name: 'Gemini' }, capability: 'unavailable', error: 'not logged in' }).status, 'unavailable');
+  assert.equal(normalizeProviderSkillDiscovery({ provider: { id: 'gemini', name: 'Gemini' }, capability: 'supported', skills: [] }).status, 'empty');
+  assert.equal(normalizeProviderSkillDiscovery({ provider: { id: 'gemini', name: 'Gemini' }, capability: 'supported', skills: [{ name: '', userInvocable: true }] }).status, 'malformed');
+});
+
+test('deduplicates provider names, excludes non-user-invocable entries, and rejects unsafe paths', async () => {
+  const { normalizeProviderSkillDiscovery } = await import('../src/shared/provider-skills');
+  const result = normalizeProviderSkillDiscovery({ provider: { id: 'pi', name: 'Pi' }, capability: 'supported', skills: [
+    { name: 'same', description: 'first', userInvocable: true },
+    { name: 'same', description: 'second', userInvocable: true },
+    { name: 'hidden', description: 'hidden', userInvocable: false },
+    { name: 'escape', description: 'escape', path: '/tmp/secret/SKILL.md', userInvocable: true },
+  ] }, { approvedRoot: '/workspace' });
+  assert.deepEqual(result.skills.map((skill) => skill.name), ['same']);
+  assert.equal(result.diagnostics.some((item) => item.code === 'unsafe-path'), true);
+});
