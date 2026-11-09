@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { discoverWorkspaceSkills } from '../src/main/skill-registry';
+import { discoverSkills, discoverWorkspaceSkills } from '../src/main/skill-registry';
 
 async function workspace() {
   const root = await mkdtemp(path.join(os.tmpdir(), 'athena-skills-'));
@@ -58,6 +58,31 @@ test('rejects a skills root symlink that escapes the workspace', async () => {
   await rm(path.join(root, '.agents', 'skills'), { recursive: true, force: true });
   await symlink(outside, path.join(root, '.agents', 'skills'));
   await assert.rejects(() => discoverWorkspaceSkills(root), /outside the workspace boundary/);
+});
+
+test('discovers global skills and workspace skills override duplicate names', async () => {
+  const root = await workspace();
+  const home = await mkdtemp(path.join(os.tmpdir(), 'athena-home-'));
+  await mkdir(path.join(home, '.agents', 'skills'), { recursive: true });
+  await skill(root, 'shared', '---\nname: shared\ndescription: Workspace\n---\nworkspace\n');
+  await mkdir(path.join(home, '.agents', 'skills', 'shared'), { recursive: true });
+  await writeFile(path.join(home, '.agents', 'skills', 'shared', 'SKILL.md'), '---\nname: shared\ndescription: Global\n---\nglobal\n');
+  await mkdir(path.join(home, '.agents', 'skills', 'global-only'), { recursive: true });
+  await writeFile(path.join(home, '.agents', 'skills', 'global-only', 'SKILL.md'), '---\nname: global-only\ndescription: Global only\n---\n');
+
+  const result = await discoverSkills(root, home);
+  assert.deepEqual(result.skills.map((item) => [item.name, item.source]), [['global-only', 'global'], ['shared', 'workspace']]);
+  assert.equal(result.skills.find((item) => item.name === 'shared')?.description, 'Workspace');
+  assert.equal(result.global.diagnostics.length, 0);
+});
+
+test('missing global root is diagnosable but does not block workspace skills', async () => {
+  const root = await workspace();
+  const home = await mkdtemp(path.join(os.tmpdir(), 'athena-home-'));
+  await skill(root, 'local', '---\nname: local\ndescription: Local\n---\n');
+  const result = await discoverSkills(root, home);
+  assert.equal(result.skills[0]?.name, 'local');
+  assert.equal(result.global.diagnostics[0]?.code, 'missing-root');
 });
 
 test('updates the content hash when a skill changes', async () => {

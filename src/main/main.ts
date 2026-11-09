@@ -28,7 +28,7 @@ import { TurnNotifications } from './notifications';
 import { Store } from './store';
 import { UsageStore } from './usage';
 import { managedCodexPath, OnboardingRuntime } from './onboarding';
-import { discoverWorkspaceSkills } from './skill-registry';
+import { discoverSkills } from './skill-registry';
 import { buildSkillContext, selectSkills } from './skill-injection';
 import { parseLeadingSkillReferences } from '../shared/skill-references';
 import { createAthenaMcpEndpoint, type AthenaMcpEndpoint } from './athena-mcp-endpoint';
@@ -537,7 +537,7 @@ async function runTurn(
   selectedSkillNames: string[] = [],
 ) {
   assertTaskEnvironment();
-  const rescannedSkills = await discoverWorkspaceSkills(store.data.settings.workspace);
+  const rescannedSkills = (await discoverSkills(store.data.settings.workspace)).skills;
   const selectedSkills = selectSkills(rescannedSkills, selectedSkillNames);
   const skillContext = buildSkillContext(selectedSkills);
   if (selectedSkills.length) {
@@ -545,6 +545,7 @@ async function runTurn(
     conversation.skillUsage = selectedSkills.map((skill) => ({
       name: skill.name,
       source: skill.source,
+      packagePath: skill.packagePath,
       contentHash: skill.contentHash,
       injectionStatus: 'injected' as const,
     }));
@@ -908,7 +909,7 @@ async function snapshot(): Promise<AppSnapshot> {
     localUser: { name: localUserName },
     settings: store.data.settings,
     agents,
-    skills: await discoverWorkspaceSkills(store.data.settings.workspace),
+    skills: (await discoverSkills(store.data.settings.workspace)).skills,
     codexConnection,
     browser: browser.getState(),
     neo: neo?.getState(),
@@ -1518,7 +1519,7 @@ async function launch() {
     },
     configuration: {
       read: async (kind) => {
-        if (kind === 'skills') return discoverWorkspaceSkills(store.data.settings.workspace);
+        if (kind === 'skills') return (await discoverSkills(store.data.settings.workspace)).skills;
         if (kind === 'workspace') return store.data.settings;
         return {};
       },
