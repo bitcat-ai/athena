@@ -192,6 +192,20 @@ select {
   color: var(--muted);
   font-size: 11px;
 }
+.conversation-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: 4px;
+}
+.conversation-row > .conversation-link {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+}
+.conversation-row > [data-slot='dropdown-trigger'] {
+  flex: 0 0 30px;
+}
 .conversation-list {
   flex: 1;
   min-height: 0;
@@ -596,11 +610,78 @@ select {
 
 /* Composer: the Pro component owns input sizing, keyboard actions and run states. */
 .composer-area {
+  position: relative;
   padding: 14px 24px 15px;
   flex-shrink: 0;
   width: 100%;
   max-width: 830px;
   align-self: center;
+}
+.slash-menu {
+  position: absolute;
+  bottom: calc(100% - 8px);
+  left: 24px;
+  width: min(380px, calc(100% - 48px));
+  max-height: min(420px, 60vh);
+  overflow-y: auto;
+  z-index: 20;
+  padding: 8px;
+  border-radius: var(--radius-overlay);
+  background: var(--overlay);
+  color: var(--overlay-foreground);
+  box-shadow: var(--overlay-shadow);
+}
+.slash-menu button {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  width: 100%;
+  min-height: 36px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+}
+.slash-menu [aria-selected='true'] button,
+.slash-menu button:hover {
+  background: var(--surface-secondary);
+}
+.slash-menu button:focus-visible {
+  outline: 2px solid var(--foreground);
+}
+.slash-menu span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.slash-heading,
+.slash-status,
+.slash-hint {
+  padding: 8px 10px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.slash-heading {
+  font-weight: 600;
+}
+.slash-menu [role='group'] + [role='group'] {
+  margin-top: 6px;
+}
+.slash-menu code {
+  font-size: 12px;
+  min-width: 80px;
+}
+.slash-menu span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.slash-hint {
+  padding-top: 10px;
 }
 .composer {
   width: 100%;

@@ -68,7 +68,7 @@ export async function checkAppNotices(page: Page) {
   await page.getByRole('menuitemradio', { name: '深色', exact: true }).click();
   await page
     .locator('.conversation-list')
-    .getByRole('button', { name: /检查网页表单/ })
+    .getByRole('button', { name: '检查网页表单', exact: true })
     .click();
   await page.getByRole('button', { name: '展开浏览器', exact: true }).click();
   const draft = page.getByRole('textbox', { name: '发送给 Agent 的任务' });
@@ -101,7 +101,7 @@ export async function checkAppNotices(page: Page) {
   await expect(panel).toBeFocused();
   await emit('a', 'a1', { type: 'request-resolved', id: 'approve' });
   const conversations = page.locator('.conversation-list');
-  await conversations.getByRole('button', { name: /检查网页表单/ }).click();
+  await conversations.getByRole('button', { name: '检查网页表单', exact: true }).click();
   const nextApproval = { ...approval, request: { ...approval.request, id: 'approve-again' } };
   await emit('a', 'a1', nextApproval);
   await expect(notice.getByRole('button', { name: '查看审批' })).toBeVisible();
@@ -110,7 +110,7 @@ export async function checkAppNotices(page: Page) {
   await expect(panel).toHaveCount(0);
   await emit('a', 'a1', nextApproval);
   await expect(notice.getByRole('button', { name: '查看审批' })).toHaveCount(0);
-  await conversations.getByRole('button', { name: /优化首页交互/ }).click();
+  await conversations.getByRole('button', { name: '优化首页交互', exact: true }).click();
   await expect(panel).toContainText('查看构建记录');
   await emit('a', 'a1', { type: 'request-resolved', id: 'approve-again' });
   await expect(panel).toHaveCount(0);

@@ -554,6 +554,27 @@ test('messages are persisted before dispatch, deduplicated, and restricted to th
   }
 });
 
+test('飞书文本链接在收取与持久化后保留完整原文', async () => {
+  const received: FeishuMessage[] = [];
+  const h = await harness(async (message) => {
+    received.push(message);
+  });
+  try {
+    await h.connectAndPair();
+    const text = 'https://yeepay.feishu.cn/file/Cawrb4khLobNbmxSXdecfA68nid 总结这是在干啥';
+    await h.callbacks.onMessage(event('complete-url', text));
+    await until(() => received.length === 1);
+    assert.equal(received[0].text, text);
+    const filename = createHash('sha256').update(`${APP_ID}:complete-url`).digest('hex') + '.enc';
+    const disk = JSON.parse(
+      await h.decrypt(await readFile(path.join(h.storageDir, 'inbox', filename), 'utf8')),
+    );
+    assert.equal(disk.message.text, text);
+  } finally {
+    await h.cleanup();
+  }
+});
+
 test('acknowledgement does not wait for agent work and cancellation bypasses the task queue', async () => {
   let release!: () => void;
   const running = new Promise<void>((resolve) => {

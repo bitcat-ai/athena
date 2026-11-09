@@ -443,6 +443,7 @@ export interface Conversation {
   previousAgentSessionIds?: string[];
   workspace?: string;
   remoteChatId?: string;
+  archivedAt?: number;
 }
 export interface FeishuState {
   status: 'restoring' | 'disconnected' | 'configuring' | 'connecting' | 'connected' | 'error';
@@ -472,6 +473,16 @@ export interface Settings {
   agent: AgentId;
   modelSelection?: import('./usage').ModelSelection;
   modelSelections?: Partial<Record<AgentId, import('./usage').ModelSelection>>;
+}
+export interface SlashCommand {
+  name: string;
+  description: string;
+}
+export type SlashCommandList =
+  | { status: 'ready'; commands: SlashCommand[] }
+  | { status: 'unsupported'; commands: []; reason: string };
+export interface SlashCommandExecution {
+  conversationId: string;
 }
 export interface CodexConnectionState {
   status: 'idle' | 'starting' | 'ready' | 'error';
@@ -506,6 +517,7 @@ export type AppEvent =
   | { type: 'recording:saved'; recording: Recording }
   | { type: 'agent:event'; conversationId: string; messageId: string; event: AgentEvent }
   | { type: 'feishu:state'; state: FeishuState }
+  | { type: 'conversation:deleted'; conversationId: string }
   | { type: 'conversation:updated'; conversation: Conversation }
   | { type: 'notice'; message: string; level: 'info' | 'error' };
 export interface WorkbenchBridge {

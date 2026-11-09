@@ -32,6 +32,7 @@ interface Run {
   answered: boolean;
   missingTokens: Set<keyof TokenCounts>;
   failed?: string;
+  nativeControl?: boolean;
 }
 
 /** Pi's long-lived JSONL RPC. Never treats prompt acceptance or agent_end as completion. */
@@ -206,6 +207,95 @@ export class PiSession implements AgentSession {
       (model: unknown) => object(model) && text(model.id) && text(model.provider),
     );
   }
+  async listCommands(): Promise<import('../shared/types').SlashCommandList> {
+    await this.prepare();
+    try {
+      const data = await this.request('get_commands');
+      if (!object(data) || !Array.isArray(data.commands))
+        throw new Error('Pi 原生命令目录格式无效');
+      const commands = data.commands.flatMap((entry: unknown) => {
+        if (!object(entry) || !text(entry.name, 120) || !/^[\w:-]+$/.test(entry.name)) return [];
+        const name = `/${entry.name}`;
+        const description =
+          typeof entry.description === 'string' ? entry.description.slice(0, 500) : '';
+        return [{ name, description }];
+      });
+      const builtins = [
+        { name: '/compact', description: '压缩当前会话（会调用模型）' },
+        { name: '/name', description: '设置 Pi 会话名称' },
+        { name: '/session', description: '查看 Pi 会话统计' },
+      ];
+      return {
+        status: 'ready',
+        commands: [...builtins, ...commands.filter((command: { name: string }) =>
+          !builtins.some((builtin) => builtin.name === command.name))],
+      };
+    } catch (error) {
+      if (this.closed) throw error;
+      return { status: 'unsupported', commands: [], reason: '当前 Pi 版本未提供原生命令目录' };
+    }
+  }
+  async executeCommand(name: string, argumentsText = ''): Promise<void> {
+    if (!/^\/[\w:-]{1,120}$/.test(name) || argumentsText.length > 20000)
+      throw new Error('Pi 原生命令格式无效');
+    if (this.active || this.sending) throw new Error('请等待 Pi 当前任务完成，或先停止');
+    await this.prepare();
+    const catalog = await this.listCommands();
+    if (catalog.status !== 'ready' || !catalog.commands.some((item) => item.name === name))
+      throw new Error('Pi 原生命令不可用或未在目录中');
+    const state = await this.request('get_state');
+    if (!object(state) || state.isStreaming || state.pendingMessageCount > 0)
+      throw new Error('Pi 会话当前不可执行原生命令');
+    const text = `${name}${argumentsText ? ` ${argumentsText}` : ''}`;
+    if (['/name', '/session', '/compact'].includes(name)) {
+      if (name === '/name' && !argumentsText.trim()) throw new Error('请在 /name 后输入会话名称');
+      if (name === '/session' && argumentsText) throw new Error('/session 不接受参数');
+      return this.executeBuiltin(name, argumentsText);
+    }
+    await this.send(text, undefined, undefined, undefined, true);
+  }
+  private async executeBuiltin(name: string, argumentsText: string) {
+    const done = new Promise<void>((resolve, reject) => {
+      this.active = {
+        id: randomUUID(), resolve, reject, text: '', messageText: '',
+        totals: unknownTokens(), cancelled: false, started: false, answered: false,
+        missingTokens: new Set(),
+      };
+    });
+    const run = this.active!;
+    run.nativeControl = true;
+    this.emit({ type: 'run-started', threadId: this.id!, turnId: run.id,
+      model: { source: 'unconfirmed' }, baseline: zeroTokens() });
+    void this.runBuiltin(name, argumentsText).then((result) => {
+      if (this.active !== run || run.cancelled) return;
+      run.text = result;
+      this.emit({ type: 'delta', text: result });
+      this.finish();
+    }).catch(() => {
+      if (this.active === run) this.shutdown('Pi 指令未完成，已关闭连接；请先核对会话状态');
+    });
+    return done;
+  }
+  private async runBuiltin(name: string, argumentsText: string): Promise<string> {
+    if (name === '/name') {
+      await this.request('set_session_name', { name: argumentsText });
+      return `Pi 会话名称已更新为“${argumentsText}”。`;
+    }
+    if (name === '/session') {
+      const stats = await this.request('get_session_stats');
+      if (!object(stats)) throw new Error('Pi 会话统计格式无效');
+      return `Pi 会话统计：用户消息 ${stats.userMessages ?? '未知'}，助手消息 ${stats.assistantMessages ?? '未知'}，工具调用 ${stats.toolCalls ?? '未知'}。`;
+    }
+    this.emit({ type: 'status', status: 'thinking', label: '正在压缩 Pi 会话' });
+    const result = await this.request(
+      'compact',
+      { ...(argumentsText ? { customInstructions: argumentsText } : {}) },
+      120000,
+    );
+    if (!object(result) || typeof result.summary !== 'string')
+      throw new Error('Pi 压缩结果格式无效');
+    return `会话已压缩；压缩前约 ${result.tokensBefore ?? '未知'} tokens。`;
+  }
   async listModels(): Promise<ModelOption[]> {
     await this.prepare();
     const [models, state] = await Promise.all([this.models(), this.request('get_state')]);
@@ -224,6 +314,7 @@ export class PiSession implements AgentSession {
     context?: string,
     selectedElement?: ElementRef,
     selection?: ModelSelection,
+    nativeCommand = false,
   ) {
     if (this.active || this.sending) throw new Error('请等待 Pi 当前任务完成，或先停止');
     if (!prompt.trim() || prompt.length > 20000 || (context?.length ?? 0) > 60000)
@@ -272,6 +363,10 @@ export class PiSession implements AgentSession {
     )
       .then((result) => {
         if (this.active !== run) return;
+        if (nativeCommand && result?.disposition === 'handled' && !run.started) {
+          this.finish();
+          return;
+        }
         if (result?.disposition !== 'started')
           this.shutdown('Pi 未为当前消息启动独立任务，已关闭连接');
       })
@@ -284,6 +379,10 @@ export class PiSession implements AgentSession {
     const run = this.active;
     if (!run) return;
     run.cancelled = true;
+    if (run.nativeControl) {
+      this.shutdown('Pi 指令已停止；请先核对会话状态');
+      return;
+    }
     this.cancelRequests();
     this.emit({ type: 'status', status: 'waiting', label: '正在停止 Pi' });
     try {

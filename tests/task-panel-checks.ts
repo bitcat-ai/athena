@@ -30,7 +30,7 @@ export async function checkTaskPanels(page: Page) {
   await page.getByRole('button', { name: '展开浏览器', exact: true }).click();
   await page
     .locator('.conversation-list')
-    .getByRole('button', { name: /优化首页交互/ })
+    .getByRole('button', { name: '优化首页交互', exact: true })
     .click();
   const draft = page.getByRole('textbox', { name: '发送给 Agent 的任务' });
   const before = ['这段草稿', '属于当前对话', '请保留', '所有内容', '以及', '换行'].join('\n');

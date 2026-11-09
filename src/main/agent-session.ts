@@ -3,6 +3,7 @@ import type {
   BrowserTool,
   ElementDetails,
   ElementRef,
+  SlashCommandList,
   ToolResult,
 } from '../shared/types';
 import type { ModelOption, ModelSelection } from '../shared/usage';
@@ -32,6 +33,8 @@ export interface AgentSession {
   matchesConfiguration(workspace: string, executablePath: string, tools: BrowserTool[]): boolean;
   prepare(selection?: ModelSelection): Promise<void>;
   listModels(): Promise<ModelOption[]>;
+  listCommands?(): Promise<SlashCommandList>;
+  executeCommand?(name: string, argumentsText?: string): Promise<void>;
   send(
     text: string,
     context?: string,

@@ -108,8 +108,12 @@ window.workbench={
   fixture.calls.push({action,payload});
   if(action==='app:snapshot')return fixture.ready?structuredClone(fixture.snapshot):new Promise(resolve=>fixture.pendingSnapshots.push(resolve));
   if(action==='codex:update-status')return fixture.updateStatus || {status:'unknown'};
+  if(action==='commands:list')return fixture.nativeCatalog || {status:'unsupported',commands:[]};
+  if(action==='commands:execute')return {conversationId:payload.conversationId};
   if(action==='models:list')return [{model:'fixture-model',name:${JSON.stringify(longModelName)},efforts:[{id:'low',description:'Low'},{id:'high',description:'High'}],defaultEffort:'low'}];
   if(action==='conversation:prepare')return {status:'ready',conversationId:payload.conversationId};
+  if(action==='conversation:archive'){const item=fixture.snapshot.conversations.find(c=>c.id===payload.conversationId);item.archivedAt=payload.archived?Date.now():undefined;return true;}
+  if(action==='conversation:delete'){if(fixture.cancelDelete)return false;fixture.snapshot.conversations=fixture.snapshot.conversations.filter(c=>c.id!==payload.conversationId);return true;}
   if(action==='conversation:new'){const item={id:'new-'+fixture.calls.length,title:'新对话',updatedAt:Date.now(),workspace:fixture.snapshot.settings.workspace,agent:payload?.agent||fixture.snapshot.settings.agent,messages:[]};fixture.snapshot.conversations.unshift(item);return item;}
   if(action==='conversation:send'){
    if(fixture.failSend)throw new Error('测试发送失败，请稍后重试。');
@@ -242,6 +246,52 @@ try {
   await expect(page.locator('.conversation-list')).not.toContainText('其他项目匹配');
   await expect(page.getByRole('button', { name: '本机用户菜单' })).toContainText('alina');
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+  await page.getByRole('button', { name: '检查网页表单', exact: true }).click();
+  await page.getByRole('button', { name: '复制消息', exact: true }).click();
+  assert.equal((await calls('app:copy')).at(-1)?.payload.text, '确认表单说明完整。');
+  await page.getByRole('button', { name: '对话操作：检查网页表单', exact: true }).click();
+  await page.getByRole('menuitem', { name: '归档对话', exact: true }).click();
+  await expect(
+    page.locator('.conversation-list').getByRole('button', { name: '检查网页表单', exact: true }),
+  ).toHaveCount(0);
+  const prepareCount = (await calls('conversation:prepare')).length;
+  await page.getByRole('button', { name: '已归档对话', exact: true }).click();
+  await page.getByRole('button', { name: '检查网页表单', exact: true }).click();
+  await expect(page.locator('.composer-area')).toHaveCount(0);
+  assert.equal((await calls('conversation:prepare')).length, prepareCount);
+  await expect(page.getByRole('button', { name: '恢复对话', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '恢复对话', exact: true }).click();
+  await expect(
+    page.locator('.conversation-list').getByRole('button', { name: '检查网页表单', exact: true }),
+  ).toBeVisible();
+  await page.evaluate(() => {
+    (window as any).__homeFixture.cancelDelete = true;
+  });
+  await page.getByRole('button', { name: '对话操作：检查网页表单', exact: true }).click();
+  await page.getByRole('menuitem', { name: '删除对话', exact: true }).click();
+  await expect(
+    page.locator('.conversation-list').getByRole('button', { name: '检查网页表单', exact: true }),
+  ).toBeVisible();
+  await page.evaluate(() => {
+    (window as any).__homeFixture.cancelDelete = false;
+  });
+  await page.getByRole('button', { name: '对话操作：旧任务', exact: true }).click();
+  await page.getByRole('menuitem', { name: '删除对话', exact: true }).click();
+  await expect(
+    page.locator('.conversation-list').getByRole('button', { name: '旧任务', exact: true }),
+  ).toHaveCount(0);
+  await page.evaluate(
+    (item) => {
+      const f = (window as any).__homeFixture;
+      f.snapshot.conversations.push(item);
+      f.emit({ type: 'conversation:updated', conversation: item });
+    },
+    snapshot.conversations.find((item) => item.id === 'legacy'),
+  );
+  checks.push('消息复制保留原文；归档只读、恢复回到列表，取消删除保留会话，确认删除移除会话');
+  await page.getByRole('button', { name: '新对话', exact: true }).first().click();
+  await expect(page.getByRole('heading', { name: '今天想完成什么？' })).toBeVisible();
+  await expect.poll(async () => (await page.locator('.composer').boundingBox())?.width).toBe(760);
   const geometry = await page.evaluate(() => {
     const info = (selector: string) => {
       const node = document.querySelector(selector)!;
@@ -337,6 +387,55 @@ try {
   const composer = page.getByRole('textbox', { name: '发送给 Agent 的任务' });
   const conversationA = page.locator('.conversation-link').filter({ hasText: '优化首页交互' });
   const conversationB = page.locator('.conversation-link').filter({ hasText: '检查网页表单' });
+  const slashSendCount = (await calls('conversation:send')).length;
+  await composer.fill('/');
+  await expect(page.getByRole('listbox', { name: '快捷指令' })).toBeVisible();
+  await expect(page.getByText('Athena 快捷操作', { exact: true })).toBeVisible();
+  await expect(page.getByText('Codex 原生指令', { exact: true })).toBeVisible();
+  const slashMenu = page.locator('.slash-menu');
+  const menuBounds = await slashMenu.boundingBox();
+  assert.ok(menuBounds && menuBounds.width <= 400, '指令菜单应保持紧凑');
+  assert.ok((await calls('commands:list')).length > 0, '进入已绑定 Agent 后读取原生指令');
+  await page.screenshot({ path: path.join(output, 'slash-menu-light.png') });
+  await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
+  await page.screenshot({ path: path.join(output, 'slash-menu-dark.png') });
+  await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'light'));
+  await composer.fill('/sea');
+  await expect(page.getByRole('option', { name: /\/search/ })).toBeVisible();
+  await composer.press('Enter');
+  await expect(composer).toHaveValue('/search');
+  await composer.press('Enter');
+  await expect(page.getByRole('dialog', { name: '搜索对话' })).toBeVisible();
+  assert.equal((await calls('conversation:send')).length, slashSendCount);
+  await page.keyboard.press('Escape');
+  await composer.fill('/');
+  await composer.press('Escape');
+  await expect(page.getByRole('listbox', { name: '快捷指令' })).toHaveCount(0);
+  await composer.fill('/compact');
+  await composer.press('Enter');
+  await expect(composer).toHaveValue('/compact');
+  assert.equal((await calls('conversation:send')).length, slashSendCount);
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('listbox', { name: '快捷指令' })).toHaveCount(0);
+  await page.evaluate(() => {
+    (window as any).__homeFixture.nativeCatalog = {
+      status: 'ready',
+      commands: [{ name: '/review', description: '检查当前修改' }],
+    };
+  });
+  await conversationB.click();
+  await conversationA.click();
+  await composer.fill('/rev');
+  await expect(page.getByRole('option', { name: /\/review/ })).toBeVisible();
+  await composer.press('Tab');
+  await expect(composer).toHaveValue('/review');
+  await composer.fill('/review 检查当前修改');
+  await composer.press('Enter');
+  await expect(composer).toHaveValue('');
+  const nativeExecution = (await calls('commands:execute')).at(-1)?.payload;
+  assert.equal(nativeExecution?.name, '/review');
+  assert.equal(nativeExecution?.arguments, '检查当前修改');
+  assert.equal((await calls('conversation:send')).length, slashSendCount);
   await composer.fill('A 的草稿');
   await conversationB.click();
   await expect(composer).toHaveValue('');

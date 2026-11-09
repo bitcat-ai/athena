@@ -25,6 +25,7 @@ import { conversationAgent, conversationModelSelection, supportsBrowser } from '
 import { NeoBrowserRuntime } from './neo-browser';
 import { FeishuConnector } from './feishu';
 import { TurnNotifications } from './notifications';
+import { conversationTitle } from '../shared/conversation-title';
 import { Store } from './store';
 import { UsageStore } from './usage';
 import { managedCodexPath, OnboardingRuntime } from './onboarding';
@@ -179,11 +180,13 @@ function selectedConversation() {
   return (
     store.data.conversations.find(
       (item) =>
+        !item.archivedAt &&
         item.id === selectedConversationId &&
         (!item.workspace || item.workspace === store.data.settings.workspace),
     ) ??
     store.data.conversations.find(
-      (item) => !item.workspace || item.workspace === store.data.settings.workspace,
+      (item) =>
+        !item.archivedAt && (!item.workspace || item.workspace === store.data.settings.workspace),
     ) ??
     createConversation()
   );
@@ -281,6 +284,7 @@ function prepareConversation(conversation: Conversation): Promise<void> {
   }
   if (conversation.workspace && conversation.workspace !== store.data.settings.workspace)
     return Promise.reject(new Error('此对话属于其他工作目录'));
+  if (conversation.archivedAt) return Promise.reject(new Error('归档对话不能准备连接'));
   selectedConversationId = conversation.id;
   if (active || startingTurn) return Promise.resolve();
   if (resetAfterTurn) resetConnections();
@@ -306,11 +310,17 @@ function prepareConversation(conversation: Conversation): Promise<void> {
       /* Local CLI work does not require Neo. */
     }
     if (quitting || revision !== connectionRevision) throw new Error('连接配置已改变');
+    if (!store.data.conversations.includes(conversation)) throw new Error('此对话已删除');
     // A send may have started while the browser connection was being prepared.
     if (active || startingTurn) return;
     const session = getSession(conversation, info.path, toolsFor(conversation));
     await session.prepare(conversationModelSelection(store.data.settings, conversation));
-    if (quitting || revision !== connectionRevision || sessions.get(conversation.id) !== session)
+    if (
+      quitting ||
+      revision !== connectionRevision ||
+      sessions.get(conversation.id) !== session ||
+      !store.data.conversations.includes(conversation)
+    )
       throw new Error('连接配置已改变');
     if (selectedConversationId === conversation.id)
       connectionState({ status: 'ready', conversationId: conversation.id });
@@ -359,6 +369,9 @@ function getConversation(id: unknown): Conversation {
   const conversation = store.data.conversations.find((item) => item.id === string(id, 100));
   if (!conversation) throw new Error('找不到这个对话');
   return conversation;
+}
+function assertConversationMutable(_conversation: Conversation) {
+  if (active || startingTurn) throw new Error('当前任务还在进行，请先停止或等待完成');
 }
 function createConversation(title = '新对话', agent = store.data.settings.agent) {
   const conversation: Conversation = {
@@ -519,11 +532,13 @@ async function runTurn(
   source: 'desktop' | 'feishu' = 'desktop',
   readonly = false,
   selectedElement?: ElementRef,
+  nativeCommand?: { name: string; argumentsText: string },
 ) {
   assertTaskEnvironment();
   if (active || startingTurn) throw new Error('当前任务还在进行，请先停止或等待完成');
   if (conversation.workspace && conversation.workspace !== store.data.settings.workspace)
     throw new Error('这段对话属于另一个工作目录。请切换回原目录，或新建对话。');
+  if (conversation.archivedAt) throw new Error('归档对话不能继续发送，请先恢复');
   const info = agentInfo(conversationAgent(conversation));
   if (!supportsBrowser(info.id) && selectedElement)
     throw new Error('当前 CLI 尚未接通网页元素工具，请移除元素上下文后发送');
@@ -531,7 +546,7 @@ async function runTurn(
   if (resetAfterTurn) resetConnections();
   const selectedModel = conversationModelSelection(store.data.settings, conversation);
   const modelSelection = selectedModel ? { ...selectedModel } : undefined;
-  if (!conversation.messages.length) conversation.title = text.trim().split('\n')[0].slice(0, 32);
+  if (!conversation.messages.length) conversation.title = conversationTitle(text);
   const visibleHistory = conversation.messages.slice();
   const user: ChatMessage = {
     id: randomUUID(),
@@ -630,12 +645,17 @@ async function runTurn(
       await neo.cancelTask();
       throw new Error('任务已停止');
     }
-    await session.send(
-      text,
-      [context, nativeContext].filter(Boolean).join('\n\n') || undefined,
-      selectedElement,
-      modelSelection,
-    );
+    if (nativeCommand) {
+      if (!session.executeCommand) throw new Error('当前 CLI 不支持执行原生命令');
+      await session.executeCommand(nativeCommand.name, nativeCommand.argumentsText);
+    } else {
+      await session.send(
+        text,
+        [context, nativeContext].filter(Boolean).join('\n\n') || undefined,
+        selectedElement,
+        modelSelection,
+      );
+    }
     const unresolved = neo.unresolvedResult(assistant.id);
     if (unresolved) throw new Error(unresolved);
     if (assistant.status === 'streaming') assistant.status = 'done';
@@ -731,12 +751,19 @@ function startTurn(
   context?: string,
   readonly = false,
   selectedElement?: ElementRef,
+  nativeCommand?: { name: string; argumentsText: string },
 ) {
   assertTaskEnvironment();
   if (active || startingTurn) throw new Error('当前任务还在进行，请先停止');
-  void runTurn(conversation, text, context, 'desktop', readonly, selectedElement).catch((error) =>
-    notice(error instanceof Error ? error.message : '任务失败', 'error'),
-  );
+  void runTurn(
+    conversation,
+    text,
+    context,
+    'desktop',
+    readonly,
+    selectedElement,
+    nativeCommand,
+  ).catch((error) => notice(error instanceof Error ? error.message : '任务失败', 'error'));
   return { conversationId: conversation.id };
 }
 async function handleFeishuMessage(message: FeishuMessage) {
@@ -755,7 +782,9 @@ async function handleFeishuMessage(message: FeishuMessage) {
   const conversation =
     store.data.conversations.find(
       (item) =>
-        item.remoteChatId === message.chatId && item.workspace === store.data.settings.workspace,
+        !item.archivedAt &&
+        item.remoteChatId === message.chatId &&
+        item.workspace === store.data.settings.workspace,
     ) || createConversation(`飞书 · ${message.text.slice(0, 22)}`);
   conversation.remoteChatId = message.chatId;
   let reply: string;
@@ -986,8 +1015,100 @@ async function invoke(action: string, payload: unknown) {
         throw new Error('CLI 已改变，请重新读取模型');
       return listModels(data.refresh === true, conversation);
     }
+    case 'conversation:archive': {
+      const data = record(payload);
+      if (typeof data.archived !== 'boolean') throw new Error('归档状态无效');
+      const conversation = getConversation(data.conversationId);
+      assertConversationMutable(conversation);
+      conversation.archivedAt = data.archived ? (conversation.archivedAt ?? Date.now()) : undefined;
+      if (conversation.archivedAt === undefined) delete conversation.archivedAt;
+      if (data.archived && selectedConversationId === conversation.id) {
+        selectedConversationId = undefined;
+        resetConnections();
+        if (!active && !startingTurn)
+          void prepareConversation(selectedConversation()).catch(() => {});
+      }
+      await store.save();
+      emit({ type: 'conversation:updated', conversation });
+      return true;
+    }
+    case 'conversation:delete': {
+      const conversation = getConversation(record(payload).conversationId);
+      assertConversationMutable(conversation);
+      const confirmation = await dialog.showMessageBox(window!, {
+        type: 'warning',
+        title: '删除对话',
+        message: `确定删除“${conversation.title}”吗？`,
+        detail: '此操作仅删除 Athena 中的对话记录，不会删除 CLI 原始会话或用量历史。',
+        buttons: ['取消', '删除'],
+        defaultId: 0,
+        cancelId: 0,
+        noLink: true,
+      });
+      if (confirmation.response !== 1) return false;
+      assertConversationMutable(conversation);
+      if (!store.data.conversations.includes(conversation)) throw new Error('此对话已删除');
+      if (selectedConversationId === conversation.id) selectedConversationId = undefined;
+      warming.delete(conversation.id);
+      const session = sessions.get(conversation.id);
+      sessions.delete(conversation.id);
+      session?.close();
+      store.data.conversations = store.data.conversations.filter(
+        (item) => item.id !== conversation.id,
+      );
+      if (selectedConversationId === undefined) {
+        resetConnections();
+        if (!active && !startingTurn)
+          void prepareConversation(selectedConversation()).catch(() => {});
+      }
+      await store.save();
+      emit({ type: 'conversation:deleted', conversationId: conversation.id });
+      return true;
+    }
+    case 'commands:list': {
+      const data = record(payload);
+      const conversation =
+        data.conversationId === undefined ? undefined : getConversation(data.conversationId);
+      const id = conversation ? conversationAgent(conversation) : string(data.agent, 50);
+      if (data.agent !== undefined && data.agent !== id)
+        throw new Error('CLI 已改变，请重新读取指令');
+      const info = agentInfo(id as AgentId);
+      if (data.workspace !== undefined && data.workspace !== store.data.settings.workspace)
+        throw new Error('工作目录已改变，请重新读取指令');
+      if (conversation && info.id === 'pi') await prepareConversation(conversation);
+      if (data.workspace !== undefined && data.workspace !== store.data.settings.workspace)
+        throw new Error('工作目录已改变，请重新读取指令');
+      const session = conversation ? sessions.get(conversation.id) : undefined;
+      if (!session || session.isClosed || !session.listCommands)
+        return { status: 'unsupported', commands: [], reason: '当前 CLI 未提供原生命令目录' };
+      return session.listCommands();
+    }
+    case 'commands:execute': {
+      if (active || startingTurn) throw new Error('请等待当前任务完成');
+      assertTaskEnvironment();
+      const data = record(payload);
+      const conversation = getConversation(string(data.conversationId, 100));
+      if (conversation.archivedAt) throw new Error('归档对话不能执行原生命令');
+      const id = conversationAgent(conversation);
+      if (data.agent !== id) throw new Error('CLI 已改变，请重新读取指令');
+      agentInfo(id);
+      const name = string(data.name, 121);
+      const argumentsText = data.arguments === undefined ? '' : string(data.arguments, 20000);
+      const session = sessions.get(conversation.id);
+      if (!session || session.isClosed || !session.executeCommand)
+        throw new Error('当前 CLI 不支持执行原生命令');
+      return startTurn(
+        conversation,
+        `${name}${argumentsText ? ` ${argumentsText}` : ''}`,
+        undefined,
+        false,
+        undefined,
+        { name, argumentsText },
+      );
+    }
     case 'conversation:prepare': {
       const conversation = getConversation(record(payload).conversationId);
+      if (conversation.archivedAt) throw new Error('归档对话不能准备连接');
       await prepareConversation(conversation);
       if ((active || startingTurn) && active?.conversationId !== conversation.id)
         return { status: 'idle', conversationId: conversation.id } satisfies CodexConnectionState;
@@ -1078,6 +1199,7 @@ async function invoke(action: string, payload: unknown) {
       if (selectedRef && selected?.ref !== selectedRef)
         throw new Error('选中的元素已变化，请重新选取后发送。');
       const conversation = data.id ? getConversation(data.id) : createConversation();
+      if (conversation.archivedAt) throw new Error('归档对话不能继续发送，请先恢复');
       return startTurn(conversation, string(data.text), context, false, selected);
     }
     case 'conversation:stop':

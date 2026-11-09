@@ -24,6 +24,8 @@ import {
   EarthIcon,
   Folder01Icon,
   FolderOpenIcon,
+  Archive01Icon,
+  Delete02Icon,
   Link02Icon,
   Loading02Icon,
   MessageSquareIcon,
@@ -38,6 +40,7 @@ import {
   TerminalIcon,
   Tick02Icon,
   UnplugIcon,
+  MoreHorizontalIcon,
   XIcon,
 } from '@hugeicons-pro/core-stroke-rounded';
 import { BrowserPane } from './BrowserPane';
@@ -133,6 +136,8 @@ export default function App() {
   const onboardingStateRef = useRef<OnboardingState | undefined>(undefined);
   const [localUserName, setLocalUserName] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
+  const [slashDismissed, setSlashDismissed] = useState(false);
+  const [slashIndex, setSlashIndex] = useState(0);
   const [showUsage, setShowUsage] = useState(false);
   const [settings, setSettings] = useState<Settings>({ workspace: '', agent: 'codex' });
   const workspaceLabel =
@@ -144,6 +149,8 @@ export default function App() {
   const [nativeRecordId, setNativeRecordId] = useState<string>();
   const [feishu, setFeishu] = useState<FeishuState>(emptyFeishu);
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [showArchived, setShowArchived] = useState(false);
+  const [changingConversation, setChangingConversation] = useState(false);
   const [selectedId, setConversationId] = useState<string>();
   const [recordings, setRecordings] = useState<Recording[]>([]);
   const [liveSteps, setLiveSteps] = useState<RecordedStep[]>([]);
@@ -177,7 +184,9 @@ export default function App() {
   const activeBrowserTab = useRef<string | undefined>(undefined);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const workspaceConversations = conversations.filter(
-    (item) => !item.workspace || item.workspace === settings.workspace,
+    (item) =>
+      (!item.workspace || item.workspace === settings.workspace) &&
+      Boolean(item.archivedAt) === showArchived,
   );
   const conversation = workspaceConversations.find((item) => item.id === selectedId);
   const conversationId = conversation?.id;
@@ -190,11 +199,55 @@ export default function App() {
   const draftEntry = drafts[draftKey];
   const draft = draftEntry?.text ?? '';
   // Before the first send there is no host ID. Keep that draft reachable after navigation.
-  const sidebarConversations = drafts[JSON.stringify([settings.workspace, null])]?.text
-    ? [{ id: undefined, title: '未发送草稿', messages: [] }, ...workspaceConversations]
-    : workspaceConversations;
-  const setDraft = (text: string) =>
+  const sidebarConversations =
+    !showArchived && drafts[JSON.stringify([settings.workspace, null])]?.text
+      ? [{ id: undefined, title: '未发送草稿', messages: [] }, ...workspaceConversations]
+      : workspaceConversations;
+  const setDraft = (text: string) => {
+    setSlashDismissed(false);
+    setSlashIndex(0);
     setDrafts((previous) => ({ ...previous, [draftKey]: { text } }));
+  };
+  const [nativeCatalog, setNativeCatalog] = useState<{
+    key: string;
+    status: 'loading' | 'ready' | 'unsupported' | 'error';
+    commands: { name: string; description: string }[];
+    reason?: string;
+  }>({ key: '', status: 'loading', commands: [] });
+  const slashCommands = [
+    { name: '/new', description: '新建对话' },
+    { name: '/search', description: '搜索对话' },
+    { name: '/usage', description: '查看用量' },
+    { name: '/settings', description: '设置与连接' },
+  ];
+  const slashQuery = /^\/[\w:-]*$/i.test(draft);
+  const currentAgentId = conversation ? conversationAgent(conversation) : settings.agent;
+  const currentAgent = agents.find((item) => item.id === currentAgentId);
+  const nativeKey = JSON.stringify([
+    settings.workspace,
+    conversationId,
+    conversation ? conversationAgent(conversation) : settings.agent,
+  ]);
+  const visibleNative = nativeCatalog.key === nativeKey ? nativeCatalog.commands : [];
+  const nativeStatus =
+    nativeCatalog.key === nativeKey
+      ? nativeCatalog.status
+      : !currentAgent?.available || !currentAgent.supported
+        ? 'unsupported'
+        : 'loading';
+  const slashMatches = slashQuery
+    ? [
+        ...slashCommands.map((command) => ({ ...command, source: 'local' })),
+        ...visibleNative
+          .filter((command) => !slashCommands.some((local) => local.name === command.name))
+          .map((command) => ({ ...command, source: 'native' })),
+      ].filter((command) => command.name.startsWith(draft.toLowerCase()))
+    : [];
+  const chooseSlash = (name: string) => {
+    setDraft(name);
+    setSlashDismissed(true);
+    composer.current?.querySelector('textarea')?.focus();
+  };
   const currentView = {
     id: conversationId,
     workspace: settings.workspace,
@@ -211,10 +264,55 @@ export default function App() {
   const busy = conversations.some((item) =>
     item.messages.some((message) => message.status === 'streaming'),
   );
+  const slashOpen = !slashDismissed && slashQuery && !busy;
   const currentBusy = messages.some((message) => message.status === 'streaming');
-  const currentAgentId = conversation ? conversationAgent(conversation) : settings.agent;
-  const currentAgent = agents.find((item) => item.id === currentAgentId);
   const defaultAgent = agents.find((item) => item.id === settings.agent);
+  useEffect(() => {
+    if (!loaded || setupRequired) return;
+    let cancelled = false;
+    if (!currentAgent?.available || !currentAgent.supported) {
+      setNativeCatalog({ key: nativeKey, status: 'unsupported', commands: [] });
+      return () => {
+        cancelled = true;
+      };
+    }
+    setNativeCatalog({ key: nativeKey, status: 'loading', commands: [] });
+    window.workbench
+      .invoke('commands:list', {
+        agent: currentAgentId,
+        conversationId,
+        workspace: settings.workspace,
+      })
+      .then((result: any) => {
+        if (cancelled) return;
+        setNativeCatalog({
+          key: nativeKey,
+          status: result?.status === 'ready' ? 'ready' : 'unsupported',
+          commands: Array.isArray(result?.commands) ? result.commands : [],
+          reason: result?.reason,
+        });
+      })
+      .catch(() => {
+        if (!cancelled)
+          setNativeCatalog({
+            key: nativeKey,
+            status: 'error',
+            commands: [],
+            reason: '读取失败，请重新连接 Agent',
+          });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    loaded,
+    setupRequired,
+    nativeKey,
+    currentAgent?.available,
+    currentAgent?.supported,
+    currentAgent?.path,
+    currentAgent?.version,
+  ]);
   const currentSelection = conversation
     ? conversationModelSelection(settings, conversation)
     : agentModelSelection(settings, currentAgentId);
@@ -266,6 +364,56 @@ export default function App() {
     },
     [showToast],
   );
+  async function changeConversation(
+    item: Conversation,
+    operation: 'archive' | 'restore' | 'delete',
+  ) {
+    if (changingConversation) return;
+    setChangingConversation(true);
+    try {
+      const changed = await action<boolean>(
+        operation === 'delete' ? 'conversation:delete' : 'conversation:archive',
+        {
+          conversationId: item.id,
+          archived: operation === 'archive',
+        },
+      );
+      if (!changed) return;
+      if (operation === 'delete') {
+        setConversations((previous) => previous.filter((entry) => entry.id !== item.id));
+        setDrafts((previous) =>
+          Object.fromEntries(
+            Object.entries(previous).filter(([key]) => {
+              try {
+                return JSON.parse(key)[1] !== item.id;
+              } catch {
+                return true;
+              }
+            }),
+          ),
+        );
+      } else {
+        setConversations((previous) =>
+          previous.map((entry) =>
+            entry.id === item.id
+              ? { ...entry, archivedAt: operation === 'archive' ? Date.now() : undefined }
+              : entry,
+          ),
+        );
+      }
+      setConversationId((previous) => (previous === item.id ? undefined : previous));
+      if (operation === 'restore') setShowArchived(false);
+      showToast(
+        operation === 'delete'
+          ? '已删除对话'
+          : operation === 'archive'
+            ? '已归档对话'
+            : '已恢复对话',
+      );
+    } finally {
+      setChangingConversation(false);
+    }
+  }
   const upsert = useCallback((next: Conversation) => {
     setConversations((previous) =>
       [next, ...previous.filter((item) => item.id !== next.id)].sort(
@@ -273,8 +421,11 @@ export default function App() {
       ),
     );
     const view = viewedConversation.current;
-    // A host-created conversation must not take over an unsent first draft.
-    if (!view.hasDraft && (!next.workspace || next.workspace === view.workspace))
+    if (
+      !next.archivedAt &&
+      !view.hasDraft &&
+      (!next.workspace || next.workspace === view.workspace)
+    )
       setConversationId((previous) => previous ?? next.id);
   }, []);
   useEffect(() => {
@@ -337,6 +488,20 @@ export default function App() {
         feishuUpdated = true;
         setFeishu(event.state);
         if (event.state.status !== 'configuring') setConnecting(false);
+      } else if (event.type === 'conversation:deleted') {
+        setConversations((previous) => previous.filter((item) => item.id !== event.conversationId));
+        setDrafts((previous) =>
+          Object.fromEntries(
+            Object.entries(previous).filter(([key]) => {
+              try {
+                return JSON.parse(key)[1] !== event.conversationId;
+              } catch {
+                return true;
+              }
+            }),
+          ),
+        );
+        setConversationId((previous) => (previous === event.conversationId ? undefined : previous));
       } else if (event.type === 'conversation:updated') upsert(event.conversation);
       else if (event.type === 'notice') showToast(event.message, event.level === 'error');
       else if (event.type === 'agent:event') {
@@ -467,7 +632,8 @@ export default function App() {
         setConversations(snapshot.conversations);
         setRecordings(snapshot.recordings);
         const scoped = snapshot.conversations.filter(
-          (item) => !item.workspace || item.workspace === snapshot.settings.workspace,
+          (item) =>
+            !item.archivedAt && (!item.workspace || item.workspace === snapshot.settings.workspace),
         );
         setConversationId(
           scoped.find((item) => item.id === snapshot.codexConnection?.conversationId)?.id ??
@@ -495,6 +661,7 @@ export default function App() {
       !workbenchMounted ||
       onboardingVisible ||
       !conversationId ||
+      conversation?.archivedAt ||
       !currentAgent?.supported
     )
       return;
@@ -516,6 +683,7 @@ export default function App() {
     workbenchMounted,
     onboardingVisible,
     conversationId,
+    conversation?.archivedAt,
     currentAgentId,
     currentAgent?.supported,
     settings.workspace,
@@ -571,6 +739,7 @@ export default function App() {
     composer.current?.querySelector('textarea')?.focus();
   };
   const newConversation = useCallback(async () => {
+    setShowArchived(false);
     setShowUsage(false);
     setSettingsTab(null);
     const item = await action<Conversation>('conversation:new');
@@ -583,6 +752,7 @@ export default function App() {
       stickToBottom.current = true;
       composer.current?.querySelector('textarea')?.focus();
     }
+    return item;
   }, [action, upsert]);
   useEffect(() => {
     const listener = (event: KeyboardEvent) => {
@@ -647,6 +817,50 @@ export default function App() {
     onboardingVisible,
   ]);
   const send = async () => {
+    const command = slashCommands.find((item) => item.name === draft.trim().toLowerCase());
+    if (command && loaded && !busy && !setupRequired) {
+      if (command.name === '/new') {
+        if (!(await newConversation())) return;
+      } else if (command.name === '/search') setSearchOpen(true);
+      else if (command.name === '/usage') setShowUsage(true);
+      else if (command.name === '/settings') setSettingsTab('agent');
+      setDrafts((previous) => {
+        if (previous[draftKey] !== draftEntry) return previous;
+        const next = { ...previous };
+        delete next[draftKey];
+        return next;
+      });
+      return;
+    }
+    const text = draft.trim();
+    const nativeName = text.split(/\s+/)[0];
+    if (
+      visibleNative.some((item) => item.name === nativeName) &&
+      loaded &&
+      !busy &&
+      !setupRequired
+    ) {
+      const result = await action<{ conversationId: string }>('commands:execute', {
+        conversationId,
+        agent: currentAgentId,
+        name: nativeName,
+        arguments: text.slice(nativeName.length).trim(),
+      });
+      if (!result?.conversationId) return;
+      setDrafts((previous) => {
+        if (previous[draftKey] !== draftEntry) return previous;
+        const next = { ...previous };
+        delete next[draftKey];
+        return next;
+      });
+      if (viewedConversation.current.draftKey === draftKey)
+        setConversationId(result.conversationId);
+      return;
+    }
+    if (/^\/[a-z][\w-]*(?:\s|$)/i.test(text)) {
+      showToast('此指令暂不支持；作为普通文本发送请在前面再加一个 /。', true);
+      return;
+    }
     if (
       !draft.trim() ||
       busy ||
@@ -663,7 +877,7 @@ export default function App() {
       : undefined;
     const result = await action<{ conversationId: string }>('conversation:send', {
       id: conversationId,
-      text: draft.trim(),
+      text: text.startsWith('//') ? text.slice(1) : text,
       context,
       selectedRef: selected?.ref,
     });
@@ -812,6 +1026,7 @@ export default function App() {
     setShowUsage(true);
   };
   const selectConversation = (id: string | undefined) => {
+    setShowArchived(Boolean(conversations.find((item) => item.id === id)?.archivedAt));
     setShowUsage(false);
     setSettingsTab(null);
     setConversationId(id);
@@ -1124,7 +1339,9 @@ export default function App() {
                   )}
                   <div>
                     <strong>使用飞书扫码</strong>
-                    <p>选择已有机器人，并确认接收私聊与回复消息的权限。已有应用配置可能发生变化，请核对授权页后确认。</p>
+                    <p>
+                      选择已有机器人，并确认接收私聊与回复消息的权限。已有应用配置可能发生变化，请核对授权页后确认。
+                    </p>
                     <div className="button-row flex-wrap">
                       {feishu.setupUrl && (
                         <ActionButton
@@ -1375,28 +1592,85 @@ export default function App() {
                 <span>{workspaceLabel}</span>
                 <Icon icon={ArrowDown01Icon} size={13} />
               </ActionButton>
-              <div className="sidebar-section-label">对话</div>
+              <div className="sidebar-section-label">{showArchived ? '已归档' : '对话'}</div>
+              <ActionButton
+                className="text-button"
+                onPress={() => {
+                  setShowArchived((value) => !value);
+                  setConversationId(undefined);
+                }}
+              >
+                {showArchived ? '返回对话列表' : '已归档对话'}
+              </ActionButton>
               <Sidebar.Content className="conversation-list" aria-label="对话列表">
                 {sidebarConversations.length ? (
                   sidebarConversations.map((item) => (
-                    <ActionButton
-                      key={item.id ?? 'unsent-draft'}
-                      className={`conversation-link ${item.id === conversationId && !showUsage && !settingsTab ? 'active' : ''}`}
-                      aria-current={
-                        item.id === conversationId && !showUsage && !settingsTab
-                          ? 'page'
-                          : undefined
-                      }
-                      onPress={() => selectConversation(item.id)}
-                      title={item.title}
-                    >
-                      {item.messages.some((message) => message.status === 'streaming') ? (
-                        <Icon icon={Loading02Icon} size={14} className="spin" />
-                      ) : (
-                        <Icon icon={MessageSquareIcon} size={14} />
+                    <div key={item.id ?? 'unsent-draft'} className="conversation-row">
+                      <ActionButton
+                        className={`conversation-link ${item.id === conversationId && !showUsage && !settingsTab ? 'active' : ''}`}
+                        aria-current={
+                          item.id === conversationId && !showUsage && !settingsTab
+                            ? 'page'
+                            : undefined
+                        }
+                        onPress={() => selectConversation(item.id)}
+                        title={item.title}
+                      >
+                        {item.messages.some((message) => message.status === 'streaming') ? (
+                          <Icon icon={Loading02Icon} size={14} className="spin" />
+                        ) : (
+                          <Icon icon={MessageSquareIcon} size={14} />
+                        )}
+                        <span>{item.title}</span>
+                      </ActionButton>
+                      {item.id && (
+                        <Dropdown>
+                          <Button
+                            isIconOnly
+                            variant="ghost"
+                            size="sm"
+                            aria-label={`对话操作：${item.title}`}
+                            isDisabled={changingConversation}
+                          >
+                            <Icon icon={MoreHorizontalIcon} size={15} />
+                          </Button>
+                          <Dropdown.Popover>
+                            <Dropdown.Menu
+                              aria-label="对话操作"
+                              onAction={(key) => {
+                                const target = conversations.find((entry) => entry.id === item.id);
+                                if (!target) return;
+                                if (key === 'archive') void changeConversation(target, 'archive');
+                                if (key === 'restore') void changeConversation(target, 'restore');
+                                if (key === 'delete') void changeConversation(target, 'delete');
+                                if (key === 'open') selectConversation(target.id);
+                              }}
+                            >
+                              {item.id !== conversationId && (
+                                <Dropdown.Item id="open" textValue="打开对话">
+                                  <Label>打开对话</Label>
+                                </Dropdown.Item>
+                              )}
+                              <Dropdown.Item
+                                id={showArchived ? 'restore' : 'archive'}
+                                textValue={showArchived ? '恢复对话' : '归档对话'}
+                              >
+                                <Icon icon={Archive01Icon} size={16} />
+                                <Label>{showArchived ? '恢复对话' : '归档对话'}</Label>
+                              </Dropdown.Item>
+                              <Dropdown.Item
+                                id="delete"
+                                textValue="删除对话"
+                                className="destructive-action"
+                              >
+                                <Icon icon={Delete02Icon} size={16} />
+                                <Label>删除对话</Label>
+                              </Dropdown.Item>
+                            </Dropdown.Menu>
+                          </Dropdown.Popover>
+                        </Dropdown>
                       )}
-                      <span>{item.title}</span>
-                    </ActionButton>
+                    </div>
                   ))
                 ) : (
                   <p className="sidebar-empty">新的对话会保存在这里</p>
@@ -1454,6 +1728,15 @@ export default function App() {
                     </span>
                   </div>
                   <div className="topbar-actions">
+                    {conversation?.archivedAt && (
+                      <ActionButton
+                        className="text-button"
+                        isDisabled={changingConversation}
+                        onPress={() => void changeConversation(conversation, 'restore')}
+                      >
+                        恢复对话
+                      </ActionButton>
+                    )}
                     {settingsTab ? (
                       <ActionButton className="text-button" onPress={() => setSettingsTab(null)}>
                         返回对话
@@ -1565,6 +1848,18 @@ export default function App() {
                                   <ProChatMessage.Bubble className="user-message-text">
                                     {message.text}
                                   </ProChatMessage.Bubble>
+                                  <ChatMessageActions>
+                                    <ChatMessageActions.Copy
+                                      aria-label="复制消息"
+                                      isCopied={toast?.copiedMessageId === message.id}
+                                      onPress={async () => {
+                                        const copied = await action<boolean>('app:copy', {
+                                          text: message.text,
+                                        });
+                                        if (copied) showToast('已复制消息', false, message.id);
+                                      }}
+                                    />
+                                  </ChatMessageActions>
                                   {message.source === 'feishu' && (
                                     <div className="message-source">
                                       <Icon icon={Link02Icon} size={11} />
@@ -1686,263 +1981,355 @@ export default function App() {
                         onSourceRequest={requestSource}
                       />
                     </Tabs.Panel>
-                    <div className="composer-area">
-                      {panelRequest && (
-                        <RequestPanel
-                          key={requestKey(panelRequest)}
-                          requestKey={requestKey(panelRequest)}
-                          pending={panelRequest}
-                          taskTitle={
-                            conversations.find((item) => item.id === panelRequest.conversationId)
-                              ?.title || '当前任务'
-                          }
-                          onRespond={action}
-                          onStop={() => void action('conversation:stop')}
-                          onShowTask={() => selectConversation(panelRequest.conversationId)}
-                        />
-                      )}
-                      <PromptInput
-                        ref={composer}
-                        className={`composer ${busy ? 'is-busy' : ''}`}
-                        value={draft}
-                        onValueChange={setDraft}
-                        status={busy ? 'streaming' : 'ready'}
-                        lockInputOnRun={false}
-                        maxHeight={panelRequest ? 72 : 160}
-                        onSubmit={() => void send()}
-                        onStop={() => void action('conversation:stop')}
-                      >
-                        <PromptInput.Shell>
-                          {selected && (
-                            <PromptInput.Attachments className="selected-context">
-                              <ChatAttachment name={selected.name || selected.tag}>
-                                <ChatAttachment.Icon>
-                                  <Icon icon={Cursor01Icon} size={16} />
-                                </ChatAttachment.Icon>
-                                <ChatAttachment.Info>
-                                  <ChatAttachment.Name title={selected.name || selected.tag} />
-                                  <code className="text-xs text-muted">
-                                    {selected.role || selected.tag}
-                                  </code>
-                                </ChatAttachment.Info>
-                                <ChatAttachment.Remove
-                                  aria-label="移除选中元素"
-                                  onPress={() => setSelected(undefined)}
-                                />
-                              </ChatAttachment>
-                            </PromptInput.Attachments>
-                          )}
-                          <PromptInput.Content>
-                            <PromptInput.TextArea
-                              aria-label="发送给 Agent 的任务"
-                              placeholder={
-                                selected
-                                  ? '对这个元素有什么想法？'
-                                  : '描述任务，或选中页面中的元素…'
-                              }
-                              onKeyDownCapture={(event) => {
-                                // beta.10 handles Enter before its consumer callback; composition must not submit.
-                                if (
-                                  event.key === 'Enter' &&
-                                  (event.nativeEvent.isComposing ||
-                                    event.nativeEvent.keyCode === 229)
-                                )
-                                  event.stopPropagation();
-                              }}
-                            />
-                          </PromptInput.Content>
-                          <PromptInput.Toolbar className="composer-controls">
-                            <PromptInput.ToolbarStart>
-                              <WebContextMenu
-                                ready={
-                                  browser.status === 'ready' && supportsBrowser(currentAgentId)
-                                }
-                                recording={browser.recording}
-                                onPage={showCurrentPage}
-                                onSelect={selectPageElement}
-                                onRecord={recordPage}
-                              />
-                              <Dropdown isOpen={agentMenu} onOpenChange={setAgentMenu}>
-                                <ActionButton
-                                  className="agent-picker"
-                                  variant="ghost"
-                                  size="md"
-                                  aria-label="选择 Agent"
-                                  aria-describedby="composer-agent-name"
-                                  title={currentAgent?.name || currentAgentId}
-                                >
-                                  <AgentIcon agent={currentAgentId} size={18} />
-                                  <span id="composer-agent-name" className="sr-only">
-                                    {currentAgent?.name || currentAgentId}
-                                  </span>
-                                  <Icon
-                                    icon={ArrowDown01Icon}
-                                    className="picker-chevron"
-                                    aria-hidden
-                                    size={12}
-                                  />
-                                </ActionButton>
-                                <Dropdown.Popover placement="top start" className="agent-menu">
-                                  <Dropdown.Menu
-                                    aria-label="本机 Agent"
-                                    onAction={(key) => {
-                                      if (key === 'manage') {
-                                        setAgentMenu(false);
-                                        openSettings('agent');
-                                      } else void selectAgent(key as Settings['agent']);
-                                    }}
-                                  >
-                                    <Dropdown.Section>
-                                      {agents.map((agent) => (
-                                        <Dropdown.Item
-                                          key={agent.id}
-                                          id={agent.id}
-                                          textValue={agent.name}
-                                          isDisabled={!agent.available || !agent.supported || busy}
-                                        >
-                                          <AgentIcon agent={agent.id} size={22} />
-                                          <div className="agent-option-copy">
-                                            <Label>{agent.name}</Label>
-                                            <Description>
-                                              {agent.available
-                                                ? agent.supported
-                                                  ? agent.version || '已安装'
-                                                  : '已检测，暂未接入'
-                                                : '未检测到'}
-                                            </Description>
-                                          </div>
-                                          {agent.id === currentAgentId && (
-                                            <Icon
-                                              icon={Tick02Icon}
-                                              size={14}
-                                              className="agent-selected"
-                                            />
-                                          )}
-                                        </Dropdown.Item>
-                                      ))}
-                                    </Dropdown.Section>
-                                    <Dropdown.Item id="manage" textValue="管理本机 Agent">
-                                      <Icon icon={Settings02Icon} size={15} />
-                                      <Label>管理本机 Agent</Label>
-                                    </Dropdown.Item>
-                                  </Dropdown.Menu>
-                                </Dropdown.Popover>
-                              </Dropdown>
-                              <ModelPicker
-                                settings={conversationSettings}
-                                conversationId={conversationId}
-                                busy={busy}
-                                connectionReady={currentConnection?.status === 'ready'}
-                                onChange={setSettings}
-                              />
-                            </PromptInput.ToolbarStart>
-                            <PromptInput.ToolbarEnd className="composer-right">
-                              <span className="composer-hint">
-                                {busy && !currentBusy ? '另一任务进行中' : '↵ 发送'}
-                              </span>
-                              <PromptInput.Send
-                                aria-label={busy ? '停止任务' : '发送任务'}
-                                isDisabled={
-                                  !busy &&
-                                  (!loaded ||
-                                    setupRequired ||
-                                    !draft.trim() ||
-                                    !currentAgent?.available ||
-                                    !currentAgent.supported ||
-                                    currentAgent.authentication === 'missing')
-                                }
-                              />
-                            </PromptInput.ToolbarEnd>
-                          </PromptInput.Toolbar>
-                        </PromptInput.Shell>
-                      </PromptInput>
-                      {!loaded ? (
-                        <p className="composer-availability" role="status">
-                          <Icon icon={Loading02Icon} size={14} className="spin" />
-                          正在读取本机配置…
-                        </p>
-                      ) : setupRequired ? (
-                        <div className="composer-availability" role="status">
-                          <span>准备好连接和工作目录，就可以开始任务。</span>
-                          <ActionButton
-                            className="text-button"
-                            isDisabled={openingOnboarding}
-                            onPress={() => void openOnboarding()}
+                    {!conversation?.archivedAt && (
+                      <div className="composer-area">
+                        {panelRequest && (
+                          <RequestPanel
+                            key={requestKey(panelRequest)}
+                            requestKey={requestKey(panelRequest)}
+                            pending={panelRequest}
+                            taskTitle={
+                              conversations.find((item) => item.id === panelRequest.conversationId)
+                                ?.title || '当前任务'
+                            }
+                            onRespond={action}
+                            onStop={() => void action('conversation:stop')}
+                            onShowTask={() => selectConversation(panelRequest.conversationId)}
+                          />
+                        )}
+                        {slashOpen && (
+                          <div
+                            className="slash-menu"
+                            role="listbox"
+                            aria-label="快捷指令"
+                            id="slash-commands"
                           >
-                            继续准备
-                          </ActionButton>
-                        </div>
-                      ) : (
-                        (!currentAgent?.available || currentAgent.authentication === 'missing') && (
-                          <div className="composer-availability" role="status">
-                            <span>
-                              {currentAgent?.authentication === 'missing'
-                                ? `请先在终端登录 ${currentAgent.name}，再刷新连接。`
-                                : '当前 Agent 尚不可用。'}
-                            </span>
-                            <ActionButton
-                              className="text-button"
-                              onPress={() => openSettings('agent')}
-                            >
-                              管理 Agent
-                            </ActionButton>
-                          </div>
-                        )
-                      )}
-                      {loaded &&
-                        currentAgent?.available &&
-                        currentAgent.authentication !== 'missing' &&
-                        currentConnection?.status === 'error' && (
-                          <div className="composer-availability" role="alert">
-                            <span>
-                              {currentConnection.message ||
-                                '本机 Agent 连接失败，请检查连接后重试。'}
-                            </span>
-                            <ActionButton
-                              className="text-button"
-                              onPress={() => openSettings('agent')}
-                            >
-                              检查连接
-                            </ActionButton>
+                            {(['local', 'native'] as const).map((source) => (
+                              <div
+                                role="group"
+                                aria-label={
+                                  source === 'local'
+                                    ? 'Athena 快捷操作'
+                                    : `${currentAgent?.name ?? currentAgentId} 原生指令`
+                                }
+                                key={source}
+                              >
+                                <div className="slash-heading">
+                                  {source === 'local'
+                                    ? 'Athena 快捷操作'
+                                    : `${currentAgent?.name ?? currentAgentId} 原生指令`}
+                                </div>
+                                {slashMatches.map((command, index) =>
+                                  command.source !== source ? null : (
+                                    <div
+                                      key={command.name}
+                                      id={`slash-command-${index}`}
+                                      role="option"
+                                      aria-selected={index === slashIndex}
+                                    >
+                                      <Button
+                                        type="button"
+                                        onMouseDown={(event) => event.preventDefault()}
+                                        onPress={() => chooseSlash(command.name)}
+                                      >
+                                        <code>{command.name}</code>
+                                        <span>{command.description}</span>
+                                      </Button>
+                                    </div>
+                                  ),
+                                )}
+                                {source === 'native' &&
+                                  !slashMatches.some((item) => item.source === 'native') && (
+                                    <div className="slash-status" role="status">
+                                      {nativeStatus === 'loading'
+                                        ? '正在读取指令…'
+                                        : nativeStatus === 'error'
+                                          ? nativeCatalog.reason
+                                          : nativeStatus === 'unsupported'
+                                            ? '当前连接不提供原生指令'
+                                            : '没有匹配的原生指令'}
+                                    </div>
+                                  )}
+                              </div>
+                            ))}
+                            <div className="slash-hint">↑↓ 选择 · Tab 补全 · Esc 关闭</div>
                           </div>
                         )}
-                      {isHome && (
-                        <PromptSuggestion className="mt-7">
-                          <PromptSuggestion.Items className="welcome-suggestions">
-                            <PromptSuggestion.Item onPress={showCurrentPage}>
-                              <span>
-                                查看当前页面
-                                <PromptSuggestion.ItemMeta className="block">
-                                  理解页面内容与结构
-                                </PromptSuggestion.ItemMeta>
-                              </span>
-                            </PromptSuggestion.Item>
-                            <PromptSuggestion.Item
-                              isDisabled={browser.status !== 'ready'}
-                              onPress={selectPageElement}
+                        <PromptInput
+                          ref={composer}
+                          className={`composer ${busy ? 'is-busy' : ''}`}
+                          value={draft}
+                          onValueChange={setDraft}
+                          status={busy ? 'streaming' : 'ready'}
+                          lockInputOnRun={false}
+                          maxHeight={panelRequest ? 72 : 160}
+                          onSubmit={() => void send()}
+                          onStop={() => void action('conversation:stop')}
+                        >
+                          <PromptInput.Shell>
+                            {selected && (
+                              <PromptInput.Attachments className="selected-context">
+                                <ChatAttachment name={selected.name || selected.tag}>
+                                  <ChatAttachment.Icon>
+                                    <Icon icon={Cursor01Icon} size={16} />
+                                  </ChatAttachment.Icon>
+                                  <ChatAttachment.Info>
+                                    <ChatAttachment.Name title={selected.name || selected.tag} />
+                                    <code className="text-xs text-muted">
+                                      {selected.role || selected.tag}
+                                    </code>
+                                  </ChatAttachment.Info>
+                                  <ChatAttachment.Remove
+                                    aria-label="移除选中元素"
+                                    onPress={() => setSelected(undefined)}
+                                  />
+                                </ChatAttachment>
+                              </PromptInput.Attachments>
+                            )}
+                            <PromptInput.Content>
+                              <PromptInput.TextArea
+                                aria-label="发送给 Agent 的任务"
+                                placeholder={
+                                  selected
+                                    ? '对这个元素有什么想法？'
+                                    : '描述任务，或选中页面中的元素…'
+                                }
+                                aria-autocomplete="list"
+                                aria-controls={slashOpen ? 'slash-commands' : undefined}
+                                aria-activedescendant={
+                                  slashOpen ? `slash-command-${slashIndex}` : undefined
+                                }
+                                onKeyDownCapture={(event) => {
+                                  if (
+                                    event.nativeEvent.isComposing ||
+                                    event.nativeEvent.keyCode === 229
+                                  ) {
+                                    if (event.key === 'Enter') event.stopPropagation();
+                                    return;
+                                  }
+                                  if (!slashOpen) return;
+                                  if (
+                                    ['ArrowDown', 'ArrowUp', 'Enter', 'Tab', 'Escape'].includes(
+                                      event.key,
+                                    ) &&
+                                    !event.shiftKey
+                                  ) {
+                                    event.preventDefault();
+                                    event.stopPropagation();
+                                    if (event.key === 'Escape') setSlashDismissed(true);
+                                    else if (!slashMatches.length) return;
+                                    else if (event.key === 'ArrowDown')
+                                      setSlashIndex((slashIndex + 1) % slashMatches.length);
+                                    else if (event.key === 'ArrowUp')
+                                      setSlashIndex(
+                                        (slashIndex + slashMatches.length - 1) %
+                                          slashMatches.length,
+                                      );
+                                    else if (slashMatches.length)
+                                      chooseSlash(
+                                        slashMatches[Math.min(slashIndex, slashMatches.length - 1)]
+                                          .name,
+                                      );
+                                  }
+                                }}
+                              />
+                            </PromptInput.Content>
+                            <PromptInput.Toolbar className="composer-controls">
+                              <PromptInput.ToolbarStart>
+                                <WebContextMenu
+                                  ready={
+                                    browser.status === 'ready' && supportsBrowser(currentAgentId)
+                                  }
+                                  recording={browser.recording}
+                                  onPage={showCurrentPage}
+                                  onSelect={selectPageElement}
+                                  onRecord={recordPage}
+                                />
+                                <Dropdown isOpen={agentMenu} onOpenChange={setAgentMenu}>
+                                  <ActionButton
+                                    className="agent-picker"
+                                    variant="ghost"
+                                    size="md"
+                                    aria-label="选择 Agent"
+                                    aria-describedby="composer-agent-name"
+                                    title={currentAgent?.name || currentAgentId}
+                                  >
+                                    <AgentIcon agent={currentAgentId} size={18} />
+                                    <span id="composer-agent-name" className="sr-only">
+                                      {currentAgent?.name || currentAgentId}
+                                    </span>
+                                    <Icon
+                                      icon={ArrowDown01Icon}
+                                      className="picker-chevron"
+                                      aria-hidden
+                                      size={12}
+                                    />
+                                  </ActionButton>
+                                  <Dropdown.Popover placement="top start" className="agent-menu">
+                                    <Dropdown.Menu
+                                      aria-label="本机 Agent"
+                                      onAction={(key) => {
+                                        if (key === 'manage') {
+                                          setAgentMenu(false);
+                                          openSettings('agent');
+                                        } else void selectAgent(key as Settings['agent']);
+                                      }}
+                                    >
+                                      <Dropdown.Section>
+                                        {agents.map((agent) => (
+                                          <Dropdown.Item
+                                            key={agent.id}
+                                            id={agent.id}
+                                            textValue={agent.name}
+                                            isDisabled={
+                                              !agent.available || !agent.supported || busy
+                                            }
+                                          >
+                                            <AgentIcon agent={agent.id} size={22} />
+                                            <div className="agent-option-copy">
+                                              <Label>{agent.name}</Label>
+                                              <Description>
+                                                {agent.available
+                                                  ? agent.supported
+                                                    ? agent.version || '已安装'
+                                                    : '已检测，暂未接入'
+                                                  : '未检测到'}
+                                              </Description>
+                                            </div>
+                                            {agent.id === currentAgentId && (
+                                              <Icon
+                                                icon={Tick02Icon}
+                                                size={14}
+                                                className="agent-selected"
+                                              />
+                                            )}
+                                          </Dropdown.Item>
+                                        ))}
+                                      </Dropdown.Section>
+                                      <Dropdown.Item id="manage" textValue="管理本机 Agent">
+                                        <Icon icon={Settings02Icon} size={15} />
+                                        <Label>管理本机 Agent</Label>
+                                      </Dropdown.Item>
+                                    </Dropdown.Menu>
+                                  </Dropdown.Popover>
+                                </Dropdown>
+                                <ModelPicker
+                                  settings={conversationSettings}
+                                  conversationId={conversationId}
+                                  busy={busy}
+                                  connectionReady={currentConnection?.status === 'ready'}
+                                  onChange={setSettings}
+                                />
+                              </PromptInput.ToolbarStart>
+                              <PromptInput.ToolbarEnd className="composer-right">
+                                <span className="composer-hint">
+                                  {busy && !currentBusy ? '另一任务进行中' : '↵ 发送'}
+                                </span>
+                                <PromptInput.Send
+                                  aria-label={busy ? '停止任务' : '发送任务'}
+                                  isDisabled={
+                                    !busy &&
+                                    (!loaded ||
+                                      setupRequired ||
+                                      !draft.trim() ||
+                                      !currentAgent?.available ||
+                                      !currentAgent.supported ||
+                                      currentAgent.authentication === 'missing')
+                                  }
+                                />
+                              </PromptInput.ToolbarEnd>
+                            </PromptInput.Toolbar>
+                          </PromptInput.Shell>
+                        </PromptInput>
+                        {!loaded ? (
+                          <p className="composer-availability" role="status">
+                            <Icon icon={Loading02Icon} size={14} className="spin" />
+                            正在读取本机配置…
+                          </p>
+                        ) : setupRequired ? (
+                          <div className="composer-availability" role="status">
+                            <span>准备好连接和工作目录，就可以开始任务。</span>
+                            <ActionButton
+                              className="text-button"
+                              isDisabled={openingOnboarding}
+                              onPress={() => void openOnboarding()}
                             >
+                              继续准备
+                            </ActionButton>
+                          </div>
+                        ) : (
+                          (!currentAgent?.available ||
+                            currentAgent.authentication === 'missing') && (
+                            <div className="composer-availability" role="status">
                               <span>
-                                选取并修改元素
-                                <PromptSuggestion.ItemMeta className="block">
-                                  在网页中直接预览调整
-                                </PromptSuggestion.ItemMeta>
+                                {currentAgent?.authentication === 'missing'
+                                  ? `请先在终端登录 ${currentAgent.name}，再刷新连接。`
+                                  : '当前 Agent 尚不可用。'}
                               </span>
-                            </PromptSuggestion.Item>
-                            <PromptSuggestion.Item
-                              isDisabled={browser.status !== 'ready' || browser.recording}
-                              onPress={recordPage}
-                            >
+                              <ActionButton
+                                className="text-button"
+                                onPress={() => openSettings('agent')}
+                              >
+                                管理 Agent
+                              </ActionButton>
+                            </div>
+                          )
+                        )}
+                        {loaded &&
+                          currentAgent?.available &&
+                          currentAgent.authentication !== 'missing' &&
+                          currentConnection?.status === 'error' && (
+                            <div className="composer-availability" role="alert">
                               <span>
-                                录制一段操作
-                                <PromptSuggestion.ItemMeta className="block">
-                                  保存步骤，交给 Agent 分析
-                                </PromptSuggestion.ItemMeta>
+                                {currentConnection.message ||
+                                  '本机 Agent 连接失败，请检查连接后重试。'}
                               </span>
-                            </PromptSuggestion.Item>
-                          </PromptSuggestion.Items>
-                        </PromptSuggestion>
-                      )}
-                    </div>
+                              <ActionButton
+                                className="text-button"
+                                onPress={() => openSettings('agent')}
+                              >
+                                检查连接
+                              </ActionButton>
+                            </div>
+                          )}
+                        {isHome && (
+                          <PromptSuggestion className="mt-7">
+                            <PromptSuggestion.Items className="welcome-suggestions">
+                              <PromptSuggestion.Item onPress={showCurrentPage}>
+                                <span>
+                                  查看当前页面
+                                  <PromptSuggestion.ItemMeta className="block">
+                                    理解页面内容与结构
+                                  </PromptSuggestion.ItemMeta>
+                                </span>
+                              </PromptSuggestion.Item>
+                              <PromptSuggestion.Item
+                                isDisabled={browser.status !== 'ready'}
+                                onPress={selectPageElement}
+                              >
+                                <span>
+                                  选取并修改元素
+                                  <PromptSuggestion.ItemMeta className="block">
+                                    在网页中直接预览调整
+                                  </PromptSuggestion.ItemMeta>
+                                </span>
+                              </PromptSuggestion.Item>
+                              <PromptSuggestion.Item
+                                isDisabled={browser.status !== 'ready' || browser.recording}
+                                onPress={recordPage}
+                              >
+                                <span>
+                                  录制一段操作
+                                  <PromptSuggestion.ItemMeta className="block">
+                                    保存步骤，交给 Agent 分析
+                                  </PromptSuggestion.ItemMeta>
+                                </span>
+                              </PromptSuggestion.Item>
+                            </PromptSuggestion.Items>
+                          </PromptSuggestion>
+                        )}
+                      </div>
+                    )}
                     <div className="composer-footer">
                       <Icon icon={Folder01Icon} size={14} />
                       <ActionButton

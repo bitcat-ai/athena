@@ -48,6 +48,32 @@ test('workspace persists and interrupted responses do not look live after restar
   }
 });
 
+test('conversation archive timestamp persists through workspace reload', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'workbench-store-'));
+  try {
+    const first = new Store(directory);
+    await first.load();
+    first.data.conversations.push({
+      id: 'archived',
+      title: '归档',
+      updatedAt: 1,
+      archivedAt: 42,
+      messages: [],
+    });
+    await first.save();
+    const second = new Store(directory);
+    await second.load();
+    assert.equal(second.data.conversations[0].archivedAt, 42);
+    delete second.data.conversations[0].archivedAt;
+    await second.save();
+    const third = new Store(directory);
+    await third.load();
+    assert.equal(third.data.conversations[0].archivedAt, undefined);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test('corrupt data is preserved instead of being silently overwritten', async () => {
   const directory = await mkdtemp(path.join(tmpdir(), 'workbench-store-'));
   try {

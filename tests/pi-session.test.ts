@@ -28,12 +28,17 @@ const start=()=>{out({type:'agent_start'});out({type:'message_start',message:{ro
 readline.createInterface({input:process.stdin}).on('line',line=>{
 const r=JSON.parse(line);fs.appendFileSync(log,JSON.stringify(r)+'\\n');
 if(r.type==='get_state'){if(mode!=='no-gate')out({type:'extension_ui_request',id:'gate',method:'notify',message:'athena-permissions-v1'});return response(r,{sessionId:sid,isStreaming:false,pendingMessageCount:0,model:{id:'test-model',provider:'fixture'}});}
+if(r.type==='get_commands')return response(r,{commands:mode==='empty-catalog'?[]:[{name:'review',description:'检查',source:'extension'}]});
+if(r.type==='set_session_name')return response(r,{});
+if(r.type==='get_session_stats')return response(r,{userMessages:2,assistantMessages:3,toolCalls:1});
+if(r.type==='compact')return response(r,{summary:'压缩摘要',tokensBefore:100});
 if(r.type==='get_available_models')return response(r,{models:[{id:'test-model',provider:'fixture',name:'Fixture'}]});
 if(r.type==='get_available_thinking_levels')return response(r,{levels:['off','high']});
 if(r.type==='set_model'||r.type==='set_thinking_level'||r.type==='clear_queue')return response(r,{});
 if(r.type==='abort'){out({type:'agent_settled',aborted:true});return response(r,{});}
 if(r.type==='extension_ui_response'){end(r.confirmed?'approved':'denied');return;}
 if(r.type!=='prompt')return;
+if(r.message==='/review')return response(r,{disposition:'handled'});
 if(r.message==='handled')return response(r,{disposition:'handled'});
 response(r,{disposition:'started'});start();
 if(r.message==='crash'){process.stderr.write('sk-secret-do-not-forward');process.exit(7);}
@@ -81,6 +86,43 @@ async function until(check: () => boolean) {
   }
   throw new Error('Fixture condition timed out');
 }
+
+test('Pi 扩展目录为空时仍提供可执行的内置 RPC 指令', async () => {
+  const f = await fixture('empty-catalog');
+  try {
+    const catalog = await f.session.listCommands();
+    assert.equal(catalog.status, 'ready');
+    for (const name of ['/name', '/session', '/compact'])
+      assert.ok(catalog.commands.some((command) => command.name === name));
+    await f.session.executeCommand('/name', '回归会话');
+    await f.session.executeCommand('/session');
+    await f.session.executeCommand('/compact', '保留用户约束');
+    const requests = (await readFile(path.join(f.directory, 'commands.jsonl'), 'utf8'))
+      .trim().split('\n').map((line) => JSON.parse(line));
+    assert.ok(requests.some((r) => r.type === 'set_session_name' && r.name === '回归会话'));
+    assert.ok(requests.some((r) => r.type === 'get_session_stats'));
+    assert.ok(requests.some((r) => r.type === 'compact' && r.customInstructions === '保留用户约束'));
+    assert.equal(requests.some((r) => r.type === 'prompt'), false);
+    assert.equal(f.events.filter((e) => e.type === 'complete').length, 3);
+    assert.ok(f.events.some((e) => e.type === 'complete' && e.text?.includes('2')));
+    assert.equal(f.session.isClosed, false);
+  } finally {
+    await f.cleanup();
+  }
+});
+
+test('Pi 原生命令立即处理时正常结束并允许后续任务', async () => {
+  const f = await fixture();
+  try {
+    await f.session.executeCommand('/review');
+    assert.equal(f.session.isClosed, false);
+    assert.equal(f.events.filter((event) => event.type === 'complete').length, 1);
+    await f.session.send('normal');
+    assert.equal(f.events.filter((event) => event.type === 'complete').length, 2);
+  } finally {
+    await f.cleanup();
+  }
+});
 
 test('Pi waits for settled, preserves Unicode framing and never emits thinking', async () => {
   const f = await fixture();
