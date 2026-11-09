@@ -30,6 +30,7 @@ import { UsageStore } from './usage';
 import { managedCodexPath, OnboardingRuntime } from './onboarding';
 import { discoverWorkspaceSkills } from './skill-registry';
 import { buildSkillContext, selectSkills } from './skill-injection';
+import { parseLeadingSkillReferences } from '../shared/skill-references';
 import { createAthenaMcpEndpoint, type AthenaMcpEndpoint } from './athena-mcp-endpoint';
 import type { ModelOption } from '../shared/usage';
 import type {
@@ -1128,14 +1129,17 @@ async function invoke(action: string, payload: unknown) {
       const context = data.context === undefined ? undefined : string(data.context, 60_000);
       const selectedRef =
         data.selectedRef === undefined ? undefined : string(data.selectedRef, 1500);
-      const selectedSkillNames = Array.isArray(data.selectedSkills)
-        ? data.selectedSkills.map((name) => string(name, 100))
+      const selectedSkillNames: string[] = Array.isArray(data.selectedSkills)
+        ? data.selectedSkills.map((name: unknown) => string(name, 100))
         : [];
       const selected = selectedRef ? browser.getState().selectedElement : undefined;
       if (selectedRef && selected?.ref !== selectedRef)
         throw new Error('选中的元素已变化，请重新选取后发送。');
+      const parsed = parseLeadingSkillReferences(string(data.text));
+      const explicitSkills = [...selectedSkillNames, ...parsed.names];
+      const taskText = parsed.names.length ? parsed.text : string(data.text);
       const conversation = data.id ? getConversation(data.id) : createConversation();
-      return startTurn(conversation, string(data.text), context, false, selected, selectedSkillNames);
+      return startTurn(conversation, taskText, context, false, selected, explicitSkills);
     }
     case 'conversation:stop':
       await stopTurn();
