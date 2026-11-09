@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { promisify } from 'node:util';
 import path from 'node:path';
 import { piIsolationArguments } from './agent-discovery';
+import { unsupportedProviderSkillDiscovery } from './provider-skill-discovery';
 import { cliEnvironment } from './agent-process';
 import type { AgentSession, AgentSessionOptions } from './agent-session';
 import type { AgentEvent, BrowserTool, ElementRef, ToolCall } from '../shared/types';
@@ -206,6 +207,10 @@ export class PiSession implements AgentSession {
       (model: unknown) => object(model) && text(model.id) && text(model.provider),
     );
   }
+  async discoverProviderSkills() {
+    return unsupportedProviderSkillDiscovery({ id: 'pi', name: 'Pi' }).discover();
+  }
+
   async listModels(): Promise<ModelOption[]> {
     await this.prepare();
     const [models, state] = await Promise.all([this.models(), this.request('get_state')]);

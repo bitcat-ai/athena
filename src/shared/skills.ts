@@ -34,7 +34,8 @@ export type SkillDiagnosticCode =
   | 'invalid-metadata'
   | 'unsafe-path'
   | 'oversized-entry'
-  | 'unreadable-entry';
+  | 'unreadable-entry'
+  | 'capability-degraded';
 
 export interface SkillDiagnostic {
   code: SkillDiagnosticCode;

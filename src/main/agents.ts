@@ -18,6 +18,7 @@ import type {
 } from '../shared/types.ts';
 
 import type { AgentSession } from './agent-session';
+import { unsupportedProviderSkillDiscovery } from './provider-skill-discovery';
 import { parseTokenCounts, readUsageBaseline, readExecutionModel } from './usage';
 import {
   zeroTokens,
@@ -795,6 +796,10 @@ export class CodexSession implements AgentSession {
       throw error;
     });
     return this.connection;
+  }
+
+  async discoverProviderSkills() {
+    return unsupportedProviderSkillDiscovery({ id: 'codex', name: 'Codex' }).discover();
   }
 
   async listModels(): Promise<ModelOption[]> {

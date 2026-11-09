@@ -4,6 +4,7 @@ import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import type { AgentSession, AgentSessionOptions } from './agent-session';
+import { unsupportedProviderSkillDiscovery } from './provider-skill-discovery';
 import type { AgentEvent, BrowserTool, ElementRef, ToolCall } from '../shared/types';
 import {
   unknownTokens,
@@ -126,6 +127,11 @@ export class StreamCliSession implements AgentSession {
     // No prompt (or model call) is used for preparation/discovery. Native startup is verified by send.
     this.ready = true;
   }
+  async discoverProviderSkills() {
+    const names = { claude: 'Claude Code', gemini: 'Gemini CLI', cursor: 'Cursor Agent' } as const;
+    return unsupportedProviderSkillDiscovery({ id: this.options.cli, name: names[this.options.cli] }).discover();
+  }
+
   async listModels(): Promise<ModelOption[]> {
     await this.prepare();
     return []; // No shared, authoritative structured model catalog for these three print protocols.
