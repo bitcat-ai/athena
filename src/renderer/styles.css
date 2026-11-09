@@ -2232,9 +2232,32 @@ select {
   border-radius: 12px;
   box-shadow: 0 1px 3px rgb(0 0 0 / 5%);
 }
-.composer-area {
-  padding-bottom: 0;
+.skill-slash-menu {
+  position: absolute;
+  inset: auto 12px calc(100% - 8px);
+  z-index: 4;
+  max-width: calc(100% - 24px);
+  max-height: 220px;
+  overflow: auto;
+  padding: 6px;
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: var(--overlay-shadow);
 }
+.skill-slash-menu button {
+  display: grid;
+  width: 100%;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  text-align: left;
+}
+.skill-slash-menu button[aria-selected='true'] { background: var(--surface-secondary); }
+.skill-slash-menu button:disabled { opacity: .45; }
+.skill-slash-menu span, .skill-slash-menu p { color: var(--secondary); font-size: 12px; }
+
 .composer [data-slot='prompt-input-shell'] {
   border: 0;
   border-radius: 24px;

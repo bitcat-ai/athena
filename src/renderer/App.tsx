@@ -60,6 +60,7 @@ import {
   supportsBrowser,
 } from '../shared/agents';
 import type { WorkspaceSkill } from '../shared/skills';
+import { parseLeadingSkillReferences } from '../shared/skill-references';
 import type {
   AgentInfo,
   AppSnapshot,
@@ -107,6 +108,46 @@ function SkillPicker({
           </button>
         );
       })}
+    </div>
+  );
+}
+
+export function SkillSlashMenu({
+  draft,
+  skills,
+  selected,
+  activeIndex,
+  onActiveChange,
+  onSelect,
+}: {
+  draft: string;
+  skills: WorkspaceSkill[];
+  selected: string[];
+  activeIndex: number;
+  onActiveChange: (index: number) => void;
+  onSelect: (skill: WorkspaceSkill) => void;
+}) {
+  const usable = skills.filter((skill) => skill.availability === 'usable');
+  const query = draft.slice(draft.lastIndexOf('/') + 1).toLowerCase();
+  const options = usable.filter((skill) => skill.name.toLowerCase().startsWith(query));
+  if (!draft.startsWith('/') || draft.includes('\n') || !draft.slice(draft.lastIndexOf(' ') + 1).startsWith('/')) return null;
+  return (
+    <div className="skill-slash-menu" role="listbox" aria-label="可用 Skill" aria-activedescendant={options[activeIndex] ? `skill-option-${options[activeIndex].name}` : undefined}>
+      {options.length ? options.map((skill, index) => {
+        const duplicate = selected.includes(skill.name);
+        return (
+          <button
+            key={skill.name}
+            id={`skill-option-${skill.name}`}
+            type="button"
+            role="option"
+            aria-selected={index === activeIndex}
+            disabled={duplicate || selected.length >= 3}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => onSelect(skill)}
+          ><strong>/{skill.name}</strong><span>{skill.description}</span></button>
+        );
+      }) : <p role="status">{usable.length ? '没有匹配的 Skill' : '当前工作区没有可用 Skill'}</p>}
     </div>
   );
 }
@@ -194,6 +235,8 @@ export default function App() {
   const [resizingBrowser, setResizingBrowser] = useState(false);
   const [settingsTab, setSettingsTab] = useState<SettingsTab | null>(null);
   const [agentMenu, setAgentMenu] = useState(false);
+  const [skillMenuActive, setSkillMenuActive] = useState(0);
+  const [skillMenuDismissed, setSkillMenuDismissed] = useState<string>();
   const [statusLabel, setStatusLabel] = useState('已接收任务');
   const [pendingRequests, setPendingRequests] = useState<PendingAgentRequest[]>([]);
   const [reviewKey, setReviewKey] = useState<string>();
@@ -228,8 +271,19 @@ export default function App() {
   const sidebarConversations = drafts[JSON.stringify([settings.workspace, null])]?.text
     ? [{ id: undefined, title: '未发送草稿', messages: [] }, ...workspaceConversations]
     : workspaceConversations;
-  const setDraft = (text: string) =>
+  const setDraft = (text: string) => {
+    if (text !== draft) setSkillMenuDismissed(undefined);
     setDrafts((previous) => ({ ...previous, [draftKey]: { text } }));
+  };
+  const slashSkillMenuOpen = skillMenuDismissed !== draft && /^(?:\/[a-z0-9]+(?:-[a-z0-9]+)*\s+)*\/[^\s/]*$/i.test(draft);
+  const slashSkillOptions = (skills ?? []).filter((skill) => skill.availability === 'usable')
+    .filter((skill) => skill.name.toLowerCase().startsWith(draft.slice(draft.lastIndexOf('/') + 1).toLowerCase()));
+  const selectSlashSkill = (skill: WorkspaceSkill) => {
+    const prefix = draft.slice(0, draft.lastIndexOf('/') + 1);
+    setDraft(`${prefix}${skill.name} `);
+    setSkillMenuActive(0);
+    requestAnimationFrame(() => composer.current?.querySelector('textarea')?.focus());
+  };
   const currentView = {
     id: conversationId,
     workspace: settings.workspace,
@@ -700,6 +754,7 @@ export default function App() {
     const context = selected
       ? `选中元素引用：${selected.ref}\n页面预览修改（仅当前DOM，不代表源码已保存）：${JSON.stringify(selectedEdit ?? null)}\n当前页面：${pageSource(browser.url)}\n页面效果调整直接使用元素编辑工具。仅当用户要求修改或保存到源码时，核实项目与页面的对应关系、定位真实组件并验证修改；不要把DOM预览当成源码修改。`
       : undefined;
+    const parsed = parseLeadingSkillReferences(draft.trim());
     const result = await action<{ conversationId: string }>('conversation:send', {
       id: conversationId,
       text: draft.trim(),
@@ -1801,6 +1856,16 @@ export default function App() {
                             </PromptInput.Attachments>
                           )}
                           <PromptInput.Content>
+                            {slashSkillMenuOpen && (
+                              <SkillSlashMenu
+                                draft={draft}
+                                skills={skills ?? []}
+                                selected={parseLeadingSkillReferences(draft).names}
+                                activeIndex={skillMenuActive}
+                                onActiveChange={setSkillMenuActive}
+                                onSelect={selectSlashSkill}
+                              />
+                            )}
                             <PromptInput.TextArea
                               aria-label="发送给 Agent 的任务"
                               placeholder={
@@ -1809,6 +1874,25 @@ export default function App() {
                                   : '描述任务，或选中页面中的元素…'
                               }
                               onKeyDownCapture={(event) => {
+                                if (slashSkillMenuOpen) {
+                                  if (event.key === 'Escape') {
+                                    event.preventDefault();
+                                    setSkillMenuDismissed(draft);
+                                    requestAnimationFrame(() => event.currentTarget.focus());
+                                    return;
+                                  }
+                                  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                                    event.preventDefault();
+                                    const delta = event.key === 'ArrowDown' ? 1 : -1;
+                                    setSkillMenuActive((index) => Math.max(0, Math.min(slashSkillOptions.length - 1, index + delta)));
+                                    return;
+                                  }
+                                  if (event.key === 'Enter' && slashSkillOptions[skillMenuActive]) {
+                                    event.preventDefault();
+                                    selectSlashSkill(slashSkillOptions[skillMenuActive]);
+                                    return;
+                                  }
+                                }
                                 // beta.10 handles Enter before its consumer callback; composition must not submit.
                                 if (
                                   event.key === 'Enter' &&
