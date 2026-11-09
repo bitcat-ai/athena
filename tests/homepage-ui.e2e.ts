@@ -516,7 +516,7 @@ try {
   await page.getByRole('tab', { name: '浏览器', exact: true }).click();
   await expect(page.getByRole('button', { name: '选择 BrowserOS neo', exact: true })).toBeVisible();
   await page.getByRole('tab', { name: '飞书', exact: true }).click();
-  await expect(page.getByRole('button', { name: '创建专用机器人', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '授权并选择机器人', exact: true })).toBeVisible();
   await page.evaluate(() =>
     (window as any).__homeFixture.feishu({ status: 'restoring', paired: false }),
   );

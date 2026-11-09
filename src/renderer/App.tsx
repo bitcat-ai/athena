@@ -1118,13 +1118,13 @@ export default function App() {
               ) : feishu.status === 'configuring' || feishu.setupQr ? (
                 <div className="feishu-setup">
                   {feishu.setupQr ? (
-                    <img src={feishu.setupQr} alt="飞书新应用授权二维码" />
+                    <img src={feishu.setupQr} alt="飞书应用授权二维码" />
                   ) : (
                     <Icon icon={Loading02Icon} size={32} className="spin" />
                   )}
                   <div>
                     <strong>使用飞书扫码</strong>
-                    <p>创建专用机器人，并确认接收私聊与回复消息的权限。</p>
+                    <p>选择已有机器人，并确认接收私聊与回复消息的权限。已有应用配置可能发生变化，请核对授权页后确认。</p>
                     <div className="button-row flex-wrap">
                       {feishu.setupUrl && (
                         <ActionButton
@@ -1139,7 +1139,7 @@ export default function App() {
                         className="text-button cancel-setup"
                         onPress={() => void action('feishu:disconnect')}
                       >
-                        取消创建
+                        取消授权
                       </ActionButton>
                     </div>
                   </div>
@@ -1157,7 +1157,7 @@ export default function App() {
                     </p>
                   ) : (
                     <>
-                      <p>向新机器人私聊发送下面这条消息：</p>
+                      <p>向已连接的机器人私聊发送下面这条消息：</p>
                       <ActionButton
                         className="pairing-code"
                         onPress={async () => {
@@ -1197,7 +1197,7 @@ export default function App() {
                   <p>
                     {feishu.appId
                       ? '连接已保存的机器人，继续从飞书发起任务。'
-                      : '创建一个属于这个工作区的机器人，从飞书发起网页任务。'}
+                      : '授权并选择已有机器人，从飞书发起网页任务。'}
                   </p>
                   <ActionButton
                     className="primary-button"
@@ -1211,11 +1211,11 @@ export default function App() {
                     ) : (
                       <Icon icon={PlusIcon} size={15} />
                     )}
-                    {feishu.appId ? '连接已保存的机器人' : '创建专用机器人'}
+                    {feishu.appId ? '连接已保存的机器人' : '授权并选择机器人'}
                   </ActionButton>
                   {feishu.appId && (
                     <ActionButton className="text-button" onPress={() => void setupFeishu()}>
-                      新建另一个机器人
+                      授权其他机器人
                     </ActionButton>
                   )}
                 </div>

@@ -743,7 +743,7 @@ test('QR setup binds the code holder using the bot event identity, not registrat
     const setup = await h.connector.beginSetup();
     assert.equal(setup.status, 'configuring');
     assert.equal(setup.setupQr, 'data:image/png;base64,fixture');
-    assert.equal(h.registration.createOnly, true);
+    assert.notEqual(h.registration.createOnly, true);
     assert.equal(h.registration.appId, undefined);
     assert.equal(h.registration.addons?.preset, false);
     assert.deepEqual(h.registration.addons?.scopes?.tenant, [
