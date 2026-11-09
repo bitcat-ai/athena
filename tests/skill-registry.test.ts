@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, symlink, unlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -55,7 +55,7 @@ test('rejects a skills root symlink that escapes the workspace', async () => {
   const outside = await mkdtemp(path.join(os.tmpdir(), 'athena-outside-'));
   await mkdir(path.join(outside, 'skill'), { recursive: true });
   await writeFile(path.join(outside, 'skill', 'SKILL.md'), '---\nname: escaped\ndescription: Escaped\n---\n');
-  await unlink(path.join(root, '.agents', 'skills'));
+  await rm(path.join(root, '.agents', 'skills'), { recursive: true, force: true });
   await symlink(outside, path.join(root, '.agents', 'skills'));
   await assert.rejects(() => discoverWorkspaceSkills(root), /outside the workspace boundary/);
 });

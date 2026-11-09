@@ -1502,7 +1502,7 @@ async function launch() {
       },
       send: async (thread, text) => {
         const conversation = getConversation(thread.conversationId);
-        return queueExternalTurn(() =>
+        await queueExternalTurn(() =>
           runTurn(conversation, text, undefined, 'desktop', false, undefined),
         );
       },
