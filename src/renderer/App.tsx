@@ -132,7 +132,13 @@ export function SkillSlashMenu({
   const options = usable.filter((skill) => skill.name.toLowerCase().startsWith(query));
   if (!draft.startsWith('/') || draft.includes('\n') || !draft.slice(draft.lastIndexOf(' ') + 1).startsWith('/')) return null;
   return (
-    <div className="skill-slash-menu" role="listbox" aria-label="可用 Skill" aria-activedescendant={options[activeIndex] ? `skill-option-${options[activeIndex].name}` : undefined}>
+    <div
+      id="skill-slash-menu"
+      className="skill-slash-menu"
+      role="listbox"
+      aria-label="可用 Skill"
+      aria-activedescendant={options[activeIndex] ? `skill-option-${options[activeIndex].name}` : undefined}
+    >
       {options.length ? options.map((skill, index) => {
         const duplicate = selected.includes(skill.name);
         return (
@@ -279,6 +285,8 @@ export default function App() {
   const slashSkillOptions = (skills ?? []).filter((skill) => skill.availability === 'usable')
     .filter((skill) => skill.name.toLowerCase().startsWith(draft.slice(draft.lastIndexOf('/') + 1).toLowerCase()));
   const selectSlashSkill = (skill: WorkspaceSkill) => {
+    const selected = [...new Set([...selectedSkills, ...parseLeadingSkillReferences(draft).names])];
+    if (selected.includes(skill.name) || selected.length >= 3) return;
     const prefix = draft.slice(0, draft.lastIndexOf('/') + 1);
     setDraft(`${prefix}${skill.name} `);
     setSkillMenuActive(0);
@@ -1868,6 +1876,9 @@ export default function App() {
                             )}
                             <PromptInput.TextArea
                               aria-label="发送给 Agent 的任务"
+                              aria-controls={slashSkillMenuOpen ? 'skill-slash-menu' : undefined}
+                              aria-expanded={slashSkillMenuOpen}
+                              aria-autocomplete="list"
                               placeholder={
                                 selected
                                   ? '对这个元素有什么想法？'
