@@ -72,9 +72,6 @@ try {
   await expect
     .poll(async () => (await snapshot()).onboarding?.codex.status, { timeout: 20000 })
     .toBe('ready');
-  await expect
-    .poll(async () => (await snapshot()).onboarding?.codex.authentication, { timeout: 20000 })
-    .toBe('ready');
   await page!.getByRole('button', { name: '选择 Codex', exact: true }).click();
   await expect(page!.locator('.onboarding .is-current')).toHaveAttribute(
     'data-screen',
@@ -149,7 +146,7 @@ try {
   await page!.getByRole('button', { name: '跳过设置', exact: true }).click();
   await expect(page!.locator('.onboarding')).toHaveCount(0, { timeout: 30000 });
   await page!.getByRole('button', { name: '返回对话', exact: true }).click();
-  await expect(composer).toHaveValue('这是一份尚未发送的草稿');
+  await expect(composer).toHaveText('这是一份尚未发送的草稿');
   assert.deepEqual(
     (await snapshot()).conversations.map((item) => item.id),
     conversationsBefore,

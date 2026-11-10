@@ -259,6 +259,19 @@ function messageOf(error: unknown): string {
     .slice(0, 2000);
 }
 
+/**
+ * A refused credential is the one failure a conversation reveals that no earlier check can.
+ * The lead says where to look; the runtime's own words follow untouched.
+ */
+function turnFailure(error: unknown): string {
+  const detail = messageOf(error);
+  return /\b401\b|unauthorized|missing bearer|missing environment variable|not logged in|(?:invalid|incorrect)[_ ]api[_ ]key/i.test(
+    detail,
+  )
+    ? `本机 Codex 的模型服务凭据未通过。请确认 codex 在终端可以正常对话（运行 codex login，或检查模型服务配置），然后重试。\n${detail}`
+    : detail;
+}
+
 function toolEventInput(name: string, input: unknown): unknown {
   if (
     !name.startsWith('neo_') ||
@@ -1057,7 +1070,7 @@ export class CodexSession implements AgentSession {
       if (p.willRetry) {
         if (this.approvals.size || this.userInputs.size) this.updateRequestStatus();
         else this.emit({ type: 'status', status: 'thinking', label: 'Codex 正在重试连接' });
-      } else this.shutdown(messageOf(p.error?.message ?? 'Codex 执行失败'));
+      } else this.shutdown(turnFailure(p.error?.message ?? 'Codex 执行失败'));
     }
     if (message.method === 'turn/completed') {
       if (p.turn?.status === 'completed' && !run.canceled) this.completeTurn();
@@ -1065,7 +1078,7 @@ export class CodexSession implements AgentSession {
         this.completeTurn(
           p.turn?.status === 'interrupted' || run.canceled
             ? '任务已停止'
-            : messageOf(p.turn?.error?.message ?? 'Codex 任务未成功完成'),
+            : turnFailure(p.turn?.error?.message ?? 'Codex 任务未成功完成'),
         );
     }
   }

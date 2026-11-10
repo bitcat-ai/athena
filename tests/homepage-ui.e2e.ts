@@ -23,7 +23,6 @@ const snapshot = {
       name: 'Codex',
       available: true,
       supported: true,
-      authentication: 'ready',
       path: '/fixture/bin/codex',
       version: 'fixture-version',
     },
@@ -475,7 +474,7 @@ try {
     });
     f.emit({ type: 'codex:state', state: { status: 'ready', conversationId: 'a' } });
   });
-  await expect(statusBadge).toHaveText('已登录');
+  await expect(statusBadge).toHaveText('已检测');
   await page.evaluate(() => {
     const fixture = (window as any).__homeFixture;
     fixture.emit({

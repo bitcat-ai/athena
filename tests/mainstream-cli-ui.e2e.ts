@@ -84,10 +84,7 @@ try {
   assert.equal(initial.settings.agent, 'pi');
   for (const id of ['pi', 'claude']) {
     const info = initial.agents.find((item) => item.id === id);
-    assert.ok(
-      info?.available && info.supported && info.authentication !== 'missing',
-      `${id} is not ready for this check`,
-    );
+    assert.ok(info?.available && info.supported, `${id} is not ready for this check`);
   }
   await expect(page.locator('#composer-agent-name')).toHaveText('Codex');
   evidence.checks.push('Legacy conversation without agent stays Codex despite a Pi default');
@@ -108,22 +105,17 @@ try {
   state = await snapshot();
   assert.equal(state.conversations.find((item) => item.id === piId)?.agent, 'pi');
   assert.equal(state.conversations.find((item) => item.id === legacy.id)?.agent, undefined);
-  for (const info of state.agents.filter(
-    (item) => !item.available || !item.supported || item.authentication === 'missing',
-  )) {
+  for (const info of state.agents.filter((item) => !item.available || !item.supported)) {
     const row = page
       .locator('.agent-setting-row')
       .filter({ has: page.getByText(info.name, { exact: true }) });
     await expect(row.getByRole('button')).toBeDisabled();
   }
-  const claudeInfo = state.agents.find((item) => item.id === 'claude')!;
-  await expect(page.locator('.agent-connection-card .small-badge')).toHaveText(
-    claudeInfo.authentication === 'ready' ? '已登录' : '登录待验证',
-  );
+  await expect(page.locator('.agent-connection-card .small-badge')).toHaveText('已检测');
   await page.getByRole('button', { name: '返回对话', exact: true }).click();
   await expect(page.locator('#composer-agent-name')).toHaveText('Pi');
   evidence.checks.push(
-    'Changing the default does not rebind existing conversations; unavailable/login-required choices are disabled',
+    'Changing the default does not rebind existing conversations; unavailable choices are disabled',
   );
 
   const draft = () => page.getByRole('textbox', { name: '发送给 Agent 的任务', exact: true });

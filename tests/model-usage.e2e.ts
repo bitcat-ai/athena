@@ -11,7 +11,7 @@ const directory = await mkdtemp(path.resolve('.runtime/model-usage-'));
 const output = path.resolve('test-results/agent-experience/live');
 await mkdir(output, { recursive: true });
 const info = (await detectAgents()).find((agent) => agent.id === 'codex');
-assert.ok(info?.path && info.authentication === 'ready');
+assert.ok(info?.path);
 let ledger = new UsageStore(directory);
 await ledger.load();
 let activeId = '';

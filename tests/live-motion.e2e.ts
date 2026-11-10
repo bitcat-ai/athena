@@ -163,11 +163,6 @@ try {
     (candidate) => candidate.id === 'codex' && candidate.available && candidate.supported,
   );
   assert.ok(codex?.path, 'A working local Codex CLI is required');
-  assert.notEqual(
-    codex.authentication,
-    'missing',
-    'Use the existing codex login before this manual test',
-  );
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const origin = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
   runtime = new BrowserRuntime({

@@ -185,7 +185,7 @@ try {
   const snapshot = () => page.evaluate(() => window.workbench.invoke<AppSnapshot>('app:snapshot'));
   const initial = await snapshot();
   assert.equal(initial.agents.find((item) => item.id === 'codex')?.path, fakeCodex);
-  assert.equal(initial.agents.find((item) => item.id === 'codex')?.authentication, 'ready');
+  assert.equal(initial.agents.find((item) => item.id === 'codex')?.available, true);
   assert.equal(initial.feishu.paired, false);
   assert.equal(initial.feishu.appId, undefined);
   const actualDataDir = await application.evaluate(({ app }) => app.getPath('userData'));

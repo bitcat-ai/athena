@@ -173,11 +173,6 @@ function selectableAgent(id: AgentId) {
   if (!info?.path) throw new Error(`本机 ${id} 不可用，请在终端检查安装后刷新`);
   return { ...info, path: info.path };
 }
-function agentInfo(id: AgentId) {
-  const info = selectableAgent(id);
-  if (info.authentication === 'missing') throw new Error(`请先在终端登录 ${info.name}，再刷新连接`);
-  return info;
-}
 async function selectDefaultAgent(value: unknown) {
   if (active || startingTurn) throw new Error('请先停止当前任务');
   if (onboarding?.changingEnvironment) throw new Error('请先完成或取消当前环境准备');
@@ -233,7 +228,7 @@ async function listModels(refresh = false, conversation?: Conversation) {
   if (conversation?.workspace && conversation.workspace !== store.data.settings.workspace)
     throw new Error('此对话属于其他工作目录');
   const id = conversation ? conversationAgent(conversation) : store.data.settings.agent;
-  const key = JSON.stringify([id, store.data.settings.workspace, agentInfo(id).path]);
+  const key = JSON.stringify([id, store.data.settings.workspace, selectableAgent(id).path]);
   if (refresh) {
     modelCatalogs.get(key)?.probe?.close();
     modelCatalogs.delete(key);
@@ -248,7 +243,7 @@ async function listModels(refresh = false, conversation?: Conversation) {
   if (catalog.request) return catalog.request;
   const request = (async () => {
     const workspace = store.data.settings.workspace;
-    const { path: executablePath } = agentInfo(id);
+    const { path: executablePath } = selectableAgent(id);
     const current =
       active?.session ??
       (selectedConversationId ? sessions.get(selectedConversationId) : undefined);
@@ -340,7 +335,7 @@ function prepareConversation(conversation: Conversation): Promise<void> {
   const revision = connectionRevision;
   connectionState({ status: 'starting', conversationId: conversation.id });
   const request = (async () => {
-    const info = agentInfo(conversationAgent(conversation));
+    const info = selectableAgent(conversationAgent(conversation));
     try {
       if (supportsBrowser(info.id) && onboarding?.allowsBrowserStartup !== false) await neo.start();
     } catch {
@@ -696,7 +691,7 @@ async function runTurn(
   assertOpenConversation(store.data.conversations, conversation);
   if (conversation.workspace && conversation.workspace !== store.data.settings.workspace)
     throw new Error('这段对话属于另一个工作目录。请切换回原目录，或新建对话。');
-  const info = agentInfo(conversationAgent(conversation));
+  const info = selectableAgent(conversationAgent(conversation));
   if (!supportsBrowser(info.id) && selectedElement)
     throw new Error('当前 CLI 尚未接通网页元素工具，请移除元素上下文后发送');
   if (!text.trim()) throw new Error('请输入任务');
@@ -1140,8 +1135,7 @@ async function invoke(action: string, payload: unknown) {
       case 'onboarding:install':
         return onboarding.install(string(record(payload).planId, 100));
       case 'onboarding:login/start':
-        if (store.data.settings.agent !== 'codex')
-          throw new Error('请在终端完成所选 CLI 的登录后重新检查');
+        if (store.data.settings.agent !== 'codex') throw new Error('所选 CLI 的登录请在终端完成');
         return onboarding.startLogin();
       case 'onboarding:login/reopen':
         return onboarding.reopenLogin();

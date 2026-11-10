@@ -108,7 +108,7 @@ export class PiSession implements AgentSession {
           timeout: 8000,
           maxBuffer: 256 * 1024,
           signal: this.startupAbort.signal,
-          env: cliEnvironment(this.options.executablePath, true),
+          env: cliEnvironment(this.options.executablePath),
         })
       ).stdout;
     } catch {

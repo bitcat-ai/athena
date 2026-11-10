@@ -63,7 +63,7 @@ neo = new NeoBrowserRuntime(browser, {
 });
 try {
   const codex = (await detectAgents()).find((x) => x.id === 'codex' && x.available && x.supported);
-  assert(codex?.path && codex.authentication === 'ready', 'Existing logged-in Codex CLI required');
+  assert(codex?.path, 'A working local Codex CLI is required');
   await browser.start(fixture.origin + (scenario === 'lost-reply' ? '/?loseReply=1' : '/'));
   await neo.start();
   browser.allowAgentControl();

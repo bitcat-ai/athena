@@ -7,7 +7,6 @@ export interface AgentInfo {
   supported: boolean;
   path?: string;
   version?: string;
-  authentication?: 'ready' | 'missing' | 'unknown';
   detail?: string;
 }
 export type CodexUpdateStatus =

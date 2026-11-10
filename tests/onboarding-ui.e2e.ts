@@ -19,7 +19,7 @@ const initial: OnboardingState = {
   stage: 'welcome',
   requiresSetup: true,
   coreReady: false,
-  codex: { status: 'unchecked', authentication: 'unknown' },
+  codex: { status: 'unchecked' },
   workspace: { path: '/fixture/original', status: 'unchecked' },
   browser: { status: 'unchecked' },
 };
@@ -30,13 +30,13 @@ import App from '/src/renderer/App';
 import '/src/renderer/styles.css';
 const mode=new URL(location.href).searchParams.get('mode')||'fresh';
 const initial=${JSON.stringify(initial)};
-if(mode==='legacy'){initial.status='legacy';initial.requiresSetup=false;initial.coreReady=true;initial.codex={status:'ready',authentication:'ready',path:'/fixture/codex'};initial.workspace.status='ready';initial.browser.status='ready';}
-if(mode==='deferred'){initial.status='deferred';initial.stage='codex';initial.codex={status:'missing',authentication:'unknown'};}
+if(mode==='legacy'){initial.status='legacy';initial.requiresSetup=false;initial.coreReady=true;initial.codex={status:'ready',path:'/fixture/codex'};initial.workspace.status='ready';initial.browser.status='ready';}
+if(mode==='deferred'){initial.status='deferred';initial.stage='codex';initial.codex={status:'missing'};}
 const fixture=window.__onboardingFixture={mode,state:initial,calls:[],listeners:[],ready:false,pendingSnapshots:[],nextOperation:1,cancelPick:false,exitDeferred:false};
 fixture.snapshot={localUser:{name:'Fixture User'},settings:{workspace:'/fixture/original',agent:'codex'},agents:[],codexConnection:{status:'idle'},browser:{status:'missing',engine:'browseros',tabs:[],url:'',title:'',loading:false,canGoBack:false,canGoForward:false,recording:false,inspecting:false},neo:{status:'stopped'},feishu:{status:'disconnected',paired:false},recordings:[],conversations:mode==='legacy'?[{id:'existing',title:'已有工作',workspace:'/fixture/original',updatedAt:Date.now(),messages:[]}]:[]};
 fixture.emit=event=>{for(const listener of fixture.listeners)listener(event)};
 fixture.sync=()=>{
- const codex={id:'codex',name:'Codex',available:fixture.state.codex.status==='ready',supported:true,authentication:fixture.state.codex.authentication,path:fixture.state.codex.path};
+ const codex={id:'codex',name:'Codex',available:fixture.state.codex.status==='ready',supported:true,path:fixture.state.codex.path};
  const others=(fixture.state.agents||[]).filter(agent=>agent.id!=='codex'&&agent.id!==fixture.state.executor?.id);
  if(fixture.state.executor?.id&&fixture.state.executor.id!=='codex')others.push(fixture.state.executor);
  fixture.state.agents=[codex,...others];fixture.state.selectedAgent ||= 'codex';
@@ -56,7 +56,6 @@ window.workbench={async invoke(command,payload){
  if(command==='app:copy'){if(fixture.failCopy)throw new Error('Clipboard unavailable');return true;}
  if(command==='onboarding:open')return fixture.update({status:'in-progress',stage:fixture.mode==='legacy'?'welcome':fixture.state.stage,error:undefined});
  if(command==='onboarding:refresh'){
-  if(fixture.state.operation?.kind==='login')return fixture.update({login:{status:'checking'},operation:{...fixture.state.operation,phase:'checking',message:'正在核对登录'}});
   const begun=fixture.begin('detect','正在核对本机 Codex',{status:'in-progress',stage:'codex',plan:undefined,error:undefined,codex:{status:'checking'}});if(fixture.holdNextRefresh){fixture.holdNextRefresh=false;return new Promise(resolve=>{fixture.releaseRefresh=()=>resolve(begun)});}return begun;
  }
  if(command==='onboarding:agent')return fixture.update({selectedAgent:payload.id,executor:fixture.state.agents.find(agent=>agent.id===payload.id)});
@@ -66,8 +65,8 @@ window.workbench={async invoke(command,payload){
   if(fixture.state.plan?.id!==payload.planId)throw new Error('安装计划已失效');
   const kind=fixture.state.plan.kind;return fixture.begin(kind==='browser'?'prepare-browser':'install-codex','正在下载官方分发',{plan:undefined});
  }
- if(command==='onboarding:login/start')return fixture.begin('login','等待官方登录结果',{stage:'login',login:{status:'waiting',canReopen:true}});
- if(command==='onboarding:login/reopen')return fixture.update({login:{status:'waiting',canReopen:true}});
+ if(command==='onboarding:login/start')return fixture.begin('login','等待官方登录结果',{login:{canReopen:true}});
+ if(command==='onboarding:login/reopen')return fixture.update({login:{canReopen:true}});
  if(command==='onboarding:cancel'){
   if(fixture.state.operation?.id!==payload.operationId)throw new Error('这次操作已经结束');
   return fixture.update({operation:undefined,login:undefined,codex:fixture.state.codex.status==='checking'?{status:'unchecked'}:fixture.state.codex});
@@ -243,7 +242,7 @@ try {
   await expect(current(page)).toContainText('正在核对本机 Codex');
   await update(page, {
     operation: undefined,
-    codex: { status: 'missing', authentication: 'unknown' },
+    codex: { status: 'missing' },
   });
   await expect(current(page)).toContainText('先准备一位 AI Agent。');
   await page.evaluate(() => (window as any).__onboardingFixture.releaseRefresh());
@@ -307,7 +306,7 @@ try {
     (old) =>
       (window as any).__onboardingFixture.late({
         ...old,
-        codex: { status: 'ready', authentication: 'ready' },
+        codex: { status: 'ready' },
         coreReady: true,
       }),
     installing,
@@ -320,29 +319,30 @@ try {
   await page.getByRole('button', { name: '重新检查', exact: true }).click();
   await update(page, {
     operation: undefined,
-    codex: { status: 'ready', authentication: 'missing', path: '/fixture/codex' },
-    stage: 'login',
-  });
-  await expect(current(page)).toContainText('还差一次登录。');
-  await page.getByRole('button', { name: '登录 Codex', exact: true }).click();
-  await expect(current(page)).toContainText('我在这里等你。');
-  await page.getByRole('button', { name: '我已完成，检查连接', exact: true }).click();
-  await expect(current(page)).toContainText('正在确认连接。');
-  assert.equal(await current(page).getByText('已连接', { exact: true }).count(), 0);
-  const later = page.getByRole('button', { name: '跳过设置', exact: true });
-  await later.focus();
-  await update(page, {
-    operation: undefined,
-    login: undefined,
-    codex: { status: 'ready', authentication: 'ready' },
+    codex: { status: 'ready', path: '/fixture/codex' },
     stage: 'workspace',
   });
   await expect(current(page)).toContainText('连接好了。');
+  await expect(current(page).locator('.onboarding-status-label')).toHaveText('已连接');
   await expect(page.getByRole('progressbar', { name: '准备步骤' })).toHaveAttribute(
     'aria-valuetext',
     '第 2 步，共 4 步：连接',
   );
+  assert.equal((await calls(page, 'onboarding:login/start')).length, 0);
+  await page.getByRole('button', { name: '查看连接详情', exact: true }).click();
+  await expect(current(page)).toContainText('/fixture/codex');
+  await page.getByRole('button', { name: '登录 Codex 账号', exact: true }).click();
+  await expect(current(page)).toContainText('我在这里等你。');
+  await expect(page.getByRole('button', { name: '取消登录', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '重新打开登录页', exact: true }).click();
+  await expect.poll(async () => (await calls(page, 'onboarding:login/reopen')).length).toBe(1);
+  await expect(current(page)).toContainText('我在这里等你。');
+  const later = page.getByRole('button', { name: '跳过设置', exact: true });
+  await later.focus();
+  await update(page, { operation: undefined, login: undefined });
+  await expect(current(page)).toContainText('连接好了。');
   await expect(later).toBeFocused();
+  assert.equal((await calls(page, 'onboarding:login/start')).length, 1);
   await page.getByRole('button', { name: '查看连接详情', exact: true }).click();
   await expect(current(page)).toContainText('/fixture/codex');
   await page.getByRole('button', { name: '返回准备', exact: true }).click();
@@ -382,7 +382,7 @@ try {
   });
   await expect(current(page)).toContainText('接下来，把网页也接上。');
   checks.push(
-    'Login-check click alone never claims success; footer focus is retained on real completion; connected/details remain reachable; directory cancel and candidate selection do not commit; access failure is recoverable',
+    'A detected runtime is connected without any login step; signing in is optional from the connection details and returns to the connected state; footer focus is retained; connected/details remain reachable; directory cancel and candidate selection do not commit; access failure is recoverable',
   );
 
   await page.getByRole('button', { name: '准备浏览器', exact: true }).click();
@@ -391,6 +391,13 @@ try {
   await expect.poll(async () => (await calls(page, 'onboarding:complete')).length).toBe(1);
   await expect(page.locator('.onboarding')).toBeVisible();
   await expect(page.locator('.app-workbench')).toHaveCount(0);
+  await expect(current(page)).toHaveAttribute('data-screen', 'ready');
+  await expect(current(page)).toContainText('准备好了，轮到你的想法。');
+  await expect(current(page).locator('.onboarding-activity')).toHaveCount(0);
+  await expect(current(page).locator('.onboarding-actions')).toHaveCount(0);
+  await expect(
+    page.locator('.onboarding-message.assistant + .onboarding-message.assistant'),
+  ).toHaveCount(0);
   await update(page, {
     operation: undefined,
     status: 'complete',
@@ -434,6 +441,7 @@ try {
     )
     .toBe(390);
   checks.push(
+    'Athena never speaks twice in a row: the automatic final check is silent and leaves the ready message as the last one',
     'Automatic handoff waits for the matching asynchronous complete event, then enters the workbench and refreshes actual directory/agent state without creating or sending a conversation; the newly mounted panel ResizeObserver tracks 1024px viewport and sidebar changes',
   );
   await page.close();
@@ -444,7 +452,7 @@ try {
   await skip.getByRole('button', { name: '开始配置', exact: true }).click();
   await update(skip, {
     operation: undefined,
-    codex: { status: 'ready', authentication: 'ready' },
+    codex: { status: 'ready' },
     workspace: { status: 'ready' },
     coreReady: true,
     stage: 'browser',
@@ -508,7 +516,7 @@ try {
   await expect(legacy.locator('.onboarding')).toHaveCount(0);
   await expect(legacy.locator('.settings-workspace')).toBeVisible();
   await legacy.getByRole('button', { name: '返回对话', exact: true }).click();
-  await expect(draft).toHaveValue('保留已有用户的草稿');
+  await expect(draft).toHaveText('保留已有用户的草稿');
   await expect(legacy.getByText('引导期间收到的实时结果', { exact: true })).toBeVisible();
   await expect(legacy.getByRole('button', { name: '发送任务', exact: true })).toBeEnabled();
   assert.equal((await calls(legacy, 'conversation:stop')).length, 0);
@@ -565,9 +573,10 @@ try {
     };
     fixture.emit({ type: 'browser:state', state: structuredClone(fixture.snapshot.browser) });
   });
+  await transfer.getByRole('button', { name: '元素检查器', exact: true }).click();
   await transfer.getByRole('button', { name: '修改源码', exact: true }).click();
-  await expect(transfer.locator('.selected-context')).toContainText('项目 A 按钮');
-  await transfer.getByRole('tab', { name: '元素', exact: true }).click();
+  await expect(transfer.locator('.composer .element-token')).toContainText('项目 A 按钮');
+  await transfer.getByRole('button', { name: '元素检查器', exact: true }).click();
   await transfer.getByRole('tab', { name: '内容', exact: true }).click();
   await transfer
     .getByRole('textbox', { name: '元素文字', exact: true })
@@ -576,8 +585,8 @@ try {
   await transfer.getByRole('button', { name: '重新查看引导', exact: true }).click();
   await transfer.getByRole('button', { name: '跳过设置', exact: true }).click();
   await transfer.getByRole('button', { name: '返回对话', exact: true }).click();
-  await expect(transferDraft).toHaveValue('项目 A 的任务草稿');
-  await expect(transfer.locator('.selected-context')).toContainText('项目 A 按钮');
+  await expect(transferDraft).toContainText('项目 A 的任务草稿');
+  await expect(transfer.locator('.composer .element-token')).toContainText('项目 A 按钮');
   await expect(transfer.getByRole('textbox', { name: '元素文字', exact: true })).toHaveValue(
     '项目 A 未提交的元素文字',
   );
@@ -587,7 +596,7 @@ try {
   await update(transfer, {
     operation: undefined,
     coreReady: false,
-    codex: { status: 'ready', authentication: 'ready' },
+    codex: { status: 'ready' },
     workspace: { status: 'error', error: '项目 A 目录已移动' },
     stage: 'workspace',
   });
@@ -615,8 +624,8 @@ try {
   });
   await expect(transfer.locator('.onboarding')).toHaveCount(0);
   await transfer.getByRole('button', { name: '返回对话', exact: true }).click();
-  await expect(transferDraft).toHaveValue('');
-  await expect(transfer.locator('.selected-context')).toHaveCount(0);
+  await expect(transferDraft).toHaveText('');
+  await expect(transfer.locator('.composer .element-token')).toHaveCount(0);
   await expect(transfer.locator('.element-workspace')).toBeHidden();
   await expect(transfer.locator('.topbar-title')).toContainText('新对话');
   await transferDraft.fill('项目 B 的新任务');
@@ -626,14 +635,14 @@ try {
   await transfer.keyboard.press('Meta+n');
   const savedChat = transfer.locator('.conversation-link').filter({ hasText: '新对话' });
   await expect(savedChat).toHaveAttribute('aria-current', 'page');
-  await expect(transferDraft).toHaveValue('');
+  await expect(transferDraft).toHaveText('');
   await transferDraft.fill('另一段对话的草稿');
   await unsent.click();
-  await expect(transferDraft).toHaveValue('项目 B 的新任务');
+  await expect(transferDraft).toHaveText('项目 B 的新任务');
   await savedChat.click();
-  await expect(transferDraft).toHaveValue('另一段对话的草稿');
+  await expect(transferDraft).toHaveText('另一段对话的草稿');
   await unsent.click();
-  await expect(transferDraft).toHaveValue('项目 B 的新任务');
+  await expect(transferDraft).toHaveText('项目 B 的新任务');
   await transferDraft.press('Enter');
   await expect(unsent).toHaveCount(0);
   const submitted = (await calls(transfer, 'conversation:send')).at(-1);
@@ -669,10 +678,8 @@ try {
     name: 'Cursor Agent',
     available: true,
     supported: true,
-    authentication: 'missing',
     path: '/fixture/Cursor Agent/bin/cursor-agent',
   };
-  const cursorLogin = "'/fixture/Cursor Agent/bin/cursor-agent' login";
   await update(cursor, {
     operation: undefined,
     selectedAgent: 'cursor',
@@ -680,16 +687,8 @@ try {
     agents: [cursorInfo],
   });
   await cursor.getByRole('button', { name: '选择 Cursor Agent', exact: true }).click();
-  await expect(current(cursor).locator('.onboarding-status-indicator')).toHaveText([
-    '已安装',
-    '未登录',
-  ]);
-  await expect(current(cursor).locator('.onboarding-status-indicator svg')).toHaveCount(2);
-  await expect(current(cursor).locator('.onboarding-login-steps > li')).toHaveCount(3);
-  await expect(
-    current(cursor).locator('.onboarding-login-steps > li').first().locator('code'),
-  ).toHaveText(cursorLogin);
-  await expect(current(cursor).locator('.onboarding-command-header')).toContainText('Shell');
+  await expect(current(cursor).getByRole('heading')).toHaveText('已找到本机 Cursor Agent。');
+  await expect(current(cursor).locator('.onboarding-status-label')).toHaveText('已连接');
   await expect(current(cursor).locator('.onboarding-status-icon > svg')).toHaveCount(1);
   await expect(current(cursor).locator('.onboarding-status-icon > img')).toHaveCount(0);
   await expect(cursor.getByRole('progressbar', { name: '准备步骤' })).toHaveAttribute(
@@ -702,32 +701,9 @@ try {
   );
   await expect(cursor.locator('.onboarding-step-number')).toHaveCount(0);
   await expect(cursor.locator('.onboarding-footer ol')).toHaveCount(0);
-  await expect(current(cursor)).toContainText('打开 macOS「终端」');
-  await expect(current(cursor).locator('code')).toHaveText(cursorLogin);
-  await expect(current(cursor)).toContainText('在打开的网页中完成登录授权');
-  const copyIconButton = current(cursor).getByRole('button', { name: '复制登录命令', exact: true });
-  await expect(copyIconButton).toHaveText('');
-  await expect(copyIconButton.locator('svg')).toHaveCount(1);
-  await cursor.evaluate(() => ((window as any).__onboardingFixture.failCopy = true));
-  await current(cursor).getByRole('button', { name: '复制登录命令', exact: true }).click();
-  await expect(current(cursor).getByRole('alert')).toHaveText(
-    '复制失败，请手动选择并复制上方命令。',
-  );
-  await expect(current(cursor).getByRole('button', { name: '已复制', exact: true })).toHaveCount(0);
-  await cursor.evaluate(() => ((window as any).__onboardingFixture.failCopy = false));
-  const copyLogin = current(cursor).getByRole('button', { name: '复制登录命令', exact: true });
-  await copyLogin.focus();
-  await copyLogin.press('Enter');
-  await expect(current(cursor).getByRole('button', { name: '已复制', exact: true })).toBeVisible();
-  await expect(current(cursor).getByRole('alert')).toHaveCount(0);
-  assert.deepEqual((await calls(cursor, 'app:copy')).at(-1).payload, { text: cursorLogin });
-  assert.equal((await calls(cursor, 'onboarding:login/start')).length, 0);
-  await cursor.screenshot({ path: path.join(output, 'cursor-login.png') });
+  await expect(cursor.locator('.onboarding')).not.toContainText('登录');
+  await cursor.screenshot({ path: path.join(output, 'cursor-connected.png') });
   await cursor.setViewportSize({ width: 1060, height: 760 });
-  const commandFits = await current(cursor)
-    .locator('.onboarding-login-command')
-    .evaluate((node) => node.scrollWidth <= node.clientWidth);
-  assert.equal(commandFits, true, 'Login command must wrap within the minimum app width');
   await expect(cursor.locator('.onboarding-top-progress')).toBeInViewport();
   const skipSetup = cursor.getByRole('button', { name: '跳过设置', exact: true });
   await expect(skipSetup).toBeInViewport();
@@ -737,32 +713,17 @@ try {
   }));
   assert.ok(skipStyle.height >= 44);
   await expect(
-    current(cursor).getByRole('button', { name: '已复制', exact: true }),
+    current(cursor).getByRole('button', { name: '先不选文件夹', exact: true }),
   ).toBeInViewport();
-  await cursor.screenshot({ path: path.join(output, 'cursor-login-1060.png') });
-  await update(cursor, {
-    executor: { ...cursorInfo, path: "/fixture/Provenr's Cursor/bin/cursor-agent" },
-  });
-  await expect(current(cursor).locator('code')).toHaveText(
-    "'/fixture/Provenr'\\''s Cursor/bin/cursor-agent' login",
-  );
-  await expect(
-    current(cursor).getByRole('button', { name: '复制登录命令', exact: true }),
-  ).toBeVisible();
-  await current(cursor).getByRole('button', { name: '我已登录，重新检查', exact: true }).click();
-  await update(cursor, { operation: undefined });
-  await expect(current(cursor).locator('.onboarding-status-indicator')).toHaveText([
-    '已安装',
-    '未登录',
-  ]);
-  await expect(current(cursor).getByRole('heading')).toHaveText('连接 Cursor Agent。');
-  await update(cursor, { executor: { ...cursorInfo, authentication: 'ready' } });
-  await expect(current(cursor)).toContainText('已登录');
-  await expect(current(cursor).getByRole('heading')).toHaveText('已找到本机 Cursor Agent。');
-  await expect(current(cursor).getByRole('button', { name: '复制登录命令' })).toHaveCount(0);
+  await cursor.screenshot({ path: path.join(output, 'cursor-connected-1060.png') });
+  await cursor.getByRole('button', { name: '查看连接详情', exact: true }).click();
+  await expect(current(cursor)).toContainText('/fixture/Cursor Agent/bin/cursor-agent');
+  await expect(cursor.getByRole('button', { name: '登录 Codex 账号', exact: true })).toHaveCount(0);
+  await cursor.getByRole('button', { name: '返回准备', exact: true }).click();
+  assert.equal((await calls(cursor, 'onboarding:login/start')).length, 0);
   await expect(cursor.locator('.is-history .onboarding-actions')).toHaveCount(0);
   checks.push(
-    'Cursor login distinguishes installation from authentication, shows and copies a shell-quoted command without executing it, and advances only after host authentication succeeds',
+    'A detected Cursor Agent is connected at once: no login state, login command or login action is shown, and its details list only the local path',
   );
   await cursor.getByRole('button', { name: '先不选文件夹', exact: true }).click();
   await update(cursor, {
@@ -787,24 +748,22 @@ try {
   });
   await darkCursor.getByRole('button', { name: '选择 Cursor Agent', exact: true }).click();
   await expect(darkCursor.locator('html')).toHaveAttribute('data-theme', 'dark');
-  await expect(current(darkCursor).locator('code')).toHaveText('cursor-agent login');
-  await darkCursor.screenshot({ path: path.join(output, 'cursor-login-dark.png') });
-  checks.push(
-    'Cursor login supports dark mode and falls back to cursor-agent when no path is supplied',
-  );
+  await expect(current(darkCursor).getByRole('heading')).toHaveText('已找到本机 Cursor Agent。');
+  await darkCursor.screenshot({ path: path.join(output, 'cursor-connected-dark.png') });
+  checks.push('A detected Cursor Agent without a reported path is connected in dark mode');
   await darkCursor.getByRole('button', { name: '跳过设置', exact: true }).click();
   await expect(darkCursor.locator('.onboarding')).toHaveCount(0);
   await expect(darkCursor.getByRole('button', { name: '继续准备', exact: true })).toBeVisible();
-  await darkCursor.getByRole('textbox', { name: '发送给 Agent 的任务' }).fill('登录后再发送');
+  await darkCursor.getByRole('textbox', { name: '发送给 Agent 的任务' }).fill('准备完成后再发送');
   await expect(darkCursor.getByRole('button', { name: '发送任务', exact: true })).toBeDisabled();
   const deferredCursor = await darkCursor.evaluate(() => (window as any).__onboardingFixture.state);
   assert.equal(deferredCursor.status, 'deferred');
   assert.equal(deferredCursor.selectedAgent, 'cursor');
-  assert.equal(deferredCursor.executor.authentication, 'missing');
+  assert.equal(deferredCursor.workspace.status, 'unchecked');
   assert.equal((await calls(darkCursor, 'onboarding:defer')).length, 1);
   assert.equal((await calls(darkCursor, 'conversation:send')).length, 0);
   checks.push(
-    'Skip exits setup without inventing login success, preserves the selected CLI, and keeps sending disabled until readiness is verified',
+    'Skip exits setup, preserves the selected CLI, and keeps sending disabled until the workspace is ready',
   );
   await darkCursor.close();
 
@@ -864,21 +823,19 @@ try {
   );
   await update(flow, {
     operation: undefined,
-    codex: { status: 'ready', authentication: 'ready', path: '/fixture/codex' },
+    codex: { status: 'ready', path: '/fixture/codex' },
     agents: [
       {
         id: 'claude',
         name: 'Claude Code',
         available: true,
         supported: true,
-        authentication: 'unknown',
       },
       {
         id: 'cursor',
         name: 'Cursor Agent',
         available: true,
         supported: true,
-        authentication: 'missing',
       },
       { id: 'opencode', name: 'OpenCode', available: true, supported: false },
       { id: 'gemini', name: 'Gemini CLI', available: false, supported: true },
@@ -931,6 +888,10 @@ try {
   await flow.getByRole('button', { name: '回到最新', exact: true }).click();
   await expect.poll(async () => (await calls(flow, 'onboarding:complete')).length).toBe(1);
   await expect(flow.getByRole('button', { name: '进入 Athena', exact: true })).toHaveCount(0);
+  await flow.screenshot({ path: path.join(output, 'ready-final-check.png') });
+  await expect(
+    flow.locator('.onboarding-message.assistant + .onboarding-message.assistant'),
+  ).toHaveCount(0);
   await expect(flow.locator('.app-workbench')).toHaveCount(0);
   await history.dispatchEvent('wheel', { deltaY: -300 });
   await history.evaluate((node) => {
