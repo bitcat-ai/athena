@@ -109,21 +109,15 @@ export async function detectAgents(
           await access(executable, constants.X_OK);
           if (!(await stat(executable)).isFile()) continue;
           const options = {
-            timeout: id === 'codex' ? 2500 : 8000,
+            timeout: 8000,
             killSignal: 'SIGKILL' as const,
             maxBuffer: 256 * 1024,
-            env: cliEnvironment(executable, id !== 'codex'),
+            env: cliEnvironment(executable),
           };
-          // Login and version must remain independent so startup probes are not serialized.
-          const [version, login] = await Promise.allSettled([
-            exec(executable, ['--version'], options),
-            id === 'codex'
-              ? exec(executable, ['login', 'status'], options)
-              : id === 'cursor'
-                ? exec(executable, ['status'], options)
-                : Promise.resolve(undefined),
-          ]);
-          if (version.status !== 'fulfilled' || !version.value.stdout.trim()) {
+          // A runtime that starts is usable. Whether it can reach its model service is only
+          // known once it connects, so login state is never probed here.
+          const version = await exec(executable, ['--version'], options).catch(() => undefined);
+          if (!version?.stdout.trim()) {
             found = {
               ...found,
               path: executable,
@@ -154,24 +148,22 @@ export async function detectAgents(
                 path: executable,
                 available: true,
                 supported: false,
-                authentication: 'unknown',
                 detail: '当前 CLI 版本不支持所需的受限执行模式，请在终端更新后刷新',
               };
               continue;
             }
           }
-          const info: AgentInfo = {
+          return {
             id,
             name,
             supported,
             available: true,
             path: executable,
-            version: version.value.stdout
+            version: version.stdout
               .replace(/\x1b\[[0-9;]*m/g, '')
               .trim()
               .split('\n')[0]
               .slice(0, 120),
-            authentication: 'unknown',
             detail:
               id === 'claude' || id === 'gemini'
                 ? '支持文本任务；本地文件和命令工具不可用'
@@ -181,38 +173,6 @@ export async function detectAgents(
                     ? '沿用本机登录与模型服务配置，工具操作逐项确认'
                     : '已检测到本机安装',
           };
-          if (id === 'codex') {
-            const output = (login.status === 'fulfilled' ? login.value : login.reason) as
-              { stdout?: string; stderr?: string } | undefined;
-            const status = `${output?.stdout ?? ''}\n${output?.stderr ?? ''}`;
-            info.authentication = /not logged in|not authenticated/i.test(status)
-              ? 'missing'
-              : login.status === 'fulfilled' && /logged in/i.test(status)
-                ? 'ready'
-                : 'unknown';
-            info.detail =
-              info.authentication === 'missing'
-                ? '请先在终端运行 codex login'
-                : info.authentication === 'ready'
-                  ? '使用本机 Codex 的既有登录'
-                  : '登录状态待核对，可在终端检查 codex login status';
-          }
-          if (id === 'cursor') {
-            const output = (login.status === 'fulfilled' ? login.value : login.reason) as
-              { stdout?: string; stderr?: string } | undefined;
-            const status = `${output?.stdout ?? ''}\n${output?.stderr ?? ''}`;
-            const missing =
-              /not logged in|not authenticated|not signed in|authentication required|login required/i.test(
-                status,
-              );
-            info.authentication = missing
-              ? 'missing'
-              : login.status === 'fulfilled' && /logged in|authenticated|signed in/i.test(status)
-                ? 'ready'
-                : 'unknown';
-            if (missing) info.detail = '请先在终端运行 cursor-agent login，再刷新';
-          }
-          return info;
         } catch {
           found = {
             ...found,

@@ -40,6 +40,9 @@ try {
     return window.workbench.invoke<any>('browser:element', { ref: q.elements[0].ref });
   });
   assert.equal(selected.semantics.kind, 'button');
+  // Selection no longer switches tabs; the inspector is opened explicitly.
+  await expect(page.locator('.composer .element-token')).toContainText('ele1');
+  await page.getByRole('button', { name: '元素检查器', exact: true }).click();
   await expect(page.getByRole('slider', { name: '圆角滑块' })).toBeVisible();
   await expect(page.locator('.inspector-context')).toContainText('按钮');
   const send = async (text: string) => {

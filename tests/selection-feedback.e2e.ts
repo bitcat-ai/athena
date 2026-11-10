@@ -51,7 +51,7 @@ event('turn/started',{threadId,turnId:current,turn:{id:current}});
 poll=setInterval(()=>{
 if(!fs.existsSync(process.env.INTERACTION_RELEASE))return;
 fs.unlinkSync(process.env.INTERACTION_RELEASE);clearInterval(poll);
-const args=mode==='interaction-failure'?{ref:selected.ref,styles:{color:'url(https://example.invalid/a)'}}:{ref:selected.ref,text:'让想法成为现实',styles:{color:'rgb(45, 69, 155)'}};
+const args=mode.startsWith('interaction-failure')?{ref:selected.ref,styles:{color:'url(https://example.invalid/a)'}}:{ref:selected.ref,text:'让想法成为现实',styles:{color:'rgb(45, 69, 155)'}};
 send({id:900,method:'item/tool/call',params:{threadId,turnId:current,callId:'edit-'+current,tool:'workbench_browser_edit',arguments:args}});
 },20);return;
 }
@@ -154,6 +154,8 @@ try {
   await screenshot('hover');
   assert.equal((await snapshot()).browser.selectedElement, undefined);
   await page.mouse.click(target.x, target.y);
+  // Picking keeps the conversation in view; the inspector is opened on purpose.
+  await page.getByRole('tab', { name: '元素', exact: true }).click();
   await page.getByRole('tab', { name: '内容', exact: true }).click();
   await expect(page.getByRole('textbox', { name: '元素文字', exact: true })).toHaveValue(
     '把下一步想清楚',
@@ -195,13 +197,20 @@ try {
   );
   const heading = await query('#headline');
   await page.evaluate((ref) => window.workbench.invoke('browser:element', { ref }), heading.ref);
+  await page.getByRole('tab', { name: '元素', exact: true }).click();
   await page.getByRole('tab', { name: '内容', exact: true }).click();
   await expect(page.getByRole('textbox', { name: '元素文字', exact: true })).toHaveValue(
     '把下一步想清楚',
   );
   await ready();
   const send = async (text: string) => {
-    await page.getByRole('textbox', { name: '发送给 Agent 的任务' }).fill(text);
+    await page.getByRole('textbox', { name: '发送给 Agent 的任务' }).fill(text + ' ');
+    // An element travels with the message only as an inline mention.
+    await page.evaluate(
+      (ref) => window.workbench.invoke('browser:element', { ref }),
+      (await query('#headline')).ref,
+    );
+    await expect(page.locator('.composer .element-token')).toHaveCount(1);
     await page.getByRole('button', { name: '发送任务', exact: true }).click();
     await expect(page.getByRole('button', { name: '停止任务', exact: true })).toBeVisible();
     await expect(page.locator('.browser-agent-status')).toBeVisible();
@@ -237,11 +246,9 @@ try {
   await expect(page.getByRole('button', { name: '停止任务', exact: true })).toHaveCount(0);
   await expect(page.locator('.browser-agent-status')).toHaveCount(0);
   assert.equal((await query('#headline')).text, '让想法成为现实');
-  await expect(page.locator('.tool-call.error')).toBeVisible();
-  await page.evaluate(
-    (ref) => window.workbench.invoke('browser:element', { ref }),
-    (await query('#headline')).ref,
-  );
+  // The rejected edit stays on record in the turn's timeline.
+  await page.locator('.activity').last().locator('button.act').click();
+  await expect(page.locator(".activity .tl li[data-kind='tool'][data-state='fail']")).toBeVisible();
   await send('interaction-cancel');
   await page.getByRole('button', { name: '停止任务', exact: true }).click();
   await expect(page.getByRole('button', { name: '停止任务', exact: true })).toHaveCount(0);

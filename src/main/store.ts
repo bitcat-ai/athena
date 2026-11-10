@@ -42,6 +42,9 @@ export class Store {
         for (const message of conversation.messages)
           if (message.status === 'streaming') {
             message.status = 'error';
+            // The turn died with the app; whatever it was doing is no longer in progress.
+            message.phase = { kind: 'ended', outcome: 'failed' };
+            message.failure ??= '应用已重启，这一轮没有完成。';
             for (const tool of message.tools ?? [])
               if (tool.status === 'running') {
                 tool.status = 'error';

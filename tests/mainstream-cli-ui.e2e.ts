@@ -84,10 +84,7 @@ try {
   assert.equal(initial.settings.agent, 'pi');
   for (const id of ['pi', 'claude']) {
     const info = initial.agents.find((item) => item.id === id);
-    assert.ok(
-      info?.available && info.supported && info.authentication !== 'missing',
-      `${id} is not ready for this check`,
-    );
+    assert.ok(info?.available && info.supported, `${id} is not ready for this check`);
   }
   await expect(page.locator('#composer-agent-name')).toHaveText('Codex');
   evidence.checks.push('Legacy conversation without agent stays Codex despite a Pi default');
@@ -108,22 +105,17 @@ try {
   state = await snapshot();
   assert.equal(state.conversations.find((item) => item.id === piId)?.agent, 'pi');
   assert.equal(state.conversations.find((item) => item.id === legacy.id)?.agent, undefined);
-  for (const info of state.agents.filter(
-    (item) => !item.available || !item.supported || item.authentication === 'missing',
-  )) {
+  for (const info of state.agents.filter((item) => !item.available || !item.supported)) {
     const row = page
       .locator('.agent-setting-row')
       .filter({ has: page.getByText(info.name, { exact: true }) });
     await expect(row.getByRole('button')).toBeDisabled();
   }
-  const claudeInfo = state.agents.find((item) => item.id === 'claude')!;
-  await expect(page.locator('.agent-connection-card .small-badge')).toHaveText(
-    claudeInfo.authentication === 'ready' ? '已登录' : '登录待验证',
-  );
+  await expect(page.locator('.agent-connection-card .small-badge')).toHaveText('已检测');
   await page.getByRole('button', { name: '返回对话', exact: true }).click();
   await expect(page.locator('#composer-agent-name')).toHaveText('Pi');
   evidence.checks.push(
-    'Changing the default does not rebind existing conversations; unavailable/login-required choices are disabled',
+    'Changing the default does not rebind existing conversations; unavailable choices are disabled',
   );
 
   const draft = () => page.getByRole('textbox', { name: '发送给 Agent 的任务', exact: true });
@@ -151,14 +143,14 @@ try {
     while (Date.now() < until) {
       const state = await snapshot();
       for (const pending of state.pendingRequests ?? []) {
-        const panel = page.getByRole('region', { name: 'Agent 待处理事项', exact: true });
+        const panel = page.locator('.req[data-request-key]');
         await expect(panel).toHaveAttribute(
           'data-request-key',
           JSON.stringify([pending.conversationId, pending.messageId, pending.request.id]),
         );
         const allowed = allowFileTools && approvalAllowed(pending);
         await panel
-          .getByRole('button', { name: allowed ? '允许这次操作' : '拒绝', exact: true })
+          .getByRole('button', { name: allowed ? '允许这次' : '拒绝', exact: true })
           .click();
         assert.ok(allowed, 'An unreviewed or out-of-scope native operation was denied');
         evidence.approvals.push(pending.kind === 'approval' ? pending.request.title : '');
@@ -195,13 +187,10 @@ try {
   assert.equal(firstReply.model?.source, 'cli-message');
   assert.ok(firstReply.model?.model);
   evidence.model = firstReply.model;
-  const execution = page.getByRole('region', { name: '任务执行', exact: true });
-  await expect(
-    execution.getByRole('button', { name: '读取文件 已返回', exact: true }).first(),
-  ).toBeVisible();
-  await expect(
-    execution.getByRole('button', { name: '写入文件 已返回', exact: true }).first(),
-  ).toBeVisible();
+  const activity = page.locator('.activity').last();
+  await activity.locator('button.act').click();
+  for (const verb of ['读取', '写入'])
+    await expect(activity.locator('.tl-title', { hasText: verb }).first()).toBeVisible();
   await expect
     .poll(async () => (await snapshot()).codexConnection?.status, { timeout: 15000 })
     .toBe('ready');
@@ -277,7 +266,7 @@ try {
       { timeout: 15000 },
     )
     .toBe(true);
-  await expect(draft()).toHaveValue(nextDraft);
+  await expect(draft()).toHaveText(nextDraft);
   await expect(page.getByRole('button', { name: '发送任务', exact: true })).toBeEnabled();
   evidence.checks.push(
     'Actual UI Stop interrupts a streaming Pi task and preserves the next draft without queueing',

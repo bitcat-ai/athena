@@ -185,7 +185,7 @@ try {
   const snapshot = () => page.evaluate(() => window.workbench.invoke<AppSnapshot>('app:snapshot'));
   const initial = await snapshot();
   assert.equal(initial.agents.find((item) => item.id === 'codex')?.path, fakeCodex);
-  assert.equal(initial.agents.find((item) => item.id === 'codex')?.authentication, 'ready');
+  assert.equal(initial.agents.find((item) => item.id === 'codex')?.available, true);
   assert.equal(initial.feishu.paired, false);
   assert.equal(initial.feishu.appId, undefined);
   const actualDataDir = await application.evaluate(({ app }) => app.getPath('userData'));
@@ -197,7 +197,7 @@ try {
   await expect.poll(async () => (await snapshot()).browser.loading).toBe(false);
   checks.push('Isolated Electron userData and fake CLI detected; no saved Feishu identity');
 
-  const panel = page.getByRole('region', { name: 'Agent 待处理事项' });
+  const panel = page.locator('.req[data-request-key]');
   async function sendPrompt(text: string) {
     await expect(panel).toHaveCount(0);
     await page.getByRole('textbox', { name: '发送给 Agent 的任务' }).fill(text);
@@ -338,7 +338,7 @@ try {
   );
   assert.equal(reusedIdResult, true);
   await expect(panel).toBeVisible();
-  await panel.getByRole('button', { name: '允许这次操作', exact: true }).click();
+  await panel.getByRole('button', { name: '允许这次', exact: true }).click();
   await waitDone(accepted, '已收到允许，测试流程已完成。');
   const approvalReplies = (await recorded()).filter(
     (entry) => entry.event === 'answered' && entry.mode.startsWith('attention-approval-'),
@@ -394,7 +394,7 @@ try {
           ?.messages.find((item) => item.id === stopped.messageId)?.status,
     )
     .not.toBe('streaming');
-  await expect(nextDraft).toHaveValue('保留下一步草稿');
+  await expect(nextDraft).toHaveText('保留下一步草稿');
   assert((await recorded()).some((entry) => entry.message?.method === 'turn/interrupt'));
   checks.push(
     'Pro composer stop interrupts the active task, clears requests and keeps the next draft',

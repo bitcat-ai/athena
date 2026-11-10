@@ -127,11 +127,9 @@ try {
   await expect
     .poll(async () => (await snapshot()).pendingRequests?.[0]?.kind, { timeout: 150000 })
     .toBe('approval');
-  await expect(page.getByRole('region', { name: '任务执行' }).last()).toContainText('等待你处理');
-  await page.getByRole('button', { name: '处理请求', exact: true }).click();
-  assert(
-    await page.locator('.request-panel').evaluate((node) => node.contains(document.activeElement)),
-  );
+  // The request sits in the conversation, right under the turn that raised it.
+  await expect(page.locator('.activity').last()).toContainText('等你在页面完成操作');
+  await expect(page.locator(".req[data-type='handoff']")).toBeVisible();
   await takeScreenshot('human-help');
   await page.getByRole('button', { name: '选择模型', exact: true }).click();
   await expect(page.getByRole('option', { name: second.name, exact: true })).toBeDisabled();
@@ -155,10 +153,13 @@ try {
     .locator('.topbar-actions')
     .getByRole('button', { name: '收起浏览器', exact: true })
     .click();
-  await page
-    .getByRole('region', { name: '任务执行' })
-    .last()
-    .screenshot({ path: path.join(output, 'execution-completed.png'), animations: 'disabled' });
+  const activity = page.locator('.activity').last();
+  await expect(activity).toContainText('已完成');
+  await activity.locator('button.act').click();
+  await activity.screenshot({
+    path: path.join(output, 'execution-completed.png'),
+    animations: 'disabled',
+  });
   // Exercise the host's evidence check and OS dispatch without opening a Finder window over the user's work.
   await app!.evaluate(({ shell }) => {
     (globalThis as any).__revealed = [];
@@ -178,14 +179,11 @@ try {
     /内容已变化/,
   );
   await writeFile(artifact.path, content);
-  const rows = page
-    .getByRole('group', { name: '工具动作' })
-    .last()
-    .getByRole('button', { expanded: false });
-  await rows.first().focus();
+  await activity.locator('.tl-row').first().focus();
   await page.keyboard.press('Enter');
-  await expect(page.getByRole('button', { name: '收起详情' })).toBeVisible();
-  await page.getByRole('button', { name: '收起详情' }).click();
+  await expect(activity.locator('.tl-detail')).toHaveCount(1);
+  await page.keyboard.press('Enter');
+  await expect(activity.locator('.tl-detail')).toHaveCount(0);
   checks.push(
     'real plan, host checkpoints, manual help round trip, artifact verification and keyboard tool details',
   );
@@ -198,15 +196,15 @@ try {
   const unknown = await waitResult(unknownId);
   assert.equal(unknown.status, 'error');
   assert.equal(unknown.model?.model, second.model);
-  await expect(page.getByRole('region', { name: '任务执行' }).last()).toContainText('需要核对结果');
-  await page.getByRole('button', { name: '继续核对' }).click();
-  await expect(page.getByRole('textbox', { name: '发送给 Agent 的任务' })).toHaveValue(
-    /不要重复已生效的操作/,
+  await expect(page.locator('.activity').last()).toContainText('结果待核对');
+  // Rechecking starts a new turn, so this run only confirms the offer is there.
+  await expect(page.locator(".req.outcome[data-outcome='blocked']").getByRole('button')).toHaveText(
+    ['标记为已完成', '查看网页 ↗', '再核对一次'],
   );
   await takeScreenshot('unresolved-result');
   results.unknown = unknown;
   checks.push(
-    'actual selected second model; unknown result is not completion; recovery drafts require send',
+    'actual selected second model; unknown result is not completion; the outcome card offers a recheck',
   );
 
   const cancelledId = await send(

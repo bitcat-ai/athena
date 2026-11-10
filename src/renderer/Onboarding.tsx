@@ -2,19 +2,15 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { Button, Card } from '@heroui/react';
 import { LayoutGroup, motion, useReducedMotion } from 'motion/react';
 import {
-  AlertCircleIcon,
   ArrowDown02Icon,
-  CheckmarkCircle02Icon,
   CommandLineIcon,
-  CopyIcon,
   Download04Icon,
   Folder01Icon,
   Globe02Icon,
   InformationCircleIcon,
   Loading02Icon,
-  Tick02Icon,
 } from '@hugeicons-pro/core-stroke-rounded';
-import { ActionButton, Icon } from './ui';
+import { Icon } from './ui';
 import { AgentIcon } from './AgentIcon';
 import { supportsBrowser } from '../shared/agents';
 import athenaLogo from './assets/brand/athena-profile.png';
@@ -37,9 +33,7 @@ type Screen =
   | 'planLoading'
   | 'installPlan'
   | 'installing'
-  | 'login'
   | 'loginWait'
-  | 'loginCheck'
   | 'connected'
   | 'details'
   | 'folder'
@@ -74,7 +68,6 @@ type StatusCard = {
   title: string;
   detail?: string;
   label?: string;
-  indicators?: Array<{ label: string; ready: boolean }>;
 };
 type AssistantEntry = {
   id: string;
@@ -108,17 +101,16 @@ const pendingScreens = new Set<Screen>([
   'planLoading',
   'installing',
   'loginWait',
-  'loginCheck',
   'folderWait',
   'workspaceChecking',
   'browserPreparing',
   'finishing',
 ]);
+const readyScreens = new Set<Screen>(['ready', 'readyWithoutBrowser']);
 const activityLabels: Partial<Record<Screen, string>> = {
   detecting: '查看本机 Agent',
   agentConnecting: '核对连接',
   loginWait: '等你完成登录',
-  loginCheck: '确认登录结果',
   workspaceChecking: '准备对话空间',
   browserPreparing: '连接网页工具',
   finishing: '确认准备结果',
@@ -133,69 +125,6 @@ const cleanError = (error: unknown) =>
     /^Error invoking remote method '[^']+':\s*(?:Error:\s*)?/,
     '',
   );
-
-function LoginCommand({
-  command,
-  active,
-  disabled,
-}: {
-  command: string;
-  active: boolean;
-  disabled: boolean;
-}) {
-  const [status, setStatus] = useState<'idle' | 'copying' | 'copied' | 'error'>('idle');
-  return (
-    <div className="onboarding-login-command">
-      <div className="onboarding-command-header">
-        <span className="onboarding-command-language">
-          <Icon icon={CommandLineIcon} size={15} />
-          Shell
-        </span>
-        <span className="onboarding-command-caption">登录命令</span>
-        {active && (
-          <ActionButton
-            className="onboarding-copy-command"
-            isIconOnly
-            aria-label={
-              status === 'copied' ? '已复制' : status === 'copying' ? '正在复制…' : '复制登录命令'
-            }
-            isDisabled={disabled || status === 'copying'}
-            onPress={async () => {
-              setStatus('copying');
-              try {
-                const copied = await window.workbench.invoke<boolean>('app:copy', {
-                  text: command,
-                });
-                setStatus(copied ? 'copied' : 'error');
-              } catch {
-                setStatus('error');
-              }
-            }}
-          >
-            <Icon
-              icon={
-                status === 'copied' ? Tick02Icon : status === 'copying' ? Loading02Icon : CopyIcon
-              }
-              size={16}
-              className={status === 'copying' ? 'spin' : undefined}
-            />
-          </ActionButton>
-        )}
-      </div>
-      <div className="onboarding-login-command-row">
-        <span className="onboarding-command-prompt" aria-hidden="true">
-          $
-        </span>
-        <code>{command}</code>
-      </div>
-      {active && status === 'error' && (
-        <p className="onboarding-error" role="alert">
-          复制失败，请手动选择并复制上方命令。
-        </p>
-      )}
-    </div>
-  );
-}
 
 function MessageText({
   text,
@@ -234,17 +163,13 @@ function screenForState(state: OnboardingState, intent: Intent): Screen {
           ? 'agentConnecting'
           : 'detecting';
     if (state.operation.kind === 'install-codex') return 'installing';
-    if (state.operation.kind === 'login')
-      return state.login?.status === 'checking' ? 'loginCheck' : 'loginWait';
+    if (state.operation.kind === 'login') return 'loginWait';
     if (state.operation.kind === 'workspace-check')
       return intent === 'pick' ? 'folderWait' : 'workspaceChecking';
     if (state.operation.kind === 'prepare-browser') return 'browserPreparing';
   }
   if (intent === 'cancel') return 'cancelled';
   if (state.plan && (intent === 'plan' || intent === 'browser')) return 'installPlan';
-  if (state.login?.status === 'error' || (intent === 'login' && state.error)) return 'error';
-  if (state.login?.status === 'waiting') return 'loginWait';
-  if (state.login?.status === 'checking') return 'loginCheck';
   if (state.workspace.candidate && (intent === 'pick' || intent === 'confirm'))
     return state.workspace.error ? 'folderError' : 'folderConfirm';
   if (state.workspace.status === 'error' && (intent === 'pick' || intent === 'confirm'))
@@ -256,12 +181,10 @@ function screenForState(state: OnboardingState, intent: Intent): Screen {
   if (intent === 'pick') return 'folder';
   if (state.selectedAgent && state.selectedAgent !== 'codex') {
     if (!state.executor?.available || !state.executor.supported) return 'missing';
-    if (state.executor.authentication === 'missing') return 'login';
   } else {
     if (state.codex.status === 'missing') return 'missing';
     if (state.codex.status === 'error') return 'error';
     if (state.codex.status !== 'ready') return 'connect';
-    if (state.codex.authentication !== 'ready') return 'login';
   }
   if (state.workspace.status === 'error') return 'folderError';
   if (state.coreReady) {
@@ -284,7 +207,6 @@ function content(
   cards?: StatusCard[];
   note?: string;
   plan?: OnboardingInstallPlan;
-  loginCommand?: string;
 } {
   const operation = state.operation;
   const pendingCard: StatusCard = {
@@ -312,33 +234,15 @@ function content(
           ? state.executor?.version
           : state.codex.version,
     label: external
-      ? !state.executor?.available
-        ? '未就绪'
-        : state.executor.authentication === 'missing'
-          ? '已安装 · 未登录'
-          : state.executor.authentication === 'ready'
-            ? '已登录'
-            : '已安装 · 登录待核对'
-      : state.codex.status === 'ready' && state.codex.authentication === 'ready'
+      ? state.executor?.available && state.executor.supported
+        ? '已连接'
+        : '未就绪'
+      : state.codex.status === 'ready'
         ? '已连接'
         : state.codex.status === 'missing'
           ? '未安装'
           : '待核对',
   };
-  if (external && state.executor?.available) {
-    connection.indicators = [
-      { label: '已安装', ready: true },
-      {
-        label:
-          state.executor.authentication === 'ready'
-            ? '已登录'
-            : state.executor.authentication === 'missing'
-              ? '未登录'
-              : '登录待核对',
-        ready: state.executor.authentication === 'ready',
-      },
-    ];
-  }
   const directory: StatusCard = {
     icon: 'folder',
     title:
@@ -355,37 +259,13 @@ function content(
         ? '可访问'
         : '待核对',
   };
-  if (
-    external &&
-    ['connect', 'missing', 'login', 'loginWait', 'loginCheck', 'connected', 'details'].includes(
-      screen,
-    )
-  ) {
+  if (external && ['connect', 'missing', 'connected', 'details'].includes(screen)) {
     if (screen === 'missing')
       return {
         title: `${name} 尚不可用。`,
         lines: ['请在终端检查安装，或选择其他已安装的 CLI，然后重新检查。'],
         cards: [connection],
       };
-    if (screen.startsWith('login')) {
-      if (state.selectedAgent === 'cursor') {
-        const executable = state.executor?.path || 'cursor-agent';
-        const quoted = /^[A-Za-z0-9_./-]+$/.test(executable)
-          ? executable
-          : `'${executable.replaceAll("'", "'\\''")}'`;
-        return {
-          title: `连接 ${name}。`,
-          lines: ['安装已就绪，接下来连接你的 Cursor 账号。'],
-          cards: [connection],
-          loginCommand: `${quoted} login`,
-        };
-      }
-      return {
-        title: `连接 ${name}。`,
-        lines: ['请在终端完成登录，然后重新检查。'],
-        cards: [connection],
-      };
-    }
     return {
       title: screen === 'connected' ? `已找到本机 ${name}。` : `使用本机 ${name}。`,
       lines: ['沿用你已有的配置。想先聊聊，还是选一个项目一起做？'],
@@ -477,23 +357,6 @@ function content(
         lines: ['你可以留在这里，或稍后回来继续。'],
         cards: [pendingCard],
       };
-    case 'login':
-      return {
-        title: state.codex.authentication === 'unknown' ? '再核对一下登录状态。' : '还差一次登录。',
-        lines:
-          state.codex.authentication === 'unknown'
-            ? ['目前还不能确认本机 Codex 的登录状态。', '可以重新检查，或通过官方页面登录。']
-            : ['我会打开 Codex 的官方登录页面。', '请在那里完成账号登录与授权。'],
-        cards: [
-          {
-            icon: 'terminal',
-            title: '连接 Codex 账号',
-            detail: '登录信息由 Codex 管理',
-            label: '待登录',
-          },
-        ],
-        note: '执行任务会使用所选账号的配额或计费。密码和密钥无需填写到 Athena。',
-      };
     case 'loginWait':
       return {
         title: '我在这里等你。',
@@ -502,16 +365,10 @@ function content(
           {
             icon: 'pending',
             title: '官方登录页面',
-            detail: state.login?.error || '等待账号授权完成',
+            detail: '等待账号授权完成',
             label: '等待中',
           },
         ],
-      };
-    case 'loginCheck':
-      return {
-        title: '正在确认连接。',
-        lines: ['我会核对登录结果，并确认本机 Codex 可以连接。'],
-        cards: [pendingCard],
       };
     case 'connected':
       return {
@@ -656,9 +513,7 @@ function content(
     case 'error':
       return {
         title: '这一步还没有完成。',
-        lines: [
-          state.login?.error || state.error || state.codex.detail || '请重新检查当前状态后继续。',
-        ],
+        lines: [state.error || state.codex.detail || '请重新检查当前状态后继续。'],
       };
   }
 }
@@ -726,17 +581,23 @@ export function Onboarding({
         : undefined;
     setEntries((previous) => {
       const last = previous.at(-1);
+      const spoke = last?.role === 'assistant' ? last : undefined;
+      // The final check that follows the ready message on its own is silent: that message stays.
+      const shown =
+        screen === 'finishing' && spoke && readyScreens.has(spoke.screen) ? spoke.screen : screen;
       const entry: AssistantEntry = {
         id:
-          last?.role === 'assistant' && (last.screen === screen || pendingScreens.has(last.screen))
-            ? last.id
+          spoke && (spoke.screen === shown || pendingScreens.has(spoke.screen))
+            ? spoke.id
             : `message-${nextId.current++}`,
         role: 'assistant',
-        screen,
+        screen: shown,
         phase,
         state: structuredClone(snapshot),
       };
-      return last?.id === entry.id ? [...previous.slice(0, -1), entry] : [...previous, entry];
+      // Athena never speaks twice in a row: with no reply in between, the newer message takes
+      // the place of the last one.
+      return spoke ? [...previous.slice(0, -1), entry] : [...previous, entry];
     });
   }, []);
 
@@ -815,8 +676,7 @@ export function Onboarding({
       command === 'onboarding:cancel' ||
       command === 'onboarding:defer' ||
       command === 'onboarding:complete' ||
-      command === 'onboarding:login/reopen' ||
-      (command === 'onboarding:refresh' && currentState.current.operation?.kind === 'login');
+      command === 'onboarding:login/reopen';
     if (exiting.current || (pending.current && !interrupt)) return;
     const ticket = ++generation.current;
     const session = currentState.current.sessionId;
@@ -962,23 +822,10 @@ export function Onboarding({
       void run('onboarding:complete', undefined, '以后再说', 'browserPreparing', 'complete', id),
   };
   const actions = (): Action[] => {
+    // Nothing to press during the silent final check; the footer can still leave setup.
+    if (state.operation && readyScreens.has(current.screen)) return [];
     if (state.operation) {
       const result: Action[] = [];
-      if (state.operation.kind === 'login')
-        result.push({
-          label: '我已完成，检查连接',
-          disabled: state.login?.status === 'checking',
-          interrupt: true,
-          run: (id) =>
-            void run(
-              'onboarding:refresh',
-              undefined,
-              '我已完成，检查连接',
-              'loginCheck',
-              'login',
-              id,
-            ),
-        });
       if (state.operation.kind === 'login' && state.login?.canReopen)
         result.push({
           label: '重新打开登录页',
@@ -1018,21 +865,8 @@ export function Onboarding({
       if (state.operation.kind === 'prepare-browser' && state.coreReady) result.push(skipBrowser);
       return result;
     }
-    if (
-      state.selectedAgent &&
-      state.selectedAgent !== 'codex' &&
-      ['missing', 'login', 'loginWait'].includes(current.screen)
-    )
-      return [
-        {
-          ...check,
-          label:
-            state.selectedAgent === 'cursor' && current.screen !== 'missing'
-              ? '我已登录，重新检查'
-              : check.label,
-        },
-        chooseAgent,
-      ];
+    if (state.selectedAgent && state.selectedAgent !== 'codex' && current.screen === 'missing')
+      return [check, chooseAgent];
     switch (current.screen) {
       case 'welcome':
         return [
@@ -1123,17 +957,6 @@ export function Onboarding({
               },
             ]
           : [check];
-      case 'login':
-      case 'loginWait':
-        return [
-          {
-            label: '登录 Codex',
-            run: (id) =>
-              void run('onboarding:login/start', undefined, '登录 Codex', 'loginWait', 'login', id),
-          },
-          { ...check, label: '重新检查已有登录', ghost: true },
-          chooseAgent,
-        ];
       case 'connected':
         return [
           skipFolder,
@@ -1143,6 +966,24 @@ export function Onboarding({
       case 'details':
         return [
           check,
+          // Signing in is the user's call; nothing here checks whether it is needed.
+          ...(state.selectedAgent && state.selectedAgent !== 'codex'
+            ? []
+            : [
+                {
+                  label: '登录 Codex 账号',
+                  ghost: true,
+                  run: (id: string) =>
+                    void run(
+                      'onboarding:login/start',
+                      undefined,
+                      '登录 Codex 账号',
+                      'loginWait',
+                      'login',
+                      id,
+                    ),
+                },
+              ]),
           { label: '返回准备', ghost: true, run: (id) => local('返回准备', 'folder', id) },
         ];
       case 'folder':
@@ -1518,69 +1359,12 @@ export function Onboarding({
                                 {card.detail && <span>{card.detail}</span>}
                               </div>
                               {card.label && (
-                                <span className="onboarding-status-label">
-                                  {card.indicators
-                                    ? card.indicators.map((indicator) => (
-                                        <span
-                                          key={indicator.label}
-                                          className="onboarding-status-indicator"
-                                          data-state={indicator.ready ? 'ready' : 'pending'}
-                                        >
-                                          <Icon
-                                            icon={
-                                              indicator.ready
-                                                ? CheckmarkCircle02Icon
-                                                : AlertCircleIcon
-                                            }
-                                            size={14}
-                                          />
-                                          {indicator.label}
-                                        </span>
-                                      ))
-                                    : card.label}
-                                </span>
+                                <span className="onboarding-status-label">{card.label}</span>
                               )}
                             </Card.Content>
                           </Card>
                         ))}
                       </div>
-                    )}
-                    {view.loginCommand && (
-                      <ol className="onboarding-login-steps">
-                        <li>
-                          <span className="onboarding-login-step-number" aria-hidden="true">
-                            1
-                          </span>
-                          <div>
-                            <strong>在终端运行登录命令</strong>
-                            <p>打开 macOS「终端」，粘贴下方命令并按回车。</p>
-                            <LoginCommand
-                              key={view.loginCommand}
-                              command={view.loginCommand}
-                              active={active}
-                              disabled={leaving || requestPending || Boolean(state.operation)}
-                            />
-                          </div>
-                        </li>
-                        <li>
-                          <span className="onboarding-login-step-number" aria-hidden="true">
-                            2
-                          </span>
-                          <div>
-                            <strong>完成账号授权</strong>
-                            <p>在打开的网页中完成登录授权，然后回到 Athena。</p>
-                          </div>
-                        </li>
-                        <li>
-                          <span className="onboarding-login-step-number" aria-hidden="true">
-                            3
-                          </span>
-                          <div>
-                            <strong>检查登录结果</strong>
-                            <p>点击「我已登录，重新检查」，确认连接后继续。</p>
-                          </div>
-                        </li>
-                      </ol>
                     )}
                     {view.plan && (
                       <dl className="onboarding-plan-details">
@@ -1651,11 +1435,7 @@ export function Onboarding({
                                 >
                                   <AgentIcon agent={agent.id} size={22} />
                                   <span>{agent.name}</span>
-                                  {!agent.supported ? (
-                                    <small>暂不支持</small>
-                                  ) : (
-                                    agent.authentication === 'missing' && <small>需登录</small>
-                                  )}
+                                  {!agent.supported && <small>暂不支持</small>}
                                 </Button>
                               </motion.div>
                             );

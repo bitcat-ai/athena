@@ -362,7 +362,6 @@ export class FeishuConnector {
         throw new Error('Encrypted storage check failed');
       if (!current()) throw new Error('Feishu setup cancelled');
       return this.dependencies.registerApp({
-        createOnly: true,
         source: 'agent-workbench',
         signal: controller.signal,
         appPreset: { name: 'Athena Demo', desc: '连接本机 Athena，协作浏览与执行任务' },
@@ -426,8 +425,8 @@ export class FeishuConnector {
           code === 'expired_token'
             ? '二维码已过期，请重新连接飞书。'
             : code === 'access_denied'
-              ? '已取消创建飞书机器人。'
-              : '飞书机器人创建或连接失败，请重试或使用手动配置。';
+              ? '已取消飞书授权。'
+              : '飞书授权或连接失败，请重试或使用手动配置。';
         this.update({ status: 'error', error: message, setupUrl: undefined, setupQr: undefined });
         rejectReady(new Error(message));
       })
@@ -445,7 +444,7 @@ export class FeishuConnector {
       domain: 'feishu' as const,
     };
     if (!validCredentials(credentials))
-      throw new Error('请填写有效的新机器人 App ID 与 App Secret。');
+      throw new Error('请填写有效的机器人 App ID 与 App Secret。');
     this.disconnect();
     await this.receiptQueue;
     await this.saveCredentials(credentials);

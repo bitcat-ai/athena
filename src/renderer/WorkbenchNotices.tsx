@@ -1,10 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type {
-  AgentInfo,
-  CodexUpdateStatus,
-  Conversation,
-  PendingAgentRequest,
-} from '../shared/types';
+import type { AgentInfo, CodexUpdateStatus } from '../shared/types';
 import { AppNotice } from './AppNotice';
 
 type CodexRelease = Exclude<CodexUpdateStatus, { status: 'unknown' }>;
@@ -52,23 +47,14 @@ export function useCodexUpdate(agent: AgentInfo | undefined, enabled: boolean) {
   };
 }
 
-export const requestKey = (pending: PendingAgentRequest) =>
-  JSON.stringify([pending.conversationId, pending.messageId, pending.request.id]);
-
+/** App-level notices only. Requests from a turn live in the conversation that raised them. */
 export function WorkbenchNotices({
-  requests,
-  conversations,
   update,
-  onReview,
   onShowRelease,
 }: {
-  requests: PendingAgentRequest[];
-  conversations: Conversation[];
   update?: CodexRelease;
-  onReview: (request: PendingAgentRequest) => void;
   onShowRelease: (url: string) => void;
 }) {
-  const [dismissedRequests, setDismissedRequests] = useState<string[]>([]);
   const [dismissedRelease, setDismissedRelease] = useState(() => {
     try {
       return localStorage.getItem(dismissedReleaseKey);
@@ -76,65 +62,24 @@ export function WorkbenchNotices({
       return null;
     }
   });
-  useEffect(() => {
-    const active = new Set(requests.map(requestKey));
-    setDismissedRequests((keys) =>
-      keys.some((key) => !active.has(key)) ? keys.filter((key) => active.has(key)) : keys,
-    );
-  }, [requests]);
-
-  const pending = requests.find((item) => !dismissedRequests.includes(requestKey(item)));
-  let notice;
-  if (pending) {
-    const dismiss = () => setDismissedRequests((keys) => [...keys, requestKey(pending)]);
-    const kind =
-      pending.kind === 'input'
-        ? 'input'
-        : pending.request.action === 'browser-help'
-          ? 'handoff'
-          : 'approval';
-    const title = { input: '任务等待回答', handoff: '任务需要你接手', approval: '任务等待审批' }[
-      kind
-    ];
-    const label = { input: '去回答', handoff: '查看任务', approval: '查看审批' }[kind];
-    notice = (
-      <AppNotice
-        key={requestKey(pending)}
-        kind={kind}
-        title={title}
-        description={
-          conversations.find((item) => item.id === pending.conversationId)?.title || '当前任务'
-        }
-        actionLabel={label}
-        onDismiss={dismiss}
-        onAction={() => {
-          dismiss();
-          onReview(pending);
-        }}
-      />
-    );
-  } else if (update && update.latestVersion !== dismissedRelease) {
-    notice = (
-      <AppNotice
-        kind="update"
-        title="Codex CLI 有新版本"
-        description={`${update.installedVersion} → ${update.latestVersion}`}
-        actionLabel="查看更新说明"
-        onAction={() => onShowRelease(update.releaseUrl)}
-        onDismiss={() => {
-          setDismissedRelease(update.latestVersion);
-          try {
-            localStorage.setItem(dismissedReleaseKey, update.latestVersion);
-          } catch {
-            /* Session dismissal still applies. */
-          }
-        }}
-      />
-    );
-  }
   return (
     <div aria-live="polite" aria-relevant="additions text" className="workbench-notices">
-      {notice}
+      {update && update.latestVersion !== dismissedRelease && (
+        <AppNotice
+          title="Codex CLI 有新版本"
+          description={`${update.installedVersion} → ${update.latestVersion}`}
+          actionLabel="查看更新说明"
+          onAction={() => onShowRelease(update.releaseUrl)}
+          onDismiss={() => {
+            setDismissedRelease(update.latestVersion);
+            try {
+              localStorage.setItem(dismissedReleaseKey, update.latestVersion);
+            } catch {
+              /* Session dismissal still applies. */
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

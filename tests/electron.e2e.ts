@@ -202,9 +202,19 @@ try {
   await clickElement(
     state.elements.find((item: any) => item.tag === 'button' && item.name === '应用标题'),
   );
-  await expect(page.locator('.selected-context')).toContainText('应用标题');
-  await page.getByRole('button', { name: '移除选中元素' }).click();
-  checks.push('Element picking attaches context without submitting form');
+  // Picking embeds the element in the draft as an inline [ele1] token and stays on the conversation.
+  await expect(page.locator('.composer .element-token')).toContainText('应用标题');
+  await expect(page.locator('.composer .element-token')).toContainText('ele1');
+  await expect(page.getByRole('region', { name: '元素检查器' })).toHaveCount(0);
+  const composer = page.getByRole('textbox', { name: '发送给 Agent 的任务' });
+  await composer.focus();
+  await page.keyboard.press('End');
+  await composer.pressSequentially('中改标题');
+  await expect(composer).toHaveText(/应用标题.*中改标题/);
+  await page.keyboard.press('Meta+a');
+  await page.keyboard.press('Backspace');
+  await expect(page.locator('.composer .element-token')).toHaveCount(0);
+  checks.push('Element picking inserts an inline token without submitting or switching tabs');
 
   if (process.env.WORKBENCH_LIVE_AGENT_TEST === '1') {
     const textarea = page.getByRole('textbox', { name: '发送给 Agent 的任务' });
@@ -230,7 +240,7 @@ try {
     await expect
       .poll(async () => (await snapshot()).text, { timeout: 10_000 })
       .toContain('Electron 联调通过');
-    await expect(page.locator('.message.assistant .tool-call')).not.toHaveCount(0);
+    await expect(page.locator('.message.assistant .activity')).not.toHaveCount(0);
     await page.screenshot({ path: path.join(root, 'docs/screenshots/agent-browser.png') });
     checks.push('Actual renderer send → Codex → BrowserOS actions → streamed UI result');
   }

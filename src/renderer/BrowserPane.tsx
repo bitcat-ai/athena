@@ -27,7 +27,9 @@ import type {
   RecordedStep,
   Recording,
 } from '../shared/types';
+import type { GlyphKind } from '../shared/phase';
 import { NeoHistory } from './NeoHistory';
+import { PhaseGlyph } from './PhaseGlyph';
 import { SharePanel } from './SharePanel';
 import type { ShareState } from '../shared/share';
 import './sharing.css';
@@ -43,7 +45,8 @@ interface Props {
   inspectorOpen: boolean;
   onToggleInspector: () => void;
   initialFrame?: BrowserFrame;
-  agentStatus?: string;
+  /** What the running turn is doing, echoed next to the page it works on. */
+  agentStatus?: { text: string; glyph: GlyphKind };
   neo?: NativeNeoState;
   nativeRecordId?: string;
 }
@@ -892,8 +895,8 @@ export function BrowserPane({
               <span className="status-right">选择元素</span>
             ) : agentStatus ? (
               <span className="browser-agent-status" role="status">
-                <span className="thinking-dot" />
-                {agentStatus}
+                <PhaseGlyph kind={agentStatus.glyph} still={agentStatus.glyph === 'wait'} />
+                {agentStatus.text}
               </span>
             ) : null}
           </div>

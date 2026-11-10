@@ -303,7 +303,8 @@ interface BrowserOptions {
   onState: (state: BrowserState) => void;
   onFrame: (frame: BrowserFrame) => void;
   onStep: (step: RecordedStep) => void;
-  onSelected: (element: ElementRef) => void;
+  /** `pick`: the user chose an element in the inspector; `edit`: an edit or undo re-reported it. */
+  onSelected: (element: ElementRef, reason: 'pick' | 'edit') => void;
   onHumanTakeover: () => void;
 }
 
@@ -2665,7 +2666,7 @@ export class BrowserRuntime {
     );
     const detail = await this.detailsInternal(ref);
     this.update({ selectedElement: detail, inspecting: false, elementControls: undefined });
-    this.options.onSelected(detail);
+    this.options.onSelected(detail, 'pick');
     return detail;
   }
   editElement(ref: string, changes: ElementEdit): Promise<ElementEditResult> {
@@ -2729,7 +2730,7 @@ export class BrowserRuntime {
       element.semantics = this.state.selectedElement?.semantics || element.semantics;
       element.backendNodeId = this.state.selectedElement?.backendNodeId;
       this.update({ selectedElement: element });
-      this.options.onSelected(element);
+      this.options.onSelected(element, 'edit');
       return { editId, element };
     });
   }
@@ -2793,7 +2794,7 @@ export class BrowserRuntime {
     );
     const element = await this.exposeDetails(tab, frame, result.element);
     this.update({ selectedElement: element });
-    this.options.onSelected(element);
+    this.options.onSelected(element, 'edit');
     return { editId, element };
   }
   undoEdit(editId?: string): Promise<ElementEditResult> {
@@ -2847,7 +2848,7 @@ export class BrowserRuntime {
     );
     const element = await this.exposeDetails(tab, frame, result.element);
     this.update({ selectedElement: element });
-    this.options.onSelected(element);
+    this.options.onSelected(element, 'edit');
     return { editId: edit.id, element };
   }
 

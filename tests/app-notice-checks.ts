@@ -8,7 +8,10 @@ export async function checkAppNotices(page: Page) {
   const output = path.resolve('test-results/app-notices');
   await mkdir(output, { recursive: true });
   const notice = page.getByRole('region', { name: '工作台提示', exact: true });
-  const panel = page.getByRole('region', { name: 'Agent 待处理事项', exact: true });
+  // Requests live in the conversation that raised them; the notice area only reports app news.
+  const cards = page.locator('.req');
+  const conversations = page.locator('.conversation-list');
+  const row = (title: RegExp) => conversations.locator('.conversation-link', { hasText: title });
   const close = notice.getByRole('button', { name: '收起提醒' });
   const update = notice.getByRole('button', { name: '查看更新说明' });
   const releaseUrl = 'https://github.com/openai/codex/releases/tag/rust-v0.102.0';
@@ -68,7 +71,7 @@ export async function checkAppNotices(page: Page) {
   await page.getByRole('menuitemradio', { name: '深色', exact: true }).click();
   await page
     .locator('.conversation-list')
-    .getByRole('button', { name: /检查网页表单/ })
+    .getByRole('button', { name: /^检查网页表单/ })
     .click();
   await page.getByRole('button', { name: '展开浏览器', exact: true }).click();
   const draft = page.getByRole('textbox', { name: '发送给 Agent 的任务' });
@@ -85,36 +88,52 @@ export async function checkAppNotices(page: Page) {
   };
   await emit('a', 'a1', approval);
   await emit('a', 'a1', approval);
-  await expect(notice).toHaveCount(1);
-  await expect(notice.getByRole('button', { name: '查看审批' })).toBeVisible();
-  await expect(update).toHaveCount(0);
+  // Another conversation's request only marks its sidebar row. Focus, draft and notice stay put.
+  await expect(row(/优化首页交互/).locator('em')).toHaveText('等你批准');
+  await expect(row(/优化首页交互/).locator('.phase-glyph.g-wait.still')).toBeVisible();
+  await expect(update).toBeVisible();
   await expect(draft).toBeFocused();
-  await expect(panel).toHaveCount(0);
+  await expect(cards).toHaveCount(0);
   const compact = await notice.boundingBox();
   const browser = await page.getByRole('region', { name: '浏览器', exact: true }).boundingBox();
   assert.ok(compact && browser && compact.x + compact.width <= browser.x + 1);
   assert.ok(await notice.evaluate((node) => node.scrollWidth <= node.clientWidth + 1));
-  await page.screenshot({ path: path.join(output, 'approval-dark-split.png') });
-  await notice.getByRole('button', { name: '查看审批' }).click();
+  await row(/优化首页交互/).click();
   await expect(page.locator('.topbar-title')).toContainText('优化首页交互');
-  await expect(panel.getByRole('button', { name: '允许这次操作' })).toBeVisible();
-  await expect(panel).toBeFocused();
+  const approvalCard = page.getByRole('group', { name: '查看构建记录' });
+  await expect(cards).toHaveCount(1);
+  await expect(approvalCard.getByRole('button', { name: '允许这次' })).toBeVisible();
+  await expect(approvalCard.getByRole('button', { name: '拒绝' })).toBeVisible();
+  // Focus rests on the card, not on a button, so a stray Enter or Space approves nothing.
+  await expect(approvalCard).toBeFocused();
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Space');
+  await expect(page.locator('.activity .act-title')).toHaveText('等待你的批准');
+  const oneLine = (node: Element) => {
+    const middles = [...node.children].map((child) => {
+      const box = child.getBoundingClientRect();
+      return Math.round(box.top + box.height / 2);
+    });
+    return (
+      Math.max(...middles) - Math.min(...middles) <= 2 && node.scrollWidth <= node.clientWidth + 1
+    );
+  };
+  assert.ok(await approvalCard.locator('.req-foot').evaluate(oneLine), 'approval footer wraps');
+  await page.screenshot({ path: path.join(output, 'approval-dark-split.png') });
   await emit('a', 'a1', { type: 'request-resolved', id: 'approve' });
-  const conversations = page.locator('.conversation-list');
-  await conversations.getByRole('button', { name: /检查网页表单/ }).click();
+  await expect(cards).toHaveCount(0);
+  await expect(row(/优化首页交互/).locator('em')).toHaveCount(0);
+  await row(/检查网页表单/).click();
   const nextApproval = { ...approval, request: { ...approval.request, id: 'approve-again' } };
   await emit('a', 'a1', nextApproval);
-  await expect(notice.getByRole('button', { name: '查看审批' })).toBeVisible();
-  await close.click();
-  await expect(update).toBeVisible();
-  await expect(panel).toHaveCount(0);
-  await emit('a', 'a1', nextApproval);
-  await expect(notice.getByRole('button', { name: '查看审批' })).toHaveCount(0);
-  await conversations.getByRole('button', { name: /优化首页交互/ }).click();
-  await expect(panel).toContainText('查看构建记录');
+  await expect(row(/优化首页交互/).locator('em')).toHaveText('等你批准');
+  await expect(cards).toHaveCount(0);
+  await row(/优化首页交互/).click();
+  await expect(approvalCard).toContainText('读取本地项目的构建结果。');
   await emit('a', 'a1', { type: 'request-resolved', id: 'approve-again' });
-  await expect(panel).toHaveCount(0);
+  await expect(cards).toHaveCount(0);
 
+  // The same request id in two conversations stays two separate requests.
   await emit('a', 'a1', {
     type: 'user-input',
     request: {
@@ -132,16 +151,27 @@ export async function checkAppNotices(page: Page) {
       detail: '核对记录编号后继续。',
     },
   });
-  await notice.getByRole('button', { name: '去回答' }).press('Enter');
-  await expect(page.locator('.topbar-title')).toContainText('优化首页交互');
-  await expect(panel.getByRole('textbox', { name: '请填写记录编号' })).toBeFocused();
+  const question = page.getByRole('group', { name: '需要你的回答' });
+  await expect(question.getByRole('textbox', { name: '请填写记录编号' })).toBeFocused();
+  await expect(row(/检查网页表单/).locator('em')).toHaveText('等你操作');
   await emit('a', 'a1', { type: 'request-resolved', id: 'rpc-1' });
-  await notice.getByRole('button', { name: '查看任务' }).click();
+  await expect(cards).toHaveCount(0);
+  await expect(row(/检查网页表单/).locator('em')).toHaveText('等你操作');
+  await row(/检查网页表单/).click();
   await expect(page.locator('.topbar-title')).toContainText('检查网页表单');
-  await expect(panel).toContainText('请在页面完成核对');
-  await expect(panel).toBeFocused();
+  const handoff = page.getByRole('group', { name: '请在页面完成核对' });
+  await expect(handoff).toContainText('核对记录编号后继续。');
+  await expect(handoff).toBeFocused();
+  await expect(handoff.locator('.req-foot').getByRole('button')).toHaveText([
+    '停止处理',
+    '去页面完成 ↗',
+    '已完成，继续',
+  ]);
+  assert.ok(await handoff.locator('.req-foot').evaluate(oneLine), 'handoff footer wraps');
+  await expect(page.locator('.browser-agent-status')).toContainText('等你在页面完成操作');
   await emit('b', 'b2', { type: 'complete' });
-  await expect(panel).toHaveCount(0);
+  await expect(cards).toHaveCount(0);
+  await expect(row(/检查网页表单/).locator('em')).toHaveCount(0);
   await expect(update).toBeVisible();
   await update.click();
   await close.click();
@@ -206,10 +236,13 @@ export async function checkAppNotices(page: Page) {
       pending('finished', 'browser-help'),
       pending('waiting', 'browser-script'),
     ];
+    f.snapshot.conversations
+      .find((c: { id: string }) => c.id === 'b')
+      .messages.push({ id: 'b2', role: 'assistant', status: 'streaming', text: '', createdAt: 1 });
     const question = {
       type: 'agent:event',
       conversationId: 'b',
-      messageId: 'b1',
+      messageId: 'b2',
       event: {
         type: 'user-input',
         request: {
@@ -228,9 +261,12 @@ export async function checkAppNotices(page: Page) {
     });
     f.release();
   });
-  await expect(notice.getByRole('button', { name: '查看审批' })).toBeVisible();
-  await close.click();
-  await expect(notice.getByRole('button', { name: '去回答' })).toBeVisible();
-  await close.click();
+  // Restored requests reach their rows without a notice, and a resolved one never comes back.
   await expect(notice).toHaveCount(0);
+  await expect(row(/优化首页交互/).locator('em')).toHaveText('等你批准');
+  await expect(row(/检查网页表单/).locator('em')).toHaveText('等你回答');
+  await row(/优化首页交互/).click();
+  await expect(cards).toHaveCount(1);
+  await expect(cards).toContainText('核对构建结果');
+  await expect(cards.getByRole('button', { name: '允许这次' })).toBeVisible();
 }

@@ -92,14 +92,12 @@ const decideWorkspace = async (approved: boolean) => {
     assert.ok(pending.request.id.startsWith('cursor-workspace:'));
     assert.equal(pending.conversationId, conversationId);
     assert.ok(pending.request.detail.startsWith(`${saved.settings.workspace}\n`));
-    const panel = page.getByRole('region', { name: 'Agent 待处理事项', exact: true });
+    const panel = page.locator('.req[data-request-key]');
     await expect(panel).toHaveAttribute(
       'data-request-key',
       JSON.stringify([pending.conversationId, pending.messageId, pending.request.id]),
     );
-    await panel
-      .getByRole('button', { name: approved ? '允许这次操作' : '拒绝', exact: true })
-      .click();
+    await panel.getByRole('button', { name: approved ? '允许这次' : '拒绝', exact: true }).click();
     checks.push(
       approved
         ? 'Explicit Cursor workspace approval in the actual host UI'
@@ -129,10 +127,7 @@ try {
   await launch();
   const initial = await snapshot();
   const info = initial.agents.find((a) => a.id === cli);
-  assert.ok(
-    info?.available && info.supported && info.authentication !== 'missing',
-    `${cli} is not ready`,
-  );
+  assert.ok(info?.available && info.supported, `${cli} is not ready`);
   await expect(page.locator('#composer-agent-name')).toHaveText(info.name);
   checks.push('The selected installed CLI is reflected in the actual composer');
 
@@ -225,7 +220,7 @@ try {
     await draft.fill('停止后保留的下一段草稿');
     await page.getByRole('button', { name: '停止任务', exact: true }).click();
     await expect.poll(async () => reply(await snapshot())?.status).not.toBe('streaming');
-    await expect(draft).toHaveValue('停止后保留的下一段草稿');
+    await expect(draft).toHaveText('停止后保留的下一段草稿');
     const stopped = reply(await snapshot())!;
     await send(
       'Reply with only the original marker from before the counting task. Do not use tools.',

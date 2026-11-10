@@ -15,6 +15,7 @@
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts",
     "test:e2e": "tsx tests/electron.e2e.ts",
+    "test:inline-mentions": "tsx tests/inline-mentions.e2e.ts",
     "test:live-agent": "tsx tests/live-agent.e2e.ts",
     "test:live-pi": "tsx tests/pi-live.e2e.ts",
     "test:live-cli": "tsx tests/stream-cli-live.e2e.ts",

@@ -23,7 +23,6 @@ const snapshot = {
       name: 'Codex',
       available: true,
       supported: true,
-      authentication: 'ready',
       path: '/fixture/bin/codex',
       version: 'fixture-version',
     },
@@ -356,11 +355,11 @@ try {
   const conversationB = page.locator('.conversation-link').filter({ hasText: '检查网页表单' });
   await composer.fill('A 的草稿');
   await conversationB.click();
-  await expect(composer).toHaveValue('');
+  await expect(composer).toHaveText('');
   await composer.fill('B 的草稿');
   await conversationA.click();
   await expect(conversationA).toHaveAttribute('aria-current', 'page');
-  await expect(composer).toHaveValue('A 的草稿');
+  await expect(composer).toHaveText('A 的草稿');
   await page.evaluate(() => {
     (window as any).__homeFixture.holdSend = true;
   });
@@ -376,15 +375,15 @@ try {
     f.releaseSend();
   });
   await expect(conversationB).toHaveAttribute('aria-current', 'page');
-  await expect(composer).toHaveValue('B 的草稿');
+  await expect(composer).toHaveText('B 的草稿');
   const submitted = (await calls('conversation:send')).at(-1)?.payload;
   assert.equal(submitted.id, 'a');
   assert.equal(submitted.text, 'A 的草稿');
   await page.getByRole('button', { name: '停止任务', exact: true }).click();
   await page.keyboard.press('Meta+n');
-  await expect(composer).toHaveValue('');
+  await expect(composer).toHaveText('');
   await conversationA.click();
-  await expect(composer).toHaveValue('A 的草稿');
+  await expect(composer).toHaveText('A 的草稿');
   checks.push(
     'Conversation drafts survive navigation and creating a chat; a delayed send leaves later edits and the current conversation intact',
   );
@@ -398,7 +397,7 @@ try {
   await page.evaluate(() => (window as any).__homeFixture.browser({ status: 'ready' }));
   await page.getByRole('button', { name: /^查看当前页面/ }).press('Enter');
   await expect(composer).toBeFocused();
-  await expect(composer).toHaveValue('保留这段草稿');
+  await expect(composer).toHaveText('保留这段草稿');
   await page.getByRole('button', { name: '收起浏览器', exact: true }).first().click();
   await userMenu.click();
   await expect
@@ -406,12 +405,12 @@ try {
     .toBe(true);
   await page.keyboard.press('Escape');
   await expect(page.locator('.local-user-menu')).toBeHidden();
-  await expect(composer).toHaveValue('保留这段草稿');
+  await expect(composer).toHaveText('保留这段草稿');
   await page.getByRole('button', { name: '添加网页上下文', exact: true }).click();
   await page.screenshot({ path: path.join(output, 'context-menu.png') });
   await page.getByRole('menuitem', { name: '当前页面', exact: true }).click();
   await expect(page.getByRole('menuitem', { name: '当前页面', exact: true })).toHaveCount(0);
-  await expect(composer).toHaveValue('保留这段草稿');
+  await expect(composer).toHaveText('保留这段草稿');
   assert.equal((await calls('conversation:send')).length, sendCount);
   await page.locator('.browser-keyboard').focus();
   await page.keyboard.press('Meta+k');
@@ -461,18 +460,18 @@ try {
   await composer.press('Enter');
   await expect(page.getByRole('alert')).toContainText('测试发送失败');
   await page.getByRole('button', { name: '关闭提示', exact: true }).click();
-  await expect(composer).toHaveValue('保留这段草稿');
+  await expect(composer).toHaveText('保留这段草稿');
   await page.evaluate(() => {
     (window as any).__homeFixture.failSend = false;
   });
   await composer.press('Enter');
-  await expect(composer).toHaveValue('');
+  await expect(composer).toHaveText('');
   await expect(page.getByRole('button', { name: '停止任务', exact: true })).toBeVisible();
   await page.keyboard.press('Meta+n');
   await composer.fill('下一段草稿');
   await expect(page.getByText('另一任务进行中', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: '停止任务', exact: true }).click();
-  await expect(composer).toHaveValue('下一段草稿');
+  await expect(composer).toHaveText('下一段草稿');
   await expect(page.getByRole('button', { name: '发送任务', exact: true })).toBeEnabled();
   checks.push(
     'IME confirmation does not submit; failed send retains draft; acknowledged send clears it; global busy switches to Stop and stopping preserves the next draft without queueing',
@@ -492,7 +491,7 @@ try {
     });
     f.emit({ type: 'codex:state', state: { status: 'ready', conversationId: 'a' } });
   });
-  await expect(statusBadge).toHaveText('已登录');
+  await expect(statusBadge).toHaveText('已检测');
   await page.evaluate(() => {
     const fixture = (window as any).__homeFixture;
     fixture.emit({
@@ -533,7 +532,7 @@ try {
   await page.getByRole('tab', { name: '浏览器', exact: true }).click();
   await expect(page.getByRole('button', { name: '选择 BrowserOS neo', exact: true })).toBeVisible();
   await page.getByRole('tab', { name: '飞书', exact: true }).click();
-  await expect(page.getByRole('button', { name: '创建专用机器人', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '授权并选择机器人', exact: true })).toBeVisible();
   await page.evaluate(() =>
     (window as any).__homeFixture.feishu({ status: 'restoring', paired: false }),
   );
@@ -553,7 +552,7 @@ try {
   await expect(page.getByRole('button', { name: '绑定 FIXTURE' })).toBeVisible();
   await page.screenshot({ path: path.join(output, 'settings-feishu.png') });
   await page.getByRole('button', { name: '返回对话', exact: true }).click();
-  await expect(composer).toHaveValue('下一段草稿');
+  await expect(composer).toHaveText('下一段草稿');
   await page.locator('.sidebar-settings').click();
   await page.keyboard.press('Meta+l');
   await expect(page.locator('.settings-workspace')).toHaveCount(0);
@@ -567,13 +566,13 @@ try {
   await userMenu.click();
   await page.getByRole('menuitem', { name: /^选择工作目录/ }).click();
   assert.equal((await calls('conversation:new')).length, beforeCancel);
-  await expect(composer).toHaveValue('下一段草稿');
+  await expect(composer).toHaveText('下一段草稿');
   await page.evaluate(() => {
     (window as any).__homeFixture.folderChoice = '/workspace/next';
   });
   await userMenu.click();
   await page.getByRole('menuitem', { name: /^选择工作目录/ }).click();
-  await expect(composer).toHaveValue('');
+  await expect(composer).toHaveText('');
   await expect(page.locator('.workspace-selector')).toContainText('next');
   checks.push(
     'Cancelled workspace picker changes nothing; accepted workspace updates directory and creates a new conversation',
@@ -780,7 +779,7 @@ try {
   await composer.fill(multiline);
   splits.push(await measureSplit('narrow-chat-stop'));
   await stop.click();
-  await expect(composer).toHaveValue(multiline);
+  await expect(composer).toHaveText(multiline);
   await writeFile(path.join(output, 'split-layout.json'), JSON.stringify(splits, null, 2));
   for (const { state, shell, buttons, chromeHeight, zoom } of splits) {
     assert.ok(

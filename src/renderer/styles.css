@@ -5,16 +5,14 @@
 @import '@heroui-pro/react/css/components/prompt-suggestion.css';
 @import '@heroui-pro/react/css/components/chat-attachment.css';
 @import '@heroui-pro/react/css/components/chat-message-actions.css';
-@import '@heroui-pro/react/css/components/chat-tool.css';
 @import '@heroui-pro/react/css/components/code-block.css';
-@import '@heroui-pro/react/css/components/text-shimmer.css';
-@import '@heroui-pro/react/css/components/timeline.css';
 @import '@heroui-pro/react/css/components/radio-button-group.css';
 @import '@heroui-pro/react/css/components/chat-message.css';
 @import '@heroui-pro/react/css/components/segment.css';
 @import '@heroui-pro/react/css/components/command.css';
 @import './theme.css';
 @import './agent-experience.css';
+@import './activity.css';
 @import './model-controls.css';
 
 * {
@@ -531,67 +529,8 @@ select {
 .message .chat-message__actions:focus-within {
   opacity: 1;
 }
-.message-failure {
-  font-size: 11px;
-  color: var(--danger);
-}
-.thinking-line {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 11px;
-  color: var(--muted);
-  padding-top: 9px;
-}
-.thinking-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--accent);
-  animation: breathe 1.6s ease infinite;
-}
-.tool-activity {
-  display: flex;
-  align-items: flex-start;
-  flex-direction: column;
-  gap: 5px;
-  margin: 0 0 14px;
-}
-.tool-call {
-  max-width: 100%;
-  font-size: 11px;
-  color: var(--muted);
-}
-.tool-call summary {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-  list-style: none;
-  border-radius: 8px;
-  padding: 5px 7px;
-}
-.tool-call summary:hover {
-  background: var(--surface-secondary);
-}
-.tool-call summary::-webkit-details-marker {
-  display: none;
-}
-.tool-call[open] summary > svg:last-child {
-  transform: rotate(90deg);
-}
-.tool-call pre {
-  max-height: 220px;
-  overflow: auto;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  padding: 12px;
-  background: var(--surface-secondary);
-  border-radius: 10px;
-  font-size: 10px;
-}
-.tool-call.error {
-  color: var(--danger);
+.message.user .chat-message__actions {
+  margin-top: 4px;
 }
 
 /* Composer: the Pro component owns input sizing, keyboard actions and run states. */
@@ -1475,11 +1414,11 @@ select {
   padding-top: 11px;
   border-top: 1px solid var(--line);
 }
-.chat-panel.is-editing .composer [data-slot='prompt-input-textarea'] {
+.chat-panel.is-editing .composer [data-slot='prompt-input-textarea'],
+.chat-panel.is-editing .composer [data-slot='prompt-input-token-input'] {
   min-height: 42px;
   padding-top: 11px;
 }
-.chat-panel.is-editing .selected-context,
 .chat-panel.is-editing .composer-footer {
   display: none;
 }
@@ -2177,10 +2116,59 @@ select {
 .sidebar-section-label {
   padding: 12px 10px 6px;
 }
+/* 标题与“已归档”入口同处一行；入口比标题高，由这一行统一居中。 */
+.sidebar-section-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 34px;
+  padding-top: 6px;
+}
+.sidebar-section-row .sidebar-section-label {
+  padding-block: 0;
+}
+.archived-toggle {
+  min-height: 28px;
+  padding-inline: 8px;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 11px;
+}
 .conversation-link {
   font-size: 13px;
   border-radius: 16px;
   padding-inline: 10px;
+}
+/* 每段对话右侧的操作菜单：平时收起，悬停、聚焦、展开或当前对话时显示。 */
+.conversation-row {
+  position: relative;
+}
+.conversation-row .conversation-link {
+  padding-right: 36px;
+}
+.conversation-menu-trigger {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  min-height: 28px;
+  margin-top: -14px;
+  border-radius: 50%;
+  color: var(--secondary);
+  opacity: 0;
+}
+.conversation-row:hover .conversation-menu-trigger,
+.conversation-row:focus-within .conversation-menu-trigger,
+.conversation-row.is-current .conversation-menu-trigger,
+.conversation-menu-trigger[aria-expanded='true'] {
+  opacity: 1;
+}
+@media (hover: none) {
+  .conversation-menu-trigger {
+    opacity: 1;
+  }
 }
 .conversation-link.active,
 .sidebar-settings.active,
@@ -2277,15 +2265,27 @@ select {
     transition-property: background-color, border-color, box-shadow, outline-color;
   }
 }
-.composer [data-slot='prompt-input-shell']:has([data-slot='prompt-input-textarea']:focus) {
+.composer [data-slot='prompt-input-shell']:has([data-slot='prompt-input-textarea']:focus),
+.composer [data-slot='prompt-input-shell']:has([data-slot='prompt-input-token-input']:focus) {
   outline: 2px solid var(--accent);
 }
-.composer [data-slot='prompt-input-textarea'] {
+.composer [data-slot='prompt-input-textarea'],
+.composer [data-slot='prompt-input-token-input'] {
   font-size: 14px;
   line-height: 24px;
   min-height: 70px;
   margin-bottom: 0;
   padding: 16px 16px 8px;
+}
+.composer [data-slot='prompt-input-token-input'] {
+  outline: none;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.composer [data-slot='prompt-input-token-input'][data-empty]::before {
+  content: attr(data-placeholder);
+  color: var(--muted);
+  pointer-events: none;
 }
 .composer-controls {
   display: grid;
@@ -2312,6 +2312,36 @@ select {
   margin: 12px 4px 0;
   color: var(--secondary);
   font-size: 12px;
+}
+/* 已归档的对话只读：输入区的位置换成说明和恢复入口，沿用输入区的表面。 */
+.archived-notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 56px;
+  padding: 12px 12px 12px 18px;
+  border-radius: 24px;
+  background: var(--surface);
+  box-shadow: var(--surface-shadow);
+  color: var(--secondary);
+  font-size: 13px;
+}
+.archived-notice > svg {
+  flex: none;
+}
+.archived-notice > span {
+  flex: 1;
+  min-width: 0;
+}
+:is(.dark, [data-theme='dark']) .archived-notice {
+  background: var(--surface-secondary);
+}
+.conversation-delete-dialog [data-slot='alert-dialog-body'] p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.conversation-delete-dialog [data-slot='alert-dialog-body'] p + p {
+  margin-top: 8px;
 }
 .composer-footer {
   flex-shrink: 0;
@@ -2405,7 +2435,7 @@ select {
 .local-user-avatar .avatar__fallback {
   color: var(--brand-blue);
 }
-.conversation-link svg:not(.spin) {
+.conversation-link svg:not(.spin, .phase-glyph) {
   display: none;
 }
 .local-user-copy {
@@ -2442,7 +2472,8 @@ select {
 }
 .local-user-menu,
 .web-context-menu,
-.appearance-menu {
+.appearance-menu,
+.conversation-menu {
   border: 0;
   border-radius: 22px;
   padding: 8px;
@@ -2462,6 +2493,7 @@ select {
 .local-user-menu [role='menuitem'],
 .local-user-menu [role='menuitemradio'],
 .web-context-menu [role='menuitem'],
+.conversation-menu [role='menuitem'],
 .appearance-menu [role='menuitemradio'] {
   min-height: 40px;
   border-radius: 12px;
@@ -2472,8 +2504,13 @@ select {
 .local-user-menu .description {
   font-size: 11px;
 }
-.appearance-menu {
+.appearance-menu,
+.conversation-menu {
   min-width: 180px;
+}
+/* 删除项的图标与文字同为危险色。 */
+.conversation-menu .menu-item--danger svg {
+  color: var(--danger);
 }
 .web-context-menu {
   width: 320px;
@@ -2486,7 +2523,8 @@ select {
   line-height: 20px;
   font-weight: 500;
 }
-.web-context-note {
+.web-context-note,
+.conversation-menu-note {
   font-size: 12px;
   line-height: 18px;
   color: var(--muted);
@@ -2860,4 +2898,36 @@ html[data-theme='dark'] .composer [data-slot='prompt-input-shell'] {
   .topbar .local-agent-status .agent-status-caption {
     display: none;
   }
+}
+
+/* Page elements embedded in the composer as inline tokens, and as chips once sent. */
+.composer .element-token {
+  margin: 0 1px;
+  padding: 1px 7px 1px 5px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 18px;
+  vertical-align: baseline;
+}
+.composer .element-token-body {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.composer .element-token small {
+  font-size: 10px;
+  opacity: 0.7;
+}
+.element-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 1px;
+  padding: 0 7px 0 5px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+  font-size: 12px;
+  line-height: 18px;
+  vertical-align: baseline;
 }

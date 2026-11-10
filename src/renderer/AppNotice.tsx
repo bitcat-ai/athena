@@ -1,30 +1,15 @@
 import { Alert, Button } from '@heroui/react';
-import {
-  Download01Icon,
-  HandIcon,
-  MessageSquareIcon,
-  ShieldCheckIcon,
-  XIcon,
-} from '@hugeicons-pro/core-stroke-rounded';
+import { Download01Icon, XIcon } from '@hugeicons-pro/core-stroke-rounded';
 import { ActionButton, Icon } from './ui';
 import './app-notice.css';
 
-const icons = {
-  approval: ShieldCheckIcon,
-  input: MessageSquareIcon,
-  handoff: HandIcon,
-  update: Download01Icon,
-};
-
 export function AppNotice({
-  kind,
   title,
   description,
   actionLabel,
   onAction,
   onDismiss,
 }: {
-  kind: keyof typeof icons;
   title: string;
   description: string;
   actionLabel: string;
@@ -34,7 +19,7 @@ export function AppNotice({
   return (
     <Alert className="app-notice" role="region" aria-label="工作台提示">
       <Alert.Indicator>
-        <Icon icon={icons[kind]} size={18} />
+        <Icon icon={Download01Icon} size={18} />
       </Alert.Indicator>
       <Alert.Content>
         <Alert.Title title={title}>{title}</Alert.Title>

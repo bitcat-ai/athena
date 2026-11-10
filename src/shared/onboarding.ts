@@ -1,4 +1,4 @@
-export type OnboardingStage = 'welcome' | 'codex' | 'login' | 'workspace' | 'browser' | 'ready';
+export type OnboardingStage = 'welcome' | 'codex' | 'workspace' | 'browser' | 'ready';
 export type OnboardingStatus = 'new' | 'in-progress' | 'deferred' | 'complete' | 'legacy';
 export type OnboardingInstallKind = 'codex' | 'browser';
 
@@ -48,7 +48,6 @@ export interface OnboardingState {
   agents?: import('./types').AgentInfo[];
   codex: {
     status: 'unchecked' | 'checking' | 'missing' | 'error' | 'ready';
-    authentication: 'unknown' | 'missing' | 'ready';
     path?: string;
     version?: string;
     detail?: string;
@@ -67,7 +66,8 @@ export interface OnboardingState {
   };
   operation?: OnboardingOperation;
   plan?: OnboardingInstallPlan;
-  login?: { status: 'waiting' | 'checking' | 'error'; canReopen: boolean; error?: string };
+  /** Present while a login the user started is waiting in the system browser. */
+  login?: { canReopen: boolean };
   error?: string;
 }
 

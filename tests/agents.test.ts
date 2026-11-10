@@ -17,8 +17,6 @@ async function fixture(
     initializeDelayMs?: number;
     holdInitialize?: boolean;
     threadStartDelayMs?: number;
-    waitForLogin?: boolean;
-    loginMessage?: string;
     toolAggregatedOutput?: string;
     modelProtocol?: boolean;
     skillsResponse?: unknown;
@@ -34,15 +32,12 @@ const fs = require('node:fs');
 const readline = require('node:readline');
 const log = ${JSON.stringify(log)};
 const options = ${JSON.stringify(options)};
-if (process.argv.includes('--version')) {
-  if(options.waitForLogin) { setInterval(()=>{if(fs.existsSync(log+'.login')) {console.log('codex-cli test');process.exit(0);}},10); }
-  else { console.log('codex-cli test'); process.exit(0); }
-}
+if (process.argv.includes('--version')) { console.log('codex-cli test'); process.exit(0); }
 if (process.argv.includes('status')) {
   fs.writeFileSync(log+'.login','checked');
-  fs.writeFileSync(log, JSON.stringify({apiKeyPresent:!!process.env.OPENAI_API_KEY}));
-  console.error(options.loginMessage || 'Logged in using ChatGPT'); process.exit(0);
+  console.error('Not logged in'); process.exit(0);
 }
+if (process.argv.includes('app-server')) fs.writeFileSync(log+'.env', JSON.stringify({apiKey:process.env.OPENAI_API_KEY,codexKey:process.env.CODEX_API_KEY}));
 const send = value => process.stdout.write(JSON.stringify(value) + '\\n');
 const event = (method, params) => send({method, params});
 let turn = 0, current, mode, pendingTool = false;
@@ -89,6 +84,8 @@ readline.createInterface({input:process.stdin}).on('line', line => {
       return finish();
     }
     if(mode==='fail') return finish('failed',{message:'model unavailable'});
+    if(mode==='unauthorized') return finish('failed',{message:'unexpected status 401 Unauthorized: Missing bearer or basic authentication in header, url: https://api.openai.com/v1/responses'});
+    if(mode==='missing-key') return event('error',{threadId:'thread-1',turnId:current,willRetry:false,error:{message:'Missing environment variable: RELAY_KEY.'}});
     if(mode==='plan') {
       event('turn/plan/updated',{threadId:'another-thread',turnId:current,plan:[{step:'foreign',status:'completed'}]});
       event('turn/plan/updated',{threadId:'thread-1',turnId:'old-turn',plan:[{step:'old',status:'completed'}]});
@@ -1384,25 +1381,23 @@ test('a missing saved session does not silently replace conversation history', a
   );
 });
 
-test('discovery uses executable PATH entries and does not pass an API key to login status', async (t) => {
+test('discovery reports a runtime by its version alone and never asks for its login state', async (t) => {
   const f = await fixture();
   const oldPath = process.env.PATH;
-  const oldKey = process.env.OPENAI_API_KEY;
   process.env.PATH = `${f.directory}${path.delimiter}${oldPath ?? ''}`;
-  process.env.OPENAI_API_KEY = 'fake-test-only';
   t.after(async () => {
     process.env.PATH = oldPath;
-    if (oldKey === undefined) delete process.env.OPENAI_API_KEY;
-    else process.env.OPENAI_API_KEY = oldKey;
     await f.cleanup();
   });
   const agents = await detectAgents();
   const codex = agents.find((agent) => agent.id === 'codex');
   assert.ok(codex);
   assert.equal(codex.path, f.executable);
-  assert.equal(codex.authentication, 'ready');
+  assert.equal(codex.available, true);
   assert.equal(codex.version, 'codex-cli test');
-  assert.equal(JSON.parse(await readFile(f.log, 'utf8')).apiKeyPresent, false);
+  // The fixture answers "Not logged in"; a runtime with its own model provider says the same.
+  assert.equal('authentication' in codex, false);
+  await assert.rejects(readFile(`${f.log}.login`), { code: 'ENOENT' });
   assert.deepEqual(agents.map((agent) => agent.id).sort(), [
     'claude',
     'codex',
@@ -1542,39 +1537,51 @@ test('A late release response cannot restore an alert for a replaced executable'
   assert.equal((await newResult).status, 'current');
 });
 
-test('Codex version and login probes run independently without serial startup waits', async () => {
-  const f = await fixture({ waitForLogin: true });
-  const oldPath = process.env.PATH;
-  process.env.PATH = `${f.directory}${path.delimiter}${oldPath ?? ''}`;
-  try {
-    const codex = (await detectAgents()).find((agent) => agent.id === 'codex');
-    assert.equal(
-      codex?.available,
-      true,
-      'The version fixture only finishes after the login process has run',
-    );
-    assert.equal(codex.version, 'codex-cli test');
-    assert.equal(codex.authentication, 'ready');
-  } finally {
-    if (oldPath === undefined) delete process.env.PATH;
-    else process.env.PATH = oldPath;
+test('the runtime starts with the provider keys of its environment', async (t) => {
+  const f = await fixture();
+  const old = { api: process.env.OPENAI_API_KEY, codex: process.env.CODEX_API_KEY };
+  process.env.OPENAI_API_KEY = 'fake-test-only';
+  process.env.CODEX_API_KEY = 'fake-test-only-codex';
+  const agent = session(f, []);
+  t.after(async () => {
+    if (old.api === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = old.api;
+    if (old.codex === undefined) delete process.env.CODEX_API_KEY;
+    else process.env.CODEX_API_KEY = old.codex;
+    agent.close();
     await f.cleanup();
-  }
+  });
+  await agent.prepare();
+  assert.deepEqual(JSON.parse(await readFile(`${f.log}.env`, 'utf8')), {
+    apiKey: 'fake-test-only',
+    codexKey: 'fake-test-only-codex',
+  });
 });
 
-test('a zero-exit not-logged-in response is not misreported as authenticated', async () => {
-  const f = await fixture({ loginMessage: 'Not logged in' });
-  const oldPath = process.env.PATH;
-  process.env.PATH = `${f.directory}${path.delimiter}${oldPath ?? ''}`;
-  try {
-    const codex = (await detectAgents()).find((agent) => agent.id === 'codex');
-    assert.equal(codex?.authentication, 'missing');
-    assert.match(codex?.detail ?? '', /codex login/);
-  } finally {
-    if (oldPath === undefined) delete process.env.PATH;
-    else process.env.PATH = oldPath;
-    await f.cleanup();
+test('a turn the model service refuses for its credentials says what to check', async (t) => {
+  for (const [mode, detail] of [
+    ['unauthorized', /401 Unauthorized/],
+    ['missing-key', /Missing environment variable: RELAY_KEY/],
+  ] as const) {
+    const f = await fixture();
+    const agent = session(f, []);
+    t.after(async () => {
+      agent.close();
+      await f.cleanup();
+    });
+    await assert.rejects(agent.send(mode), (error: Error) => {
+      assert.match(error.message, /^本机 Codex 的模型服务凭据未通过/);
+      assert.match(error.message, detail);
+      return true;
+    });
   }
+  const f = await fixture();
+  const agent = session(f, []);
+  t.after(async () => {
+    agent.close();
+    await f.cleanup();
+  });
+  await assert.rejects(agent.send('fail'), { message: 'model unavailable' });
 });
 
 test('public plans reject foreign turns and malformed statuses, without forwarding hidden fields', async (t) => {

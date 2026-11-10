@@ -104,11 +104,6 @@ try {
     (candidate) => candidate.id === 'codex' && candidate.available,
   );
   assert.ok(codex?.path, 'A local Codex CLI is required');
-  assert.notEqual(
-    codex.authentication,
-    'missing',
-    'Sign in using codex login before this manual check',
-  );
   await new Promise<void>((resolve) => fixture.listen(0, '127.0.0.1', resolve));
   const origin = `http://127.0.0.1:${(fixture.address() as { port: number }).port}`;
   runtime = new BrowserRuntime({
