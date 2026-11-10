@@ -824,10 +824,15 @@ export class CodexSession implements AgentSession {
         })) : undefined,
       }, { approvedRoot: this.options.workspace, providerManagedPaths: true });
     } catch (error) {
+      const errorMessage = messageOf(error);
+      const authRequired = /auth|login|unauthorized|not authenticated/i.test(errorMessage);
       return {
         status: isObject(error) && error.code === -32601 ? 'unsupported' : 'unavailable',
         source: 'provider', provider, skills: [],
-        diagnostics: [{ code: 'capability-degraded', message: 'Codex Skill discovery is unavailable.' }],
+        diagnostics: [{
+          code: 'capability-degraded',
+          message: authRequired ? '请先在终端登录 Codex，再刷新连接' : 'Codex Skill discovery is unavailable.',
+        }],
       };
     }
   }

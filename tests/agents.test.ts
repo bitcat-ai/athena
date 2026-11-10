@@ -240,6 +240,7 @@ test('Codex discovery preserves failure states and never borrows a different cwd
     [{ skillsResponse: { data: [{ cwd: '/other', skills: [{ name: 'wrong', enabled: true }] }] } }, 'malformed'],
     [{ skillsResponse: { data: [{ cwd: '/other', skills: [] }] } }, 'malformed'],
     [{ skillsError: { code: -32601, message: 'Method not found' } }, 'unsupported'],
+    [{ skillsError: { code: -32000, message: 'Unauthorized: please run codex login' } }, 'unavailable'],
     [{ skillsError: { code: -32000, message: 'Unavailable' } }, 'unavailable'],
     [{ skills: [] }, 'empty'],
   ] as Array<[Parameters<typeof fixture>[0], string]>) {
@@ -249,6 +250,8 @@ test('Codex discovery preserves failure states and never borrows a different cwd
       const result = await agent.discoverProviderSkills();
       assert.equal(result.status, expected);
       assert.deepEqual(result.skills, []);
+      if (options?.skillsError?.message.includes('Unauthorized'))
+        assert.match(result.diagnostics[0]?.message ?? '', /请先在终端登录 Codex，再刷新连接/);
     } finally { agent.close(); await f.cleanup(); }
   }
 });

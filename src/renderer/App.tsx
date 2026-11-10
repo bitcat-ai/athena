@@ -654,8 +654,15 @@ export default function App() {
         setProviderSkills(discovery?.skills ?? []);
         setProviderSkillDiscovery(discovery);
       })
-      .catch(() => {
-        if (!disposed) { setProviderSkills([]); setProviderSkillDiscovery(undefined); }
+      .catch((error) => {
+        if (!disposed) {
+          setProviderSkills([]);
+          setProviderSkillDiscovery({
+            status: 'unavailable', source: 'provider',
+            provider: { id: currentAgentId, name: currentAgent?.name ?? currentAgentId }, skills: [],
+            diagnostics: [{ code: 'capability-degraded', message: errorText(error) }],
+          });
+        }
       });
     return () => { disposed = true; };
   }, [loaded, workbenchMounted, onboardingVisible, conversationId, currentAgentId, settings.workspace, slashSkillMenuOpen]);
