@@ -108,6 +108,7 @@ window.workbench={
   fixture.calls.push({action,payload});
   if(action==='app:snapshot')return fixture.ready?structuredClone(fixture.snapshot):new Promise(resolve=>fixture.pendingSnapshots.push(resolve));
   if(action==='codex:update-status')return fixture.updateStatus || {status:'unknown'};
+  if(action==='skills:list')return {status:'ready',source:'provider',provider:{id:'codex',name:'Codex'},skills:[{name:'review',description:'Review code',source:'provider',provider:{id:'codex',name:'Codex'},providerPath:'/opt/codex/review/SKILL.md',userInvocable:true}],diagnostics:[]};
   if(action==='models:list')return [{model:'fixture-model',name:${JSON.stringify(longModelName)},efforts:[{id:'low',description:'Low'},{id:'high',description:'High'}],defaultEffort:'low'}];
   if(action==='conversation:prepare')return {status:'ready',conversationId:payload.conversationId};
   if(action==='conversation:new'){const item={id:'new-'+fixture.calls.length,title:'新对话',updatedAt:Date.now(),workspace:fixture.snapshot.settings.workspace,agent:payload?.agent||fixture.snapshot.settings.agent,messages:[]};fixture.snapshot.conversations.unshift(item);return item;}
@@ -335,6 +336,22 @@ try {
   );
 
   const composer = page.getByRole('textbox', { name: '发送给 Agent 的任务' });
+  // Mount the production App; the initial snapshot has no skills, so this menu
+  // can only populate through the real refresh IPC wiring.
+  await composer.fill('/');
+  await expect(page.getByRole('option', { name: /review/ })).toBeVisible();
+  assert.ok((await calls('skills:list')).some((call: any) => call.payload.conversationId === 'a'));
+  await composer.press('Enter');
+  await expect(composer).toHaveValue('/review ');
+  await composer.fill('/review Check the changes');
+  await composer.press('Enter');
+  await expect.poll(async () => (await calls('conversation:send')).at(-1)?.payload.selectedSkills).toEqual(['codex:review']);
+  const skillSend = (await calls('conversation:send')).at(-1)!.payload;
+  assert.equal(skillSend.text, 'Check the changes');
+  assert.deepEqual(skillSend.selectedSkillMetadata, [{name:'review',providerId:'codex',providerPath:'/opt/codex/review/SKILL.md'}]);
+  assert.deepEqual(skillSend.selectedSkills, ['codex:review']);
+  await page.getByRole('button', { name: '停止任务', exact: true }).click();
+  await composer.fill('');
   const conversationA = page.locator('.conversation-link').filter({ hasText: '优化首页交互' });
   const conversationB = page.locator('.conversation-link').filter({ hasText: '检查网页表单' });
   await composer.fill('A 的草稿');

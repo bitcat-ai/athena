@@ -21,6 +21,9 @@ async function fixture(
     loginMessage?: string;
     toolAggregatedOutput?: string;
     modelProtocol?: boolean;
+    skillsResponse?: unknown;
+    skills?: unknown[];
+    skillsError?: { code: number; message: string };
   } = {},
 ) {
   const directory = await mkdtemp(path.join(tmpdir(), 'workbench-agent-test-'));
@@ -49,6 +52,7 @@ readline.createInterface({input:process.stdin}).on('line', line => {
   const request = JSON.parse(line); fs.appendFileSync(log, line+'\\n');
   const p = request.params || {};
   if (request.method === 'initialize') { if(options.holdInitialize)return; return setTimeout(()=>send({id:request.id,result:{userAgent:'fake-codex'}}),options.initializeDelayMs||0); }
+  if (request.method === 'skills/list') return send({id:request.id,...(options.skillsError ? {error:options.skillsError} : {result:options.skillsResponse ?? {data:[{cwd:p.cwds[0],skills:options.skills ?? []}]}})});
   if (request.method === 'model/list') return send({id:request.id,result:{data:[
     {id:'catalog-a',model:'model-a',displayName:'Model A',isDefault:true,supportedReasoningEfforts:[{reasoningEffort:'low',description:'Quick'}],defaultReasoningEffort:'low'},
     {id:'hidden',model:'hidden',hidden:true},
@@ -214,6 +218,55 @@ function session(
     ...overrides,
   });
 }
+
+test('Codex discovers enabled skills for the effective cwd without starting a model turn', async (t) => {
+  const f = await fixture({ skills: [
+    { name: 'review', path: '/opt/codex/global/review/SKILL.md', enabled: true, description: 'Review code', interface: { shortDescription: 'Review' } },
+    { name: 'disabled', path: '/opt/codex/disabled/SKILL.md', enabled: false },
+  ] });
+  const agent = session(f, []);
+  t.after(() => { agent.close(); return f.cleanup(); });
+  const discovery = await agent.discoverProviderSkills();
+  assert.equal(discovery.status, 'ready');
+  assert.deepEqual(discovery.skills, [{ name: 'review', description: 'Review code', shortDescription: 'Review', providerPath: '/opt/codex/global/review/SKILL.md', contentHash: undefined, userInvocable: true, source: 'provider', provider: { id: 'codex', name: 'Codex' } }]);
+  const requests = await f.requests();
+  assert.deepEqual(requests.find(r => r.method === 'skills/list').params, { cwds: [f.directory] });
+  assert.ok(requests.findIndex(r => r.method === 'initialized') < requests.findIndex(r => r.method === 'skills/list'));
+  assert.equal(requests.some(r => r.method === 'thread/start' || r.method === 'turn/start'), false);
+});
+
+test('Codex discovery preserves failure states and never borrows a different cwd', async (t) => {
+  for (const [options, expected] of [
+    [{ skillsResponse: { data: [{ cwd: '/other', skills: [{ name: 'wrong', enabled: true }] }] } }, 'malformed'],
+    [{ skillsResponse: { data: [{ cwd: '/other', skills: [] }] } }, 'malformed'],
+    [{ skillsError: { code: -32601, message: 'Method not found' } }, 'unsupported'],
+    [{ skillsError: { code: -32000, message: 'Unavailable' } }, 'unavailable'],
+    [{ skills: [] }, 'empty'],
+  ] as Array<[Parameters<typeof fixture>[0], string]>) {
+    const f = await fixture(options);
+    const agent = session(f, []);
+    try {
+      const result = await agent.discoverProviderSkills();
+      assert.equal(result.status, expected);
+      assert.deepEqual(result.skills, []);
+    } finally { agent.close(); await f.cleanup(); }
+  }
+});
+
+test('Codex sends selected skills as native mentions, not page context', async (t) => {
+  const f = await fixture();
+  const agent = session(f, []);
+  t.after(() => { agent.close(); return f.cleanup(); });
+  await agent.send('Check the changes', 'Current page', undefined, undefined, [{
+    name: 'review', provider: { id: 'codex', name: 'Codex' }, source: 'provider',
+    providerPath: '/opt/codex/review/SKILL.md', description: 'Review', userInvocable: true,
+  }]);
+  const turn = (await f.requests()).find(r => r.method === 'turn/start');
+  assert.deepEqual(turn.params.input, [{ type: 'text', text: '$review\n\nCheck the changes\n\n<page_context>\nCurrent page\n</page_context>' }]);
+  await agent.send('No skill');
+  const turns = (await f.requests()).filter(r => r.method === 'turn/start');
+  assert.deepEqual(turns[1].params.input, [{ type: 'text', text: 'No skill' }]);
+});
 
 test('preparing a session initializes once without a model turn and is reused by later sends', async (t) => {
   const f = await fixture({ initializeDelayMs: 30, threadStartDelayMs: 30 });

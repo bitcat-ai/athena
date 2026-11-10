@@ -29,6 +29,7 @@ import { Store } from './store';
 import { UsageStore } from './usage';
 import { managedCodexPath, OnboardingRuntime } from './onboarding';
 import { discoverSkills } from './skill-registry';
+import type { WorkspaceSkill, SkillUsage } from '../shared/skills';
 import { buildSkillContext, selectProviderSkills, selectSkills } from './skill-injection';
 import { parseLeadingSkillReferences } from '../shared/skill-references';
 import { createAthenaMcpEndpoint, type AthenaMcpEndpoint } from './athena-mcp-endpoint';
@@ -539,22 +540,25 @@ async function runTurn(
 ) {
   assertTaskEnvironment();
   const info = agentInfo(conversationAgent(conversation));
-  const providerSkills = await getSession(conversation, info.path, toolsFor(conversation)).discoverProviderSkills();
-  const providerNames = selectedSkillNames.filter((name) => providerSkills.skills.some((skill) => skill.name === name));
-  const localNames = selectedSkillNames.filter((name) => !providerNames.includes(name));
-  const selectedProviderSkills = selectProviderSkills(providerSkills.skills, providerNames, providerSkills.provider.id, selectedSkillExpectations);
-  const rescannedSkills = (await discoverSkills(store.data.settings.workspace)).skills;
-  const selectedSkills = [...selectSkills(rescannedSkills, localNames), ...selectedProviderSkills];
-  const skillContext = buildSkillContext(selectedSkills);
+  const providerNames = selectedSkillExpectations.filter((item) => item.providerId === 'codex').map((item) => item.name);
+  const localSkillNames = selectedSkillNames.filter((name) => !providerNames.includes(name));
+  const providerSkills = providerNames.length
+    ? await getSession(conversation, info.path, toolsFor(conversation)).discoverProviderSkills()
+    : undefined;
+  const selectedProviderSkills = selectProviderSkills(providerSkills?.skills ?? [], providerNames, info.id, selectedSkillExpectations);
+  const rescannedSkills = localSkillNames.length ? (await discoverSkills(store.data.settings.workspace)).skills : [];
+  const selectedSkills = [...selectSkills(rescannedSkills, localSkillNames), ...selectedProviderSkills];
+  const skillContext = buildSkillContext(selectSkills(rescannedSkills, localSkillNames));
+  const skillUsage: SkillUsage[] = selectedSkills.map((skill) => ({
+    name: skill.name,
+    source: skill.source,
+    ...('provider' in skill ? { provider: skill.provider, providerPath: skill.providerPath } : { packagePath: skill.packagePath }),
+    contentHash: skill.contentHash,
+    injectionStatus: 'injected',
+  }));
   if (selectedSkills.length) {
     conversation.selectedSkills = selectedSkills.map((skill) => skill.name);
-    conversation.skillUsage = selectedSkills.map((skill) => ({
-      name: skill.name,
-      source: skill.source,
-      ...(skill.source === 'provider' && 'provider' in skill ? { provider: skill.provider, providerPath: skill.providerPath } : { packagePath: 'packagePath' in skill ? skill.packagePath : undefined }),
-      contentHash: skill.contentHash,
-      injectionStatus: 'injected' as const,
-    }));
+    conversation.skillUsage = skillUsage;
   }
 
   if (conversation.workspace && conversation.workspace !== store.data.settings.workspace)
@@ -675,9 +679,10 @@ async function runTurn(
     }
     await session.send(
       text,
-      [context, skillContext, nativeContext].filter(Boolean).join('\n\n') || undefined,
+      [context, nativeContext].filter(Boolean).join('\n\n') || undefined,
       selectedElement,
       modelSelection,
+      selectedProviderSkills,
     );
     const unresolved = neo.unresolvedResult(assistant.id);
     if (unresolved) throw new Error(unresolved);
@@ -1000,7 +1005,7 @@ async function invoke(action: string, payload: unknown) {
     emit({ type: 'mcp:connections', connections: athenaMcp.connections() });
     return athenaMcp.connections();
   }
-
+  if (action.startsWith('browser:'))
     return sharing
       ? sharing.hostAction(action, payload)
       : dispatchBrowserAction(browser, action, payload);
@@ -1052,6 +1057,12 @@ async function invoke(action: string, payload: unknown) {
         void prepareConversation(selectedConversation()).catch(() => {});
       }
       return agents;
+    }
+    case 'skills:list': {
+      const data = payload === undefined ? {} : record(payload);
+      const conversation = data.conversationId === undefined ? selectedConversation() : getConversation(data.conversationId);
+      const info = agentInfo(conversationAgent(conversation));
+      return getSession(conversation, info.path, toolsFor(conversation)).discoverProviderSkills();
     }
     case 'models:list': {
       const data = payload === undefined ? {} : record(payload);
@@ -1153,7 +1164,7 @@ async function invoke(action: string, payload: unknown) {
       const selectedSkillNames: string[] = Array.isArray(data.selectedSkills)
         ? data.selectedSkills.map((name: unknown) => string(name, 100))
         : [];
-      const selectedSkillExpectations = Array.isArray(data.selectedSkillMetadata)
+      const codexExpected = Array.isArray(data.selectedSkillMetadata)
         ? data.selectedSkillMetadata.map((item: unknown) => {
             const value = record(item);
             return {
@@ -1164,6 +1175,7 @@ async function invoke(action: string, payload: unknown) {
             };
           })
         : [];
+      const selectedSkillExpectations = codexExpected.filter((item) => item.providerId.startsWith('codex:')).map((item) => ({ ...item, providerId: item.providerId.slice(6) }));
       const selected = selectedRef ? browser.getState().selectedElement : undefined;
       if (selectedRef && selected?.ref !== selectedRef)
         throw new Error('选中的元素已变化，请重新选取后发送。');

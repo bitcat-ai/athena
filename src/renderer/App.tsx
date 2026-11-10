@@ -64,6 +64,7 @@ import { parseLeadingSkillReferences } from '../shared/skill-references';
 import type {
   AgentInfo,
   AppSnapshot,
+  AppEvent,
   BrowserFrame,
   BrowserState,
   ChatMessage,
@@ -222,7 +223,7 @@ export default function App() {
   const [skills, setSkills] = useState<AppSnapshot['skills']>([]);
   const [providerSkills, setProviderSkills] = useState<ProviderSkill[]>([]);
   const [providerSkillDiscovery, setProviderSkillDiscovery] = useState<AppSnapshot['providerSkillDiscovery']>();
-  const [pendingExternalConnections, setPendingExternalConnections] = useState<AppSnapshot['pendingExternalConnections']>([]);
+  const [pendingExternalConnections, setPendingExternalConnections] = useState<NonNullable<AppSnapshot['pendingExternalConnections']>>([]);
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
   const workspaceLabel =
     settings.workspaceMode === 'personal' ? '不绑定文件夹' : basename(settings.workspace);
@@ -289,7 +290,7 @@ export default function App() {
     setDrafts((previous) => ({ ...previous, [draftKey]: { text } }));
   };
   const slashSkillMenuOpen = skillMenuDismissed !== draft && /^(?:\/[a-z0-9]+(?:-[a-z0-9]+)*\s+)*\/[^\s/]*$/i.test(draft);
-  const selectedProviderSkillMetadata = selectedSkills
+  const selectedProviderSkillMetadata = [...new Set([...selectedSkills, ...parseLeadingSkillReferences(draft).names])]
     .map((name) => providerSkills.find((skill) => skill.name === name))
     .filter((skill): skill is ProviderSkill => Boolean(skill))
     .map((skill) => ({
@@ -643,6 +644,22 @@ export default function App() {
     currentSelection?.effort,
   ]);
   useEffect(() => {
+    if (!loaded || !workbenchMounted || onboardingVisible) return;
+    // Match the existing effect cancellation pattern: old conversation responses
+    // must never populate the new conversation's menu.
+    let disposed = false;
+    void window.workbench.invoke<AppSnapshot['providerSkillDiscovery']>('skills:list', { conversationId })
+      .then((discovery) => {
+        if (disposed) return;
+        setProviderSkills(discovery?.skills ?? []);
+        setProviderSkillDiscovery(discovery);
+      })
+      .catch(() => {
+        if (!disposed) { setProviderSkills([]); setProviderSkillDiscovery(undefined); }
+      });
+    return () => { disposed = true; };
+  }, [loaded, workbenchMounted, onboardingVisible, conversationId, currentAgentId, settings.workspace, slashSkillMenuOpen]);
+  useEffect(() => {
     if (!onboardingVisible && !settingsTab && !showUsage && stickToBottom.current)
       scroll.current?.scrollTo({ top: scroll.current.scrollHeight, behavior: 'instant' });
   }, [messages, currentBusy, onboardingVisible, settingsTab, showUsage]);
@@ -784,11 +801,19 @@ export default function App() {
     const parsed = parseLeadingSkillReferences(draft.trim());
     const result = await action<{ conversationId: string }>('conversation:send', {
       id: conversationId,
-      text: draft.trim(),
+      text: parsed.text,
       context,
       selectedRef: selected?.ref,
-      selectedSkills,
-      selectedSkillMetadata: selectedProviderSkillMetadata,
+      selectedSkills: [...new Set([...selectedSkills.map((name) => providerSkills.some((skill) => skill.name === name) ? `codex:${name}` : name), ...parsed.names.map((name) => providerSkills.some((skill) => skill.name === name) ? `codex:${name}` : name)])],
+      selectedSkillMetadata: [...new Set([...selectedSkills, ...parsed.names])]
+        .map((name) => providerSkills.find((skill) => skill.name === name))
+        .filter((skill): skill is ProviderSkill => Boolean(skill))
+        .map((skill) => ({
+          name: skill.name,
+          providerId: skill.provider.id,
+          ...(skill.providerPath === undefined ? {} : { providerPath: skill.providerPath }),
+          ...(skill.contentHash === undefined ? {} : { contentHash: skill.contentHash }),
+        })),
     });
     if (!result?.conversationId) return;
     setDrafts((previous) => {
@@ -1908,11 +1933,17 @@ export default function App() {
                                   : '描述任务，或选中页面中的元素…'
                               }
                               onKeyDownCapture={(event) => {
+                                if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) {
+                                  if (event.key === 'Enter') event.stopPropagation();
+                                  return;
+                                }
                                 if (slashSkillMenuOpen) {
                                   if (event.key === 'Escape') {
                                     event.preventDefault();
+                                    event.stopPropagation();
                                     setSkillMenuDismissed(draft);
-                                    requestAnimationFrame(() => event.currentTarget.focus());
+                                    const target = event.currentTarget;
+                                    requestAnimationFrame(() => target.focus());
                                     return;
                                   }
                                   if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
@@ -1923,6 +1954,8 @@ export default function App() {
                                   }
                                   if (event.key === 'Enter' && slashSkillOptions[skillMenuActive]) {
                                     event.preventDefault();
+                                    event.stopPropagation();
+                                    event.nativeEvent.stopImmediatePropagation();
                                     selectSlashSkill(slashSkillOptions[skillMenuActive]);
                                     return;
                                   }

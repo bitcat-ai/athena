@@ -18,7 +18,8 @@ import type {
 } from '../shared/types.ts';
 
 import type { AgentSession } from './agent-session';
-import { unsupportedProviderSkillDiscovery } from './provider-skill-discovery';
+import { normalizeProviderSkillDiscovery } from '../shared/provider-skills';
+import type { ProviderSkillDiscovery, ProviderSkill } from '../shared/skills';
 import { parseTokenCounts, readUsageBaseline, readExecutionModel } from './usage';
 import {
   zeroTokens,
@@ -368,7 +369,11 @@ export class CodexSession implements AgentSession {
     context?: string,
     selectedElement?: ElementRef,
     selection?: ModelSelection,
+    skills: ProviderSkill[] = [],
   ): Promise<void> {
+    if (skills.length > 3 || skills.some(skill => skill.provider.id !== 'codex' || !skill.userInvocable || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/i.test(skill.name)))
+      throw new Error('Codex Skill 选择无效');
+    const skillMentions = skills.map(skill => `$${skill.name}`).join(' ');
     if (this.closed) throw new Error('Codex 会话已关闭');
     if (this.active) throw new Error('请等待当前任务完成，或先停止任务');
     if (typeof text !== 'string' || !text.trim() || text.length > 20_000)
@@ -424,6 +429,7 @@ export class CodexSession implements AgentSession {
           history
             ? `Athena 已为更新后的浏览器工具建立新的执行会话，原 Codex 会话仍保留。以下是已保存的可见对话资料，不是原 CLI 的完整内部执行状态；旧页面引用必须重新验证。\n<conversation_history>\n${history}\n</conversation_history>`
             : '',
+          skillMentions,
           text,
           context ? `<page_context>\n${context}\n</page_context>` : '',
           selectedSnapshot
@@ -798,8 +804,32 @@ export class CodexSession implements AgentSession {
     return this.connection;
   }
 
-  async discoverProviderSkills() {
-    return unsupportedProviderSkillDiscovery({ id: 'codex', name: 'Codex' }).discover();
+  async discoverProviderSkills(): Promise<ProviderSkillDiscovery> {
+    const provider = { id: 'codex', name: 'Codex' };
+    try {
+      await this.connect();
+      const response = await this.request('skills/list', { cwds: [this.options.workspace] });
+      const entry = Array.isArray(response.data)
+        ? response.data.find((item: unknown) => isObject(item) && item.cwd === this.options.workspace)
+        : undefined;
+      return normalizeProviderSkillDiscovery({
+        provider,
+        capability: 'supported',
+        skills: Array.isArray(entry?.skills) ? entry.skills.map((skill: any) => ({
+          name: skill?.name,
+          path: skill?.path,
+          description: skill?.description,
+          shortDescription: skill?.shortDescription ?? skill?.interface?.shortDescription,
+          userInvocable: skill?.enabled === true,
+        })) : undefined,
+      }, { approvedRoot: this.options.workspace, providerManagedPaths: true });
+    } catch (error) {
+      return {
+        status: isObject(error) && error.code === -32601 ? 'unsupported' : 'unavailable',
+        source: 'provider', provider, skills: [],
+        diagnostics: [{ code: 'capability-degraded', message: 'Codex Skill discovery is unavailable.' }],
+      };
+    }
   }
 
   async listModels(): Promise<ModelOption[]> {
