@@ -135,7 +135,7 @@ export function SkillSlashMenu({
   const options = usable.filter((skill) => skill.name.toLowerCase().startsWith(query));
   if (!draft.startsWith('/') || draft.includes('\n') || !draft.slice(draft.lastIndexOf(' ') + 1).startsWith('/')) return null;
   const statusText = discoveryStatus && discoveryStatus.status !== 'ready'
-    ? discoveryStatus.status === 'unsupported' ? '当前 Agent 不支持 Skill 发现' : '当前 Agent 暂无可用 Skill'
+    ? discoveryStatus.diagnostics[0]?.message ?? (discoveryStatus.status === 'unsupported' ? '当前 Agent 不支持 Skill 发现' : '当前 Agent 暂无可用 Skill')
     : '当前工作区没有可用 Skill';
   return (
     <div
