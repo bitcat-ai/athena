@@ -391,6 +391,13 @@ try {
   await expect.poll(async () => (await calls(page, 'onboarding:complete')).length).toBe(1);
   await expect(page.locator('.onboarding')).toBeVisible();
   await expect(page.locator('.app-workbench')).toHaveCount(0);
+  await expect(current(page)).toHaveAttribute('data-screen', 'ready');
+  await expect(current(page)).toContainText('准备好了，轮到你的想法。');
+  await expect(current(page).locator('.onboarding-activity')).toHaveCount(0);
+  await expect(current(page).locator('.onboarding-actions')).toHaveCount(0);
+  await expect(
+    page.locator('.onboarding-message.assistant + .onboarding-message.assistant'),
+  ).toHaveCount(0);
   await update(page, {
     operation: undefined,
     status: 'complete',
@@ -434,6 +441,7 @@ try {
     )
     .toBe(390);
   checks.push(
+    'Athena never speaks twice in a row: the automatic final check is silent and leaves the ready message as the last one',
     'Automatic handoff waits for the matching asynchronous complete event, then enters the workbench and refreshes actual directory/agent state without creating or sending a conversation; the newly mounted panel ResizeObserver tracks 1024px viewport and sidebar changes',
   );
   await page.close();
@@ -880,6 +888,10 @@ try {
   await flow.getByRole('button', { name: '回到最新', exact: true }).click();
   await expect.poll(async () => (await calls(flow, 'onboarding:complete')).length).toBe(1);
   await expect(flow.getByRole('button', { name: '进入 Athena', exact: true })).toHaveCount(0);
+  await flow.screenshot({ path: path.join(output, 'ready-final-check.png') });
+  await expect(
+    flow.locator('.onboarding-message.assistant + .onboarding-message.assistant'),
+  ).toHaveCount(0);
   await expect(flow.locator('.app-workbench')).toHaveCount(0);
   await history.dispatchEvent('wheel', { deltaY: -300 });
   await history.evaluate((node) => {

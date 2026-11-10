@@ -106,6 +106,7 @@ const pendingScreens = new Set<Screen>([
   'browserPreparing',
   'finishing',
 ]);
+const readyScreens = new Set<Screen>(['ready', 'readyWithoutBrowser']);
 const activityLabels: Partial<Record<Screen, string>> = {
   detecting: '查看本机 Agent',
   agentConnecting: '核对连接',
@@ -580,17 +581,23 @@ export function Onboarding({
         : undefined;
     setEntries((previous) => {
       const last = previous.at(-1);
+      const spoke = last?.role === 'assistant' ? last : undefined;
+      // The final check that follows the ready message on its own is silent: that message stays.
+      const shown =
+        screen === 'finishing' && spoke && readyScreens.has(spoke.screen) ? spoke.screen : screen;
       const entry: AssistantEntry = {
         id:
-          last?.role === 'assistant' && (last.screen === screen || pendingScreens.has(last.screen))
-            ? last.id
+          spoke && (spoke.screen === shown || pendingScreens.has(spoke.screen))
+            ? spoke.id
             : `message-${nextId.current++}`,
         role: 'assistant',
-        screen,
+        screen: shown,
         phase,
         state: structuredClone(snapshot),
       };
-      return last?.id === entry.id ? [...previous.slice(0, -1), entry] : [...previous, entry];
+      // Athena never speaks twice in a row: with no reply in between, the newer message takes
+      // the place of the last one.
+      return spoke ? [...previous.slice(0, -1), entry] : [...previous, entry];
     });
   }, []);
 
@@ -815,6 +822,8 @@ export function Onboarding({
       void run('onboarding:complete', undefined, '以后再说', 'browserPreparing', 'complete', id),
   };
   const actions = (): Action[] => {
+    // Nothing to press during the silent final check; the footer can still leave setup.
+    if (state.operation && readyScreens.has(current.screen)) return [];
     if (state.operation) {
       const result: Action[] = [];
       if (state.operation.kind === 'login' && state.login?.canReopen)
