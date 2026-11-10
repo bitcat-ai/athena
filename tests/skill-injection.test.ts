@@ -22,7 +22,7 @@ test('selects up to three usable skills and rejects invalid selections', () => {
   assert.throws(() => selectSkills(skills, ['missing']), /不存在/);
 });
 
-test('revalidates optional provider path and hash before injection', () => {
+test('revalidates selected provider identity, path, and hash before native send', () => {
   const skill: ProviderSkill = {
     name: 'review', description: 'Review', source: 'provider', provider: { id: 'codex', name: 'Codex' },
     providerPath: '/workspace/review/SKILL.md', contentHash: 'v1', userInvocable: true,

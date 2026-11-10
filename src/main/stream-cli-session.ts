@@ -1,11 +1,14 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
-import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
+import { createHash, randomUUID } from 'node:crypto';
+import { constants } from 'node:fs';
+import { lstat, mkdtemp, open, opendir, readdir, realpath, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import type { AgentSession, AgentSessionOptions } from './agent-session';
-import { unsupportedProviderSkillDiscovery } from './provider-skill-discovery';
+import { unavailableProviderSkillDiscovery } from '../shared/provider-skills';
 import type { AgentEvent, BrowserTool, ElementRef, ToolCall } from '../shared/types';
+import { selectProviderSkills } from './skill-injection';
+import type { ProviderSkill, ProviderSkillDiscovery } from '../shared/skills';
 import {
   unknownTokens,
   zeroTokens,
@@ -54,6 +57,161 @@ interface Run {
   policyDirectory?: string;
   workspaceTrusted?: boolean;
   workspaceTrust?: { id: string; resolve(): void };
+}
+
+// Deliberately a small YAML subset: no aliases, tags, merges or executable configuration.
+// Unsupported frontmatter is skipped rather than accidentally exposing a hidden skill.
+function cursorSkillMetadata(text: string): { description: string; userInvocable: boolean; cliVisible: boolean } | undefined {
+  const result = { description: '未提供描述', userInvocable: true, cliVisible: true };
+  if (!text.startsWith('---\n') && !text.startsWith('---\r\n')) return result;
+  const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(text);
+  if (!match) return;
+  const scalar = (value: string) => {
+    const raw = value.trim();
+    if (raw.startsWith('"')) {
+      try { const parsed: unknown = JSON.parse(raw); return typeof parsed === 'string' ? parsed : undefined; } catch { return; }
+    }
+    if (/^'([^']|'')*'$/.test(raw)) return raw.slice(1, -1).replace(/''/g, "'");
+    if (/[\[\]{}&*!|>]/.test(raw)) return;
+    return raw.replace(/\s+#.*$/, '').trim();
+  };
+  let section = '';
+  let surfaces: string[] | undefined;
+  let descriptionLines: string[] | undefined;
+  const keys = new Set<string>();
+  for (const line of match[1].split(/\r?\n/)) {
+    if (!line.trim() || /^\s*#/.test(line)) continue;
+    if (descriptionLines && /^\s+/.test(line)) { descriptionLines.push(line.trim()); result.description = descriptionLines.join(' '); continue; }
+    descriptionLines = undefined;
+    if (/^\s*\t/.test(line)) return;
+    if (section === 'surfaces' && /^\s+-\s+/.test(line)) {
+      const value = scalar(line.replace(/^\s+-\s+/, ''));
+      if (value === undefined) return;
+      surfaces!.push(value);
+      continue;
+    }
+    const entry = /^( *)([\w-]+):\s*(.*?)\s*$/.exec(line);
+    if (!entry) return;
+    const [, indent, key, raw] = entry;
+    if (!indent) {
+      if (keys.has(key)) return;
+      keys.add(key);
+      section = key;
+      if (key === 'description' && /^[|>][-+]?$/.test(raw)) { descriptionLines = []; result.description = ''; }
+      else if (key === 'description') { const value = scalar(raw); if (value === undefined) return; result.description = value || result.description; }
+      else if (key === 'user-invocable') {
+        const value = scalar(raw)?.toLowerCase();
+        if (!value || !['true', 'false', 'yes', 'no', 'on', 'off', '1', '0'].includes(value)) return;
+        result.userInvocable = !['false', 'no', 'off', '0'].includes(value);
+      } else if (key === 'metadata' && raw) return;
+      else if (key === 'metadata' && !raw) section = 'metadata';
+    } else if ((section === 'metadata' || section === 'surfaces') && key === 'surfaces') {
+      if (surfaces) return;
+      section = 'surfaces';
+      if (!raw) surfaces = [];
+      else {
+        const values = raw.startsWith('[') && raw.endsWith(']') ? raw.slice(1, -1).split(',') : [raw];
+        const parsed = values.map(scalar);
+        if (parsed.some((value) => value === undefined)) return;
+        surfaces = parsed.flatMap((value) => value!.split(',')).filter(Boolean);
+      }
+    }
+  }
+  result.cliVisible = !surfaces?.length || surfaces.some((value) => value.trim().toLowerCase() === 'cli');
+  return result;
+}
+
+async function discoverCursorSkills(workspace: string): Promise<ProviderSkillDiscovery> {
+  const provider = { id: 'cursor', name: 'Cursor Agent' };
+  const skills = new Map<string, ProviderSkill>();
+  const diagnostics: ProviderSkillDiscovery['diagnostics'] = [];
+  const warn = (code: ProviderSkillDiscovery['diagnostics'][number]['code'], message: string) => {
+    if (!diagnostics.some((item) => item.code === code)) diagnostics.push({ code, message });
+  };
+  let entriesLeft = 10_000;
+  let bytesLeft = 8_000_000;
+  const seenRoots = new Set<string>();
+  const missing = (error: unknown) => ['ENOENT', 'ENOTDIR'].includes((error as NodeJS.ErrnoException).code ?? '');
+  const home = path.resolve(os.homedir());
+  const bases: string[] = [];
+  // Nearest project roots win; user roots and Cursor's synced built-ins come last.
+  for (let base = workspace; base !== home; base = path.dirname(base)) {
+    bases.push(base);
+    if (path.dirname(base) === base || bases.length >= 64) break;
+  }
+  bases.push(home);
+  const roots = bases.flatMap((base) => ['.cursor', '.agents', '.codex', '.claude'].map((directory) => ({ base, relative: path.join(directory, 'skills') })));
+  roots.push({ base: home, relative: path.join('.cursor', 'skills-cursor') });
+  for (const { base, relative } of roots) {
+    if (entriesLeft <= 0 || bytesLeft <= 0) break;
+    let root: string;
+    try {
+      const canonicalBase = await realpath(base);
+      root = path.join(canonicalBase, relative);
+      if (await realpath(root) !== root) { warn('unsafe-path', '已跳过符号链接 Skill 根目录'); continue; }
+      if (seenRoots.has(root)) continue;
+      seenRoots.add(root);
+    } catch (error) { if (!missing(error)) warn('unreadable-entry', '部分 Cursor Skill 根目录无法读取'); continue; }
+    const visit = async (directory: string, depth: number): Promise<void> => {
+      if (entriesLeft <= 0 || bytesLeft <= 0) return;
+      entriesLeft--;
+      const entryPath = path.join(directory, 'SKILL.md');
+      try {
+        const info = await lstat(entryPath);
+        if (info.isSymbolicLink()) warn('unsafe-path', '已跳过符号链接 Skill 文件');
+        else if (info.isFile()) {
+          if (info.size > 1_000_000 || info.size > bytesLeft) warn('oversized-entry', '已跳过超出读取预算的 Cursor Skill');
+          else {
+            const file = await open(entryPath, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+            try {
+              const opened = await file.stat();
+              if (opened.isFile() && opened.size <= 1_000_000 && opened.size <= bytesLeft) {
+                const buffer = Buffer.alloc(Math.min(1_000_001, bytesLeft + 1));
+                let size = 0;
+                while (size < buffer.length) {
+                  const read = await file.read(buffer, size, buffer.length - size, null);
+                  if (!read.bytesRead) break;
+                  size += read.bytesRead;
+                }
+                bytesLeft -= Math.min(size, bytesLeft);
+                if (size > opened.size) warn('unreadable-entry', 'Cursor Skill 在读取期间发生变化');
+                else {
+                  const contents = buffer.subarray(0, size);
+                  const metadata = cursorSkillMetadata(contents.toString('utf8'));
+                  const name = path.basename(directory);
+                  if (!metadata) warn('invalid-metadata', '已跳过无法安全解析元数据的 Cursor Skill');
+                  else if (metadata.cliVisible && identifier(name) && !skills.has(name)) skills.set(name, {
+                    name, description: metadata.description, userInvocable: metadata.userInvocable,
+                    providerPath: entryPath, contentHash: createHash('sha256').update(contents).digest('hex'), source: 'provider', provider,
+                  });
+                }
+              }
+            } finally { await file.close(); }
+          }
+        }
+      } catch (error) { if (!missing(error)) warn('unreadable-entry', '部分 Cursor Skill 文件无法读取'); }
+      if (depth >= 10) return;
+      try {
+        const children: string[] = [];
+        const directoryHandle = await opendir(directory);
+        for await (const entry of directoryHandle) {
+          if (entriesLeft-- <= 0) break;
+          if (entry.name === 'node_modules') continue;
+          if (entry.isSymbolicLink()) { warn('unsafe-path', '已跳过符号链接 Skill 目录'); continue; }
+          if (entry.isDirectory()) children.push(entry.name);
+        }
+        for (const child of children.sort()) {
+          if (entriesLeft <= 0 || bytesLeft <= 0) break;
+          const childPath = path.join(directory, child);
+          if (await realpath(childPath) !== childPath) { warn('unsafe-path', '已跳过符号链接 Skill 目录'); continue; }
+          await visit(childPath, depth + 1);
+        }
+      } catch (error) { if (!missing(error)) warn('unreadable-entry', '部分 Cursor Skill 目录无法读取'); }
+    };
+    await visit(root, 0);
+  }
+  if (entriesLeft <= 0 || bytesLeft <= 0) warn('capability-degraded', 'Cursor Skill 扫描达到本地安全预算，结果可能不完整');
+  return { provider, source: 'provider', status: skills.size ? 'ready' : diagnostics.length ? 'unavailable' : 'empty', skills: [...skills.values()].sort((a, b) => a.name.localeCompare(b.name)), diagnostics };
 }
 
 /** One native JSONL print process per turn; only native IDs may be resumed. No host tool bridge. */
@@ -128,8 +286,14 @@ export class StreamCliSession implements AgentSession {
     this.ready = true;
   }
   async discoverProviderSkills() {
-    const names = { claude: 'Claude Code', gemini: 'Gemini CLI', cursor: 'Cursor Agent' } as const;
-    return unsupportedProviderSkillDiscovery({ id: this.options.cli, name: names[this.options.cli] }).discover();
+    if (this.options.cli === 'cursor')
+      return discoverCursorSkills(this.options.workspace);
+    const provider = this.options.cli;
+    const names = { claude: 'Claude Code', gemini: 'Gemini CLI' } as const;
+    const reason = provider === 'claude'
+      ? 'Claude Code discovery is unavailable while the selected safe-mode environment disables slash commands and file-reading tools.'
+      : 'Gemini skill activation is blocked by the deny-all admin policy, and no safe discovery RPC is verified.';
+    return unavailableProviderSkillDiscovery({ id: provider, name: names[provider] }, reason);
   }
 
   async listModels(): Promise<ModelOption[]> {
@@ -141,6 +305,7 @@ export class StreamCliSession implements AgentSession {
     context?: string,
     selectedElement?: ElementRef,
     selection?: ModelSelection,
+    skills: ProviderSkill[] = [],
   ) {
     if (this.active || this.sending) throw new Error('请等待当前 CLI 任务完成，或先停止');
     if (!prompt.trim() || prompt.length > 20000 || (context?.length ?? 0) > 60000)
@@ -149,6 +314,15 @@ export class StreamCliSession implements AgentSession {
     this.sending = true;
     try {
       await this.prepare(selection);
+      if (this.options.cli === 'cursor' && (skills.length || /(^|\s)\$[a-zA-Z0-9]/.test(prompt))) {
+        const discovery = await discoverCursorSkills(this.options.workspace);
+        const selected = selectProviderSkills(discovery.skills, skills.map((skill) => skill.name), 'cursor', skills.map((skill) => ({
+          name: skill.name, providerId: skill.provider.id, providerPath: skill.providerPath, contentHash: skill.contentHash,
+        })));
+        const invocable = new Set(discovery.skills.filter((skill) => skill.userInvocable).map((skill) => skill.name));
+        prompt = prompt.replace(/(^|\s)\$([a-zA-Z0-9][a-zA-Z0-9._-]*)(?=\s|$)/g, (match, prefix: string, name: string) => invocable.has(name) ? `${prefix}/${name}` : match);
+        if (selected.length) prompt = `${selected.map((skill) => `/${skill.name}`).join('\n')}\n\n${prompt}`;
+      }
     } finally {
       this.sending = false;
     }

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { StreamCliSession, type StreamCliId } from '../src/main/stream-cli-session';
@@ -166,6 +166,100 @@ for (const [mode, expected] of [
     }
   });
 }
+
+test('Cursor discovers project skills before user skills with metadata and bounded nested entries', async (t) => {
+  const f = await fixture('cursor');
+  const home = path.join(f.directory, 'home');
+  t.mock.method(os, 'homedir', () => home);
+  try {
+    const projectRoot = path.join(f.directory, '.cursor', 'skills');
+    const userRoot = path.join(home, '.cursor', 'skills');
+    await mkdir(path.join(projectRoot, 'nested', 'review'), { recursive: true });
+    await writeFile(path.join(projectRoot, 'nested', 'review', 'SKILL.md'), '---\nname: ignored-name\ndescription: Project review\nuser-invocable: false\n---\nBody');
+    await mkdir(path.join(userRoot, 'nested', 'review'), { recursive: true });
+    await writeFile(path.join(userRoot, 'nested', 'review', 'SKILL.md'), '---\ndescription: User review\nmetadata:\n  surfaces: [cli]\n---\nBody');
+    await mkdir(path.join(projectRoot, 'hidden'), { recursive: true });
+    await writeFile(path.join(projectRoot, 'hidden', 'SKILL.md'), '---\nmetadata:\n  surfaces: [web]\n---\nBody');
+    const discovery = await f.session.discoverProviderSkills();
+    assert.equal(discovery.status, 'ready');
+    assert.deepEqual(discovery.skills.map((skill) => skill.name), ['review']);
+    assert.equal(discovery.skills[0]?.description, 'Project review');
+    assert.equal(discovery.skills[0]?.userInvocable, false);
+    assert.match(discovery.skills[0]?.providerPath ?? '', /\.cursor[\/]skills[\/]nested[\/]review[\/]SKILL\.md$/);
+    assert.equal(discovery.skills[0]?.contentHash?.length, 64);
+  } finally {
+    await rm(path.join(home, '.cursor', 'skills', 'nested', 'review'), { recursive: true, force: true });
+    await f.cleanup();
+  }
+});
+
+test('Cursor sends selected native skills on stdin and rewrites only known invocable dollar mentions', async (t) => {
+  const f = await fixture('cursor');
+  t.mock.method(os, 'homedir', () => path.join(f.directory, 'home'));
+  try {
+    for (const name of ['review', 'hidden']) {
+      const directory = path.join(f.directory, '.cursor', 'skills', name);
+      await mkdir(directory, { recursive: true });
+      await writeFile(path.join(directory, 'SKILL.md'), `---\ndescription: Review changes\nuser-invocable: ${name !== 'hidden'}\n---\nPRIVATE_SKILL_BODY`);
+    }
+    const discovery = await f.session.discoverProviderSkills();
+    const skill = discovery.skills.find((item) => item.name === 'review')!;
+    await f.session.send('$review $unknown $hidden $10', '$review context', undefined, undefined, [skill]);
+    const call = (await f.logs())[0];
+    assert.equal(call.input, '/review\n\n/review $unknown $hidden $10\n\n<task_context>\n$review context\n</task_context>');
+    assert.ok(!JSON.stringify(call.args).includes('/review'));
+    assert.ok(!call.input.includes('PRIVATE_SKILL_BODY'));
+    assert.equal(call.args[call.args.indexOf('--mode') + 1], 'ask');
+    assert.equal(f.events.filter((event) => event.type === 'approval').length, 1);
+    await writeFile(skill.providerPath!, 'Changed');
+    await assert.rejects(f.session.send('stale', undefined, undefined, undefined, [skill]), /改变|不可用/);
+    assert.equal((await f.logs()).length, 1);
+  } finally { await f.cleanup(); }
+});
+
+test('Cursor covers provider roots and ancestors while rejecting unsafe, deep, dependency and oversized entries', async (t) => {
+  const f = await fixture('cursor');
+  const home = path.join(f.directory, 'home');
+  t.mock.method(os, 'homedir', () => home);
+  const put = async (base: string, root: string, name: string, content = '---\ndescription: Valid\n---\nBody') => {
+    const directory = path.join(base, root, name);
+    await mkdir(directory, { recursive: true });
+    const file = path.join(directory, 'SKILL.md');
+    await writeFile(file, content);
+    return file;
+  };
+  try {
+    for (const [root, name] of [['.cursor/skills', 'cursor'], ['.agents/skills', 'agents'], ['.codex/skills', 'codex'], ['.claude/skills', 'claude']]) {
+      await put(f.directory, root, name);
+      await put(home, root, `user-${name}`);
+    }
+    await put(home, '.cursor/skills-cursor', 'builtin');
+    await put(home, '.cursor/skills-cursor', 'cursor', '---\ndescription: Must lose\n---\n');
+    await put(f.directory, '.cursor/skills', 'block-list', '---\nmetadata:\n  surfaces:\n    - web\n---\n');
+    await put(f.directory, '.cursor/skills', 'cli-list', '---\ndescription: >\n  Folded description\n  second line\nmetadata:\n  surfaces:\n    - cli\n---\n');
+    await put(f.directory, '.cursor/skills', 'bad', '---\nuser-invocable: maybe\n---\n');
+    await put(f.directory, '.cursor/skills', 'huge', 'x'.repeat(1_000_001));
+    await put(f.directory, '.cursor/skills', 'node_modules/dependency');
+    await put(f.directory, '.cursor/skills', `${Array(10).fill('nested').join('/')}/too-deep`);
+    const outside = await put(f.directory, 'outside', 'escaped');
+    await symlink(path.dirname(outside), path.join(f.directory, '.cursor/skills/link-directory'));
+    await mkdir(path.join(f.directory, '.cursor/skills/link-file'));
+    await symlink(outside, path.join(f.directory, '.cursor/skills/link-file/SKILL.md'));
+    const child = path.join(f.directory, 'subproject');
+    await mkdir(child);
+    const session = new StreamCliSession({ cli: 'cursor', workspace: child, executablePath: f.executablePath, tools: [], onEvent: () => {}, callTool: async () => { throw new Error('No tools'); } });
+    try {
+      const discovery = await session.discoverProviderSkills();
+      assert.deepEqual(discovery.skills.map((skill) => skill.name), ['agents', 'builtin', 'claude', 'cli-list', 'codex', 'cursor', 'user-agents', 'user-claude', 'user-codex', 'user-cursor']);
+      assert.equal(discovery.skills.find((skill) => skill.name === 'cursor')?.description, 'Valid');
+      assert.equal(discovery.skills.find((skill) => skill.name === 'cli-list')?.description, 'Folded description second line');
+      assert.ok(discovery.diagnostics.some((item) => item.code === 'unsafe-path'));
+      assert.ok(discovery.diagnostics.some((item) => item.code === 'oversized-entry'));
+      assert.ok(discovery.diagnostics.some((item) => item.code === 'invalid-metadata'));
+      await assert.rejects(readFile(path.join(f.directory, 'args.jsonl')));
+    } finally { session.close(); }
+  } finally { await f.cleanup(); }
+});
 
 test('Cursor asks the host before trusting a workspace and keeps Ask restrictions after approval', async () => {
   const f = await fixture('cursor', 'normal', undefined, false);
@@ -603,6 +697,24 @@ test('stream-cli-session: explicit close rejects an active turn instead of compl
     await f.cleanup();
   }
 });
+test('Claude and Gemini discovery report constrained capabilities without launching a CLI', async () => {
+  for (const [cli, expected] of [
+    ['claude', /safe-mode environment disables slash commands and file-reading tools/],
+    ['gemini', /blocked by the deny-all admin policy/],
+  ] as const) {
+    const f = await fixture(cli);
+    try {
+      const discovery = await f.session.discoverProviderSkills();
+      assert.equal(discovery.status, 'unavailable');
+      assert.deepEqual(discovery.skills, []);
+      assert.match(discovery.diagnostics[0].message, expected);
+      await assert.rejects(readFile(path.join(f.directory, 'args.jsonl')));
+    } finally {
+      await f.cleanup();
+    }
+  }
+});
+
 test('stream-cli-session: prepare remembers explicit model selection without running a discovery prompt', async () => {
   const f = await fixture('claude');
   try {

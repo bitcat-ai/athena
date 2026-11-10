@@ -540,11 +540,15 @@ async function runTurn(
 ) {
   assertTaskEnvironment();
   const info = agentInfo(conversationAgent(conversation));
-  const providerNames = selectedSkillExpectations.filter((item) => item.providerId === 'codex').map((item) => item.name);
+  if (selectedSkillExpectations.some((item) => item.providerId !== info.id))
+    throw new Error('Skill provider 已改变，请刷新后重试');
+  const providerNames = selectedSkillExpectations.map((item) => item.name);
   const localSkillNames = selectedSkillNames.filter((name) => !providerNames.includes(name));
   const providerSkills = providerNames.length
     ? await getSession(conversation, info.path, toolsFor(conversation)).discoverProviderSkills()
     : undefined;
+  if (providerSkills && (providerSkills.provider.id !== info.id || providerSkills.status !== 'ready'))
+    throw new Error('Provider Skill 当前不可用，请刷新后重试');
   const selectedProviderSkills = selectProviderSkills(providerSkills?.skills ?? [], providerNames, info.id, selectedSkillExpectations);
   const rescannedSkills = localSkillNames.length ? (await discoverSkills(store.data.settings.workspace)).skills : [];
   const selectedSkills = [...selectSkills(rescannedSkills, localSkillNames), ...selectedProviderSkills];
@@ -554,7 +558,8 @@ async function runTurn(
     source: skill.source,
     ...('provider' in skill ? { provider: skill.provider, providerPath: skill.providerPath } : { packagePath: skill.packagePath }),
     contentHash: skill.contentHash,
-    injectionStatus: 'injected',
+    injectionStatus: 'provider' in skill ? 'degraded' : 'injected',
+    ...('provider' in skill ? { capabilityDegradation: 'CLI 未提供 Provider Skill 已应用确认。' } : {}),
   }));
   if (selectedSkills.length) {
     conversation.selectedSkills = selectedSkills.map((skill) => skill.name);
@@ -1158,13 +1163,17 @@ async function invoke(action: string, payload: unknown) {
     case 'conversation:send': {
       assertTaskEnvironment();
       const data = record(payload);
+      if (data.selectedSkills !== undefined && !Array.isArray(data.selectedSkills))
+        throw new Error('Skill 选择格式不正确');
+      if (data.selectedSkillMetadata !== undefined && !Array.isArray(data.selectedSkillMetadata))
+        throw new Error('Skill 元数据格式不正确');
       const context = data.context === undefined ? undefined : string(data.context, 60_000);
       const selectedRef =
         data.selectedRef === undefined ? undefined : string(data.selectedRef, 1500);
       const selectedSkillNames: string[] = Array.isArray(data.selectedSkills)
         ? data.selectedSkills.map((name: unknown) => string(name, 100))
         : [];
-      const codexExpected = Array.isArray(data.selectedSkillMetadata)
+      const selectedSkillExpectations = Array.isArray(data.selectedSkillMetadata)
         ? data.selectedSkillMetadata.map((item: unknown) => {
             const value = record(item);
             return {
@@ -1175,12 +1184,15 @@ async function invoke(action: string, payload: unknown) {
             };
           })
         : [];
-      const selectedSkillExpectations = codexExpected.filter((item) => item.providerId === 'codex');
       const selected = selectedRef ? browser.getState().selectedElement : undefined;
       if (selectedRef && selected?.ref !== selectedRef)
         throw new Error('选中的元素已变化，请重新选取后发送。');
       const parsed = parseLeadingSkillReferences(string(data.text));
       const explicitSkills = [...new Set([...selectedSkillNames, ...parsed.names])];
+      if (explicitSkills.length > 3) throw new Error('最多选择 3 个 Skill');
+      if (new Set(selectedSkillExpectations.map((item) => item.name)).size !== selectedSkillExpectations.length ||
+          selectedSkillExpectations.some((item) => !explicitSkills.includes(item.name)))
+        throw new Error('Skill 元数据与选择不匹配');
       const taskText = parsed.names.length ? parsed.text : string(data.text);
       const conversation = data.id ? getConversation(data.id) : createConversation();
       return startTurn(conversation, taskText, context, false, selected, explicitSkills, selectedSkillExpectations);

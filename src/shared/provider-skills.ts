@@ -19,7 +19,7 @@ export interface ProviderDiscoveryInput {
 
 export interface ProviderPathPolicy {
   approvedRoot: string;
-  /** Trusted CLI discovery can return global entries; Athena never reads these files. */
+  /** Provider-owned paths are opaque metadata; Athena never resolves or reads them. */
   providerManagedPaths?: boolean;
 }
 
@@ -62,7 +62,7 @@ export function normalizeProviderSkillDiscovery(input: ProviderDiscoveryInput, p
     }
     if (item.userInvocable !== true || names.has(item.name.trim())) continue;
     const providerPath = typeof item.path === 'string' && item.path.trim() ? item.path.trim() : undefined;
-    if (providerPath && (policy.providerManagedPaths ? !path.isAbsolute(providerPath) : !contained(providerPath, policy.approvedRoot))) {
+    if (!policy.providerManagedPaths && providerPath && !contained(providerPath, policy.approvedRoot)) {
       diagnostics.push(diagnostic('unsafe-path', 'Provider Skill path is outside the approved boundary.'));
       continue;
     }
