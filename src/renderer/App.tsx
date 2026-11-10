@@ -131,11 +131,10 @@ function errorText(error: unknown) {
 
 function sessionLabel(info?: AgentInfo, connection?: CodexConnectionState) {
   if (!info?.available) return info?.path ? '启动异常' : '未检测到';
-  if (info.authentication === 'missing') return '需要登录';
   if (connection?.status === 'starting') return '初始化中';
   if (connection?.status === 'ready') return '已就绪';
   if (connection?.status === 'error') return '连接失败';
-  return info.authentication === 'ready' ? '已登录' : '登录待验证';
+  return '已检测';
 }
 
 interface DraftEntry {
@@ -816,8 +815,7 @@ export default function App() {
       !loaded ||
       setupRequired ||
       !currentAgent?.available ||
-      !currentAgent.supported ||
-      currentAgent.authentication === 'missing'
+      !currentAgent.supported
     )
       return;
     setInspectorOpen(false);
@@ -1110,11 +1108,7 @@ export default function App() {
                       size="sm"
                       variant="secondary"
                       isDisabled={
-                        busy ||
-                        !agent.available ||
-                        !agent.supported ||
-                        agent.authentication === 'missing' ||
-                        agent.id === settings.agent
+                        busy || !agent.available || !agent.supported || agent.id === settings.agent
                       }
                       onPress={() => void selectDefaultAgent(agent.id)}
                     >
@@ -1125,11 +1119,7 @@ export default function App() {
                     >
                       {agent.available
                         ? agent.supported
-                          ? agent.authentication === 'missing'
-                            ? '需要登录'
-                            : agent.authentication === 'unknown'
-                              ? '登录待验证'
-                              : '可使用'
+                          ? '可使用'
                           : '已检测'
                         : agent.path
                           ? '启动异常'
@@ -1140,8 +1130,7 @@ export default function App() {
               </div>
               <div className="settings-note">
                 使用本机 CLI
-                已有的登录与模型服务配置。未安装或需要登录时，请在终端完成后刷新；不会自动改用其他
-                CLI。
+                已有的登录与模型服务配置。未安装时，请在终端安装后刷新；不会自动改用其他 CLI。
               </div>
               <Card className="settings-workspace-card">
                 <Card.Content>
@@ -1259,7 +1248,9 @@ export default function App() {
                   )}
                   <div>
                     <strong>使用飞书扫码</strong>
-                    <p>选择已有机器人，并确认接收私聊与回复消息的权限。已有应用配置可能发生变化，请核对授权页后确认。</p>
+                    <p>
+                      选择已有机器人，并确认接收私聊与回复消息的权限。已有应用配置可能发生变化，请核对授权页后确认。
+                    </p>
                     <div className="button-row flex-wrap">
                       {feishu.setupUrl && (
                         <ActionButton
@@ -1961,8 +1952,7 @@ export default function App() {
                                     setupRequired ||
                                     !draft.trim() ||
                                     !currentAgent?.available ||
-                                    !currentAgent.supported ||
-                                    currentAgent.authentication === 'missing')
+                                    !currentAgent.supported)
                                 }
                               />
                             </PromptInput.ToolbarEnd>
@@ -1986,13 +1976,9 @@ export default function App() {
                           </ActionButton>
                         </div>
                       ) : (
-                        (!currentAgent?.available || currentAgent.authentication === 'missing') && (
+                        !currentAgent?.available && (
                           <div className="composer-availability" role="status">
-                            <span>
-                              {currentAgent?.authentication === 'missing'
-                                ? `请先在终端登录 ${currentAgent.name}，再刷新连接。`
-                                : '当前 Agent 尚不可用。'}
-                            </span>
+                            <span>当前 Agent 尚不可用。</span>
                             <ActionButton
                               className="text-button"
                               onPress={() => openSettings('agent')}
@@ -2004,7 +1990,6 @@ export default function App() {
                       )}
                       {loaded &&
                         currentAgent?.available &&
-                        currentAgent.authentication !== 'missing' &&
                         currentConnection?.status === 'error' && (
                           <div className="composer-availability" role="alert">
                             <span>

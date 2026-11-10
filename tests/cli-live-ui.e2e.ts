@@ -127,10 +127,7 @@ try {
   await launch();
   const initial = await snapshot();
   const info = initial.agents.find((a) => a.id === cli);
-  assert.ok(
-    info?.available && info.supported && info.authentication !== 'missing',
-    `${cli} is not ready`,
-  );
+  assert.ok(info?.available && info.supported, `${cli} is not ready`);
   await expect(page.locator('#composer-agent-name')).toHaveText(info.name);
   checks.push('The selected installed CLI is reflected in the actual composer');
 

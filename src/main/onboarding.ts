@@ -34,7 +34,7 @@ const BROWSER_DIGESTS: Record<string, string> = {
   arm64: '71de41267c6a9bd991c2d560125304082aa32a45a86f572fd819ce6e521e8a56',
   x64: '8eb7626cdc291ace6e70b19dc6dc8d1999a4a0492a0d13ee580a6a06ed3a14b6',
 };
-const STAGES: OnboardingStage[] = ['welcome', 'codex', 'login', 'workspace', 'browser', 'ready'];
+const STAGES: OnboardingStage[] = ['welcome', 'codex', 'workspace', 'browser', 'ready'];
 type Fetcher = (url: string, options?: RequestInit) => Promise<Response>;
 type Context = {
   signal: AbortSignal;
@@ -88,12 +88,12 @@ export function managedCodexPath(directory: string, arch: string = process.arch)
     'codex',
   );
 }
-function validProgress(value: OnboardingProgress | undefined): value is OnboardingProgress {
-  return Boolean(
-    value?.version === 1 &&
-    ['in-progress', 'deferred', 'complete'].includes(value.status) &&
-    STAGES.includes(value.stage),
-  );
+function storedProgress(value: OnboardingProgress | undefined): OnboardingProgress | undefined {
+  if (value?.version !== 1 || !['in-progress', 'deferred', 'complete'].includes(value.status))
+    return;
+  // Earlier versions stored a separate login stage; it resumes at the CLI step.
+  const stage = (value.stage as string) === 'login' ? 'codex' : value.stage;
+  return STAGES.includes(stage) ? { ...structuredClone(value), stage } : undefined;
 }
 async function exists(file: string) {
   try {
@@ -125,7 +125,6 @@ export class OnboardingRuntime {
   private progress?: OnboardingProgress;
   private operation?: Operation;
   private cancellation?: Promise<OnboardingState>;
-  private loginCheck?: Promise<void>;
   private loginUrl?: string;
   private changedConfiguration = false;
   private readonly legacy: boolean;
@@ -133,7 +132,7 @@ export class OnboardingRuntime {
   private disposed = false;
 
   constructor(private options: Options) {
-    this.progress = validProgress(options.progress) ? structuredClone(options.progress) : undefined;
+    this.progress = storedProgress(options.progress);
     this.legacy = options.existingData && !this.progress;
     this.download = options.download ?? fetch;
     this.state = {
@@ -150,7 +149,7 @@ export class OnboardingRuntime {
         ? false
         : (this.progress?.required ?? this.progress?.status !== 'complete'),
       coreReady: false,
-      codex: { status: 'unchecked', authentication: 'unknown' },
+      codex: { status: 'unchecked' },
       workspace: {
         path: options.settings().workspace,
         mode: options.settings().workspaceMode,
@@ -180,11 +179,10 @@ export class OnboardingRuntime {
     this.state.selectedAgent = selected;
     const cliReady =
       selected === 'codex'
-        ? this.state.codex.status === 'ready' && this.state.codex.authentication === 'ready'
+        ? this.state.codex.status === 'ready'
         : this.state.executor?.id === selected &&
           this.state.executor.available &&
-          this.state.executor.supported &&
-          this.state.executor.authentication !== 'missing';
+          this.state.executor.supported;
     this.state.coreReady = Boolean(cliReady && this.state.workspace.status === 'ready');
     this.state.revision++;
     if (!this.disposed) this.options.onState(this.getState());
@@ -196,7 +194,6 @@ export class OnboardingRuntime {
     const codex = agents.find((item) => item.id === 'codex');
     this.state.codex = {
       status: codex?.available && codex.supported ? 'ready' : codex?.path ? 'error' : 'missing',
-      authentication: codex?.authentication ?? 'unknown',
       path: codex?.path,
       version: codex?.version,
       detail: codex?.detail,
@@ -275,8 +272,10 @@ export class OnboardingRuntime {
         if (this.operation !== operation || this.disposed) return;
         if (!operation.controller.signal.aborted) {
           this.state.error = safeError(error);
-          if (kind === 'login')
-            this.state.login = { status: 'error', canReopen: false, error: this.state.error };
+          if (kind === 'login') {
+            this.loginUrl = undefined;
+            this.state.login = undefined;
+          }
           if (kind === 'prepare-browser')
             this.state.browser = {
               ...this.state.browser,
@@ -337,14 +336,12 @@ export class OnboardingRuntime {
     this.publish();
   }
   private nextStage() {
-    if (this.options.settings().agent === 'codex') {
-      if (this.state.codex.status !== 'ready') return 'codex' as const;
-      if (this.state.codex.authentication !== 'ready') return 'login' as const;
-    } else {
-      if (!this.state.executor?.available || !this.state.executor.supported)
-        return 'codex' as const;
-      if (this.state.executor.authentication === 'missing') return 'login' as const;
-    }
+    if (
+      this.options.settings().agent === 'codex'
+        ? this.state.codex.status !== 'ready'
+        : !this.state.executor?.available || !this.state.executor.supported
+    )
+      return 'codex' as const;
     if (this.state.workspace.status !== 'ready') return 'workspace' as const;
     return this.state.browser.status === 'ready' ? ('ready' as const) : ('browser' as const);
   }
@@ -360,52 +357,6 @@ export class OnboardingRuntime {
     return this.getState();
   }
   refresh() {
-    if (this.operation?.kind === 'login' && !this.operation.controller.signal.aborted) {
-      const operation = this.operation;
-      if (!this.loginCheck) {
-        this.state.login = { status: 'checking', canReopen: Boolean(this.loginUrl) };
-        this.state.operation = {
-          ...this.state.operation!,
-          phase: 'checking-login',
-          message: '正在核对当前 Codex 登录…',
-        };
-        this.publish();
-        this.loginCheck = (async () => {
-          const agents = await this.options.probeAgents();
-          if (this.operation !== operation || operation.controller.signal.aborted || this.disposed)
-            return;
-          this.options.onAgents(agents);
-          this.acceptAgents(agents);
-          if (this.state.codex.authentication === 'ready') {
-            await this.cancel(operation.id);
-            if (!this.operation && !this.disposed) {
-              this.state.stage = this.nextStage();
-              await this.persist();
-              this.publish();
-            }
-          } else {
-            this.state.login = { status: 'waiting', canReopen: Boolean(this.loginUrl) };
-            this.state.operation = {
-              ...this.state.operation!,
-              phase: 'waiting-login',
-              message: '尚未确认登录，请在系统浏览器完成后再检查。',
-            };
-            this.publish();
-          }
-        })()
-          .catch((error) => {
-            if (this.operation === operation && !operation.controller.signal.aborted) {
-              this.state.error = safeError(error);
-              this.state.login = { status: 'waiting', canReopen: Boolean(this.loginUrl) };
-              this.publish();
-            }
-          })
-          .finally(() => {
-            this.loginCheck = undefined;
-          });
-      }
-      return this.getState();
-    }
     return this.begin(
       'refresh',
       'detect',
@@ -730,29 +681,22 @@ export class OnboardingRuntime {
       },
     );
   }
+  /**
+   * Optional and only ever started by the user. Athena does not judge whether a login is needed;
+   * the exit status of `codex login` is the whole verdict.
+   */
   startLogin() {
     return this.begin(
       'login',
       'login',
-      'checking-login',
-      '正在核对已有 Codex 登录…',
+      'waiting-login',
+      '正在打开官方 Codex 登录…',
       async (context) => {
         await this.probe(context);
         if (this.state.codex.status !== 'ready' || !this.state.codex.path)
           throw new Error('请先安装并验证 Codex');
-        if (this.state.codex.authentication === 'ready') {
-          this.state.login = undefined;
-          this.state.stage = this.nextStage();
-          return;
-        }
-        if (this.state.codex.authentication !== 'missing')
-          throw new Error('暂时无法确认已有登录，请重新检查后再登录');
         this.loginUrl = undefined;
-        this.state.stage = 'login';
-        this.state.login = { status: 'waiting', canReopen: false };
-        this.changedConfiguration = true;
-        await this.persist();
-        context.check();
+        this.state.login = { canReopen: false };
         context.phase('waiting-login', '请在系统浏览器完成官方 Codex 登录…');
         const executable = this.state.codex.path;
         await new Promise<void>((resolve, reject) => {
@@ -790,7 +734,7 @@ export class OnboardingRuntime {
                 const url = new URL(candidate);
                 if (url.username || url.password || url.protocol !== 'https:') continue;
                 this.loginUrl = url.href;
-                this.state.login = { status: 'waiting', canReopen: true };
+                this.state.login = { canReopen: true };
                 this.publish();
               } catch {
                 /* Malformed diagnostics are not a login URL. */
@@ -806,18 +750,15 @@ export class OnboardingRuntime {
             context.signal.removeEventListener('abort', cancel);
             if (context.signal.aborted) reject(new Error('本次登录已取消'));
             else if (code === 0) resolve();
-            else reject(new Error('本次 Codex 登录未完成，请重新登录或检查现有登录'));
+            else reject(new Error('本次 Codex 登录未完成，可以重新登录'));
           });
           if (context.signal.aborted) cancel();
         });
         context.check();
         this.loginUrl = undefined;
-        this.state.login = { status: 'checking', canReopen: false };
-        context.phase('checking-login', '正在重新核对 Codex 登录结果…');
-        await this.probe(context);
-        if (this.getState().codex.authentication !== 'ready')
-          throw new Error('登录进程已结束，但尚未确认有效登录；请重新检查');
         this.state.login = undefined;
+        // Connections opened before this login reconnect to pick it up.
+        await this.probe(context);
         this.changedConfiguration = true;
         this.state.stage = this.nextStage();
         await this.persist();
@@ -1056,6 +997,5 @@ export class OnboardingRuntime {
     this.operation?.controller.abort();
     await this.operation?.promise;
     await this.cancellation;
-    await this.loginCheck;
   }
 }

@@ -20,18 +20,14 @@ const present = (file: string) =>
     () => false,
   );
 const missing = (): AgentInfo[] => [
-  { id: 'codex', name: 'Codex', supported: true, available: false, authentication: 'missing' },
+  { id: 'codex', name: 'Codex', supported: true, available: false },
 ];
-const ready = (
-  executable = '/fixture/codex',
-  authentication: AgentInfo['authentication'] = 'ready',
-): AgentInfo[] => [
+const ready = (executable = '/fixture/codex'): AgentInfo[] => [
   {
     id: 'codex',
     name: 'Codex',
     supported: true,
     available: true,
-    authentication,
     path: executable,
     version: 'codex-cli 0.166.0',
   },
@@ -371,7 +367,7 @@ test('private installation verifies the full package, deduplicates confirmation 
       url.endsWith('/release.json')
         ? Response.json(data.metadata)
         : new Response(data.bytes, { headers: { 'content-length': String(data.bytes.length) } });
-    f.data.probe = async () => ((await present(binary)) ? ready(binary, 'missing') : missing());
+    f.data.probe = async () => ((await present(binary)) ? ready(binary) : missing());
     f.runtime.planInstall('codex');
     await f.runtime.settled();
     const plan = f.runtime.getState().plan!;
@@ -481,23 +477,52 @@ test('cancel waits for owned cleanup and late download completion cannot install
   }
 });
 
-async function loginFixture(authentication: AgentInfo['authentication'] = 'missing') {
+async function loginFixture(exitCode = 0) {
   const f = await fixture();
   const binary = path.join(f.directory, 'codex-login-fixture');
   const pid = path.join(f.directory, 'login.pid'),
-    finish = path.join(f.directory, 'login.finish'),
-    auth = path.join(f.directory, 'login.auth');
+    finish = path.join(f.directory, 'login.finish');
   await writeFile(
     binary,
-    `${nodeShebang()}\nconst fs=require('node:fs');fs.writeFileSync(${JSON.stringify(pid)},String(process.pid));console.error('https://auth.openai.com/oauth/authorize?state=private-fixture-state');const timer=setInterval(()=>{if(fs.existsSync(${JSON.stringify(finish)})){fs.writeFileSync(${JSON.stringify(auth)},'ready');process.exit(0)}},10);process.on('SIGTERM',()=>{clearInterval(timer);setTimeout(()=>{console.error('https://auth.openai.com/late?state=old');process.exit(0)},20)});\n`,
+    `${nodeShebang()}\nconst fs=require('node:fs');fs.writeFileSync(${JSON.stringify(pid)},String(process.pid));console.error('https://auth.openai.com/oauth/authorize?state=private-fixture-state');const timer=setInterval(()=>{if(fs.existsSync(${JSON.stringify(finish)}))process.exit(${exitCode})},10);process.on('SIGTERM',()=>{clearInterval(timer);setTimeout(()=>{console.error('https://auth.openai.com/late?state=old');process.exit(0)},20)});\n`,
   );
   await chmod(binary, 0o755);
-  f.data.agents = ready(binary, authentication);
-  f.data.probe = async () => ready(binary, (await present(auth)) ? 'ready' : authentication);
-  return { ...f, binary, pid, finish, auth };
+  f.data.agents = ready(binary);
+  let probes = 0;
+  f.data.probe = async () => {
+    probes++;
+    return ready(binary);
+  };
+  return { ...f, binary, pid, finish, probes: () => probes };
 }
 
-test('login exposes no auth URL in state, reopens only its owned URL, and verifies success from a fresh probe', async () => {
+test('a detected runtime is ready without any login state, and an old login stage resumes at the CLI step', async () => {
+  const f = await fixture();
+  try {
+    f.runtime.refresh();
+    await f.runtime.settled();
+    const state = f.runtime.getState();
+    assert.equal(state.codex.status, 'ready');
+    assert.equal('authentication' in state.codex, false);
+    assert.equal(state.stage, 'workspace');
+    assert.equal(state.login, undefined);
+  } finally {
+    await f.close();
+  }
+  const resumed = await fixture({
+    existingData: true,
+    progress: { version: 1, status: 'in-progress', stage: 'login' as never, required: true },
+  });
+  try {
+    assert.equal(resumed.runtime.getState().status, 'in-progress');
+    assert.equal(resumed.runtime.getState().stage, 'codex');
+    assert.equal(resumed.runtime.getState().requiresSetup, true);
+  } finally {
+    await resumed.close();
+  }
+});
+
+test('a login the user starts keeps its URL out of state, reopens only its owned URL, and ends on the exit status', async () => {
   const f = await loginFixture();
   try {
     const first = f.runtime.startLogin(),
@@ -509,27 +534,30 @@ test('login exposes no auth URL in state, reopens only its owned URL, and verifi
     assert.deepEqual(f.data.external, []);
     await f.runtime.reopenLogin();
     assert.equal(f.data.external.length, 1);
+    // A waiting login is never interrupted or judged by a refresh.
+    assert.throws(() => f.runtime.refresh(), /等待当前准备完成/);
+    const before = f.probes();
     await writeFile(f.finish, 'finish');
     await f.runtime.settled();
-    assert.equal(f.runtime.getState().codex.authentication, 'ready');
+    assert.equal(f.runtime.getState().error, undefined);
     assert.equal(f.runtime.getState().stage, 'workspace');
     assert.equal(f.runtime.getState().login, undefined);
     assert.equal(f.runtime.changingEnvironment, false);
+    assert.equal(f.probes(), before + 1, 'Open connections are refreshed to pick up the login');
     await assert.rejects(() => f.runtime.reopenLogin(), /失效/);
   } finally {
     await f.close();
   }
 });
 
-test('login cancellation ignores late output and does not log out or fabricate authentication', async () => {
+test('login cancellation ignores late output and ends only the owned process', async () => {
   const f = await loginFixture();
   try {
     const started = f.runtime.startLogin();
     await until(() => f.runtime.getState().login?.canReopen === true);
     await f.runtime.cancel(started.operation!.id);
-    assert.equal(f.runtime.getState().codex.authentication, 'missing');
     assert.equal(f.runtime.getState().login, undefined);
-    assert.equal(await present(f.auth), false);
+    assert.equal(f.runtime.getState().codex.status, 'ready');
     const child = Number(await readFile(f.pid, 'utf8'));
     assert.throws(() => process.kill(child, 0));
     await assert.rejects(() => f.runtime.reopenLogin(), /失效/);
@@ -538,37 +566,20 @@ test('login cancellation ignores late output and does not log out or fabricate a
   }
 });
 
-test('manual login check requires real credentials and safely ends only the owned wait', async () => {
-  const f = await loginFixture();
+test('an unfinished login is reported and leaves the detected runtime usable', async () => {
+  const f = await loginFixture(1);
   try {
     f.runtime.startLogin();
     await until(() => f.runtime.getState().login?.canReopen === true);
-    f.runtime.refresh();
-    await until(() => f.runtime.getState().login?.status === 'waiting');
-    assert.equal(f.runtime.getState().codex.authentication, 'missing');
-    await writeFile(f.auth, 'another official flow completed');
-    f.runtime.refresh();
-    await until(() => !f.runtime.getState().operation);
-    assert.equal(f.runtime.getState().codex.authentication, 'ready');
-    assert.equal(await readFile(f.auth, 'utf8'), 'another official flow completed');
-    assert.equal(f.runtime.getState().stage, 'workspace');
+    await writeFile(f.finish, 'finish');
+    await f.runtime.settled();
+    const state = f.runtime.getState();
+    assert.match(state.error!, /登录未完成/);
+    assert.equal(state.login, undefined);
+    assert.equal(state.codex.status, 'ready');
+    await assert.rejects(() => f.runtime.reopenLogin(), /失效/);
   } finally {
     await f.close();
-  }
-});
-
-test('existing or unknown authentication never starts a replacement login', async () => {
-  for (const auth of ['ready', 'unknown'] as const) {
-    const f = await loginFixture(auth);
-    try {
-      f.runtime.startLogin();
-      await f.runtime.settled();
-      assert.equal(await present(f.pid), false);
-      assert.equal(f.runtime.getState().codex.authentication, auth);
-      if (auth === 'unknown') assert.match(f.runtime.getState().error!, /重新检查/);
-    } finally {
-      await f.close();
-    }
   }
 });
 
@@ -602,7 +613,7 @@ test('environment writes refuse an existing task while a read-only probe remains
     f.runtime.refresh();
     assert.equal(f.runtime.changingEnvironment, false);
     await f.runtime.settled();
-    assert.equal(f.runtime.getState().codex.authentication, 'ready');
+    assert.equal(f.runtime.getState().codex.status, 'ready');
     assert.equal(f.runtime.blocksTasks, false);
   } finally {
     await f.close();
@@ -626,7 +637,7 @@ test('deferring revokes an unconfirmed directory candidate', async () => {
   }
 });
 
-test('the private CLI fallback requires a successful login-status exit before reporting ready', async () => {
+test('the private CLI fallback is usable once it reports its version, whatever its login status says', async () => {
   const directory = await mkdtemp(path.join(tmpdir(), 'athena-private-detection-'));
   const previousPath = process.env.PATH;
   try {
@@ -645,7 +656,7 @@ test('the private CLI fallback requires a successful login-status exit before re
     const codex = (await detectAgents(fallback)).find((item) => item.id === 'codex')!;
     assert.equal(codex.available, true);
     assert.equal(codex.path, fallback);
-    assert.equal(codex.authentication, 'unknown');
+    assert.equal('authentication' in codex, false);
   } finally {
     if (previousPath === undefined) delete process.env.PATH;
     else process.env.PATH = previousPath;

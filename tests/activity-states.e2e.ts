@@ -176,7 +176,6 @@ const snapshot = {
       name: 'Codex',
       available: true,
       supported: true,
-      authentication: 'ready',
       path: '/fixture/bin/codex',
       version: 'fixture',
     },

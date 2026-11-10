@@ -66,7 +66,6 @@ test('discovery deduplicates real installations and finds a healthy CLI after a 
     const claude = agents.find((a) => a.id === 'claude');
     assert.equal(claude?.path, path.join(second, 'claude'));
     assert.equal(claude?.available, true);
-    assert.equal(claude?.authentication, 'unknown');
     assert.equal(agents.find((a) => a.id === 'gemini')?.available, false);
     assert.equal(agents.find((a) => a.id === 'cursor')?.path, path.join(first, 'cursor-agent'));
     assert.ok(agents.some((a) => a.id === 'pi'));
@@ -128,17 +127,16 @@ test('Pi startup requires a documented way to disable MCP in both supported layo
   );
 });
 
-test('Pi setup is not blocked by absent Codex; changing the default does not fake its login', async () => {
+test('Pi setup is not blocked by absent Codex; changing the default does not make Codex ready', async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'athena-cli-onboarding-'));
   const settings: Settings = { agent: 'pi', workspace: directory };
   const agents: AgentInfo[] = [
-    { id: 'codex', name: 'Codex', supported: true, available: false, authentication: 'missing' },
+    { id: 'codex', name: 'Codex', supported: true, available: false },
     {
       id: 'pi',
       name: 'Pi',
       supported: true,
       available: true,
-      authentication: 'unknown',
       path: '/fixture/pi',
     },
   ];
@@ -166,8 +164,7 @@ test('Pi setup is not blocked by absent Codex; changing the default does not fak
     await runtime.initialize();
     assert.equal(runtime.getState().coreReady, true);
     assert.equal(runtime.getState().executor?.id, 'pi');
-    assert.equal(runtime.getState().executor?.authentication, 'unknown');
-    assert.equal(runtime.getState().codex.authentication, 'missing');
+    assert.equal(runtime.getState().codex.status, 'missing');
     settings.agent = 'codex';
     await runtime.refresh();
     await runtime.settled();
