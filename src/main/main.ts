@@ -31,7 +31,6 @@ import { managedCodexPath, OnboardingRuntime } from './onboarding';
 import { discoverSkills } from './skill-registry';
 import type { WorkspaceSkill, SkillUsage } from '../shared/skills';
 import { buildSkillContext, selectProviderSkills, selectSkills } from './skill-injection';
-import { parseLeadingSkillReferences } from '../shared/skill-references';
 import { createAthenaMcpEndpoint, type AthenaMcpEndpoint } from './athena-mcp-endpoint';
 import type { ModelOption } from '../shared/usage';
 import type {
@@ -209,7 +208,7 @@ async function listModels(refresh = false, conversation?: Conversation) {
   if (conversation?.workspace && conversation.workspace !== store.data.settings.workspace)
     throw new Error('此对话属于其他工作目录');
   const id = conversation ? conversationAgent(conversation) : store.data.settings.agent;
-  const key = JSON.stringify([id, store.data.settings.workspace, agentInfo(id).path]);
+  const key = JSON.stringify([id, store.data.settings.workspace, selectableAgent(id).path]);
   if (refresh) {
     modelCatalogs.get(key)?.probe?.close();
     modelCatalogs.delete(key);
@@ -224,7 +223,7 @@ async function listModels(refresh = false, conversation?: Conversation) {
   if (catalog.request) return catalog.request;
   const request = (async () => {
     const workspace = store.data.settings.workspace;
-    const { path: executablePath } = agentInfo(id);
+    const { path: executablePath } = selectableAgent(id);
     const current =
       active?.session ??
       (selectedConversationId ? sessions.get(selectedConversationId) : undefined);
@@ -315,7 +314,7 @@ function prepareConversation(conversation: Conversation): Promise<void> {
   const revision = connectionRevision;
   connectionState({ status: 'starting', conversationId: conversation.id });
   const request = (async () => {
-    const info = agentInfo(conversationAgent(conversation));
+    const info = selectableAgent(conversationAgent(conversation));
     try {
       if (supportsBrowser(info.id) && onboarding?.allowsBrowserStartup !== false) await neo.start();
     } catch {
@@ -537,6 +536,7 @@ async function runTurn(
   selectedElement?: ElementRef,
   selectedSkillNames: string[] = [],
   selectedSkillExpectations: Array<{ name: string; providerId: string; providerPath?: string; contentHash?: string }> = [],
+  displayText?: string,
 ) {
   assertTaskEnvironment();
   const info = agentInfo(conversationAgent(conversation));
@@ -581,6 +581,7 @@ async function runTurn(
     id: randomUUID(),
     role: 'user',
     text,
+    ...(displayText === undefined ? {} : { displayText }),
     createdAt: Date.now(),
     status: 'done',
     source,
@@ -790,10 +791,11 @@ function startTurn(
   selectedElement?: ElementRef,
   selectedSkillNames: string[] = [],
   selectedSkillExpectations: Array<{ name: string; providerId: string; providerPath?: string; contentHash?: string }> = [],
+  displayText?: string,
 ) {
   assertTaskEnvironment();
   if (active || startingTurn) throw new Error('当前任务还在进行，请先停止');
-  void runTurn(conversation, text, context, 'desktop', readonly, selectedElement, selectedSkillNames, selectedSkillExpectations).catch((error) =>
+  void runTurn(conversation, text, context, 'desktop', readonly, selectedElement, selectedSkillNames, selectedSkillExpectations, displayText).catch((error) =>
     notice(error instanceof Error ? error.message : '任务失败', 'error'),
   );
   return { conversationId: conversation.id };
@@ -924,7 +926,7 @@ async function snapshot(): Promise<AppSnapshot> {
   let providerSkillDiscovery: AppSnapshot['providerSkillDiscovery'];
   try {
     const conversation = selectedConversation();
-    const info = agentInfo(conversationAgent(conversation));
+    const info = selectableAgent(conversationAgent(conversation));
     providerSkillDiscovery = await getSession(conversation, info.path, toolsFor(conversation)).discoverProviderSkills();
   } catch {
     providerSkillDiscovery = {
@@ -1041,6 +1043,10 @@ async function invoke(action: string, payload: unknown) {
   }
   if (sharing?.active && ['recording:start', 'recording:stop'].includes(action))
     throw new Error('共享正在自动记录，结束共享后可回看');
+  if (action.startsWith('browser:'))
+    return sharing
+      ? sharing.hostAction(action, payload)
+      : dispatchBrowserAction(browser, action, payload);
   switch (action) {
     case 'app:snapshot':
       return snapshot();
@@ -1165,6 +1171,8 @@ async function invoke(action: string, payload: unknown) {
       const data = record(payload);
       if (data.selectedSkills !== undefined && !Array.isArray(data.selectedSkills))
         throw new Error('Skill 选择格式不正确');
+      if (Array.isArray(data.selectedSkills) && data.selectedSkills.length > 3)
+        throw new Error('最多选择 3 个 Skill');
       if (data.selectedSkillMetadata !== undefined && !Array.isArray(data.selectedSkillMetadata))
         throw new Error('Skill 元数据格式不正确');
       const context = data.context === undefined ? undefined : string(data.context, 60_000);
@@ -1187,15 +1195,15 @@ async function invoke(action: string, payload: unknown) {
       const selected = selectedRef ? browser.getState().selectedElement : undefined;
       if (selectedRef && selected?.ref !== selectedRef)
         throw new Error('选中的元素已变化，请重新选取后发送。');
-      const parsed = parseLeadingSkillReferences(string(data.text));
-      const explicitSkills = [...new Set([...selectedSkillNames, ...parsed.names])];
+      const explicitSkills = selectedSkillNames;
       if (explicitSkills.length > 3) throw new Error('最多选择 3 个 Skill');
       if (new Set(selectedSkillExpectations.map((item) => item.name)).size !== selectedSkillExpectations.length ||
           selectedSkillExpectations.some((item) => !explicitSkills.includes(item.name)))
         throw new Error('Skill 元数据与选择不匹配');
-      const taskText = parsed.names.length ? parsed.text : string(data.text);
+      const taskText = string(data.text);
+      const displayText = data.displayText === undefined ? undefined : string(data.displayText);
       const conversation = data.id ? getConversation(data.id) : createConversation();
-      return startTurn(conversation, taskText, context, false, selected, explicitSkills, selectedSkillExpectations);
+      return startTurn(conversation, taskText, context, false, selected, explicitSkills, selectedSkillExpectations, displayText);
     }
     case 'conversation:stop':
       await stopTurn();

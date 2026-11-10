@@ -74,7 +74,7 @@ export async function discoverExecutables(names: string[], directories: string[]
 }
 
 export function piIsolationArguments(help: string): string[] | undefined {
-  const flags = ['--no-extensions', '--no-skills', '--no-prompt-templates'];
+  const flags = ['--no-extensions', '--no-prompt-templates'];
   if (flags.some((flag) => !help.includes(flag))) return;
   if (help.includes('--no-mcp')) flags.push('--no-mcp');
   else if (

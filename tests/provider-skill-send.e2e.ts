@@ -131,14 +131,16 @@ require('node:readline').createInterface({input:process.stdin}).on('line', line 
   await composer.fill('/');
   await expect(page.getByRole('option', { name: /review/ })).toBeVisible();
   await composer.press('Enter');
-  await expect(composer).toHaveValue('/review ');
-  await composer.fill('/review Inspect changes');
+  await expect(composer).toContainText('/review');
+  await composer.press('End');
+  await page.keyboard.insertText('Inspect changes');
   await composer.press('Enter');
   await expect.poll(async () => (await prompts()).length).toBe(1);
   await expect.poll(async () => (await conversation()).messages.at(-1)?.status).toBe('done');
-  await expect(composer).toHaveValue('');
+  await expect(composer).toHaveText('');
   assert.equal((await prompts())[0].message, '/skill:review\n\nInspect changes');
   const completed = await conversation();
+  await expect(page.locator('.user-message-text').first()).toHaveText('/review Inspect changes');
   assert.equal(completed.messages[0].text, 'Inspect changes');
   assert.equal(completed.skillUsage?.[0].provider?.id, 'pi');
   assert.equal(completed.skillUsage?.[0].injectionStatus, 'degraded');
@@ -179,7 +181,7 @@ require('node:readline').createInterface({input:process.stdin}).on('line', line 
       'rejected metadata must not append messages or overwrite skill usage',
     );
     // This direct IPC check preserves an unrelated draft; it does not prove UI-submit failure retention.
-    await expect(composer).toHaveValue(draft);
+    await expect(composer).toContainText(draft);
   }
   console.log(
     'PASS: actual renderer skill selection/send -> preload IPC -> production Pi adapter -> scripted CLI; native prompt, degraded usage, stale provider/path notices with no turn mutation, and unrelated draft preservation. No model calls. Pi RPC provides no content hash; no content-change validation claimed. Async stale-send ACK does not prove UI-submit draft retention.',

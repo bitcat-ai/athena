@@ -44,6 +44,10 @@ process.stdin.setEncoding('utf8'); process.stdin.on('data',s=>input+=s); process
  if(mode==='result-error'){out(cli==='gemini'?{type:'result',status:'error',error:{message:'sk-secret-native-error'}}:{type:'result',subtype:'error_during_execution',is_error:true,result:'sk-secret-native-error'});return;}
  if(mode==='tool-disabled'){out(cli==='gemini'?{type:'tool_use',tool_id:'tool-1',tool_name:'write_file',parameters:{}}:{type:'assistant',message:{role:'assistant',content:[{type:'tool_use',id:'tool-1',name:'Write',input:{}}]}});return;}
  if(mode==='denied'){out({type:'result',subtype:'success',is_error:false,permission_denials:[{tool_name:'Write'}],result:'blocked'});return;}
+ if(cli==='claude' && mode.startsWith('read-')) {
+  out({type:'assistant',message:{role:'assistant',content:[{type:'tool_use',id:'read:1',name:'Read',input:{file_path:'evidence.txt'}}]}});
+  if(mode!=='read-pending') out({type:'user',message:{role:'user',content:[{type:'tool_result',tool_use_id:'read:1',is_error:mode==='read-error',content:'HIDDEN_TOOL_OUTPUT'}]}});
+ }
  if(cli==='claude') {
   out({type:'stream_event',event:{type:'message_start',message:{model:'actual-claude'}}});
   out({type:'stream_event',event:{type:'content_block_delta',delta:{type:'thinking_delta',thinking:'HIDDEN_THINKING'}}});
@@ -166,6 +170,87 @@ for (const [mode, expected] of [
     }
   });
 }
+
+test('Claude discovers native config skills with user precedence, settings overrides and optional descriptions without invoking CLI', async (t) => {
+  const f = await fixture('claude');
+  const config = path.join(f.directory, 'custom-config');
+  const previous = process.env.CLAUDE_CONFIG_DIR;
+  process.env.CLAUDE_CONFIG_DIR = config;
+  t.after(() => { if (previous === undefined) delete process.env.CLAUDE_CONFIG_DIR; else process.env.CLAUDE_CONFIG_DIR = previous; });
+  try {
+    for (const [root, name, body] of [
+      [path.join(config, 'skills'), 'review', '---\nname: not-the-command\n---\nUser body'],
+      [path.join(f.directory, '.claude/skills'), 'review', '---\ndescription: Project loses\n---\n'],
+      [path.join(config, 'skills'), 'off', 'Hidden'],
+      [path.join(config, 'skills'), 'manual', '---\nuser-invocable: false\n---\n'],
+    ]) {
+      await mkdir(path.join(root, name), { recursive: true });
+      await writeFile(path.join(root, name, 'SKILL.md'), body);
+    }
+    await writeFile(path.join(config, 'settings.json'), '{ /* native JSONC */ skillOverrides: { off: "off", }, }');
+    const discovery = await f.session.discoverProviderSkills();
+    assert.equal(discovery.status, 'ready');
+    assert.deepEqual(discovery.skills.map((skill) => skill.name), ['manual', 'review']);
+    const review = discovery.skills.find((skill) => skill.name === 'review')!;
+    assert.equal(review.providerPath, path.join(config, 'skills/review/SKILL.md'));
+    assert.match(review.contentHash!, /^[a-f0-9]{64}$/);
+    assert.equal(discovery.skills[0].userInvocable, false);
+    await assert.rejects(readFile(path.join(f.directory, 'args.jsonl')));
+  } finally { await f.cleanup(); }
+});
+
+test('Claude reads enabled plugin skills statically and ignores disabled plugins and escaping manifest paths', async (t) => {
+  const f = await fixture('claude');
+  const home = path.join(f.directory, 'home');
+  t.mock.method(os, 'homedir', () => home);
+  try {
+    const config = path.join(home, '.claude');
+    const install = path.join(f.directory, 'plugin');
+    await mkdir(path.join(config, 'plugins'), { recursive: true });
+    await mkdir(path.join(install, '.claude-plugin'), { recursive: true });
+    await mkdir(path.join(install, 'skills/review'), { recursive: true });
+    await writeFile(path.join(install, 'skills/review/SKILL.md'), '---\nname: not-native\ndescription: Plugin review\n---\n');
+    await writeFile(path.join(install, '.claude-plugin/plugin.json'), JSON.stringify({ name: 'quality', skills: ['../../outside'] }));
+    await writeFile(path.join(config, 'settings.json'), JSON.stringify({ enabledPlugins: { 'quality@local': true, 'disabled@local': false } }));
+    await writeFile(path.join(config, 'plugins/installed_plugins.json'), JSON.stringify({ plugins: {
+      'quality@local': [{ scope: 'project', projectPath: f.directory, installPath: install }],
+      'disabled@local': [{ scope: 'user', installPath: install }],
+    } }));
+    const discovery = await f.session.discoverProviderSkills();
+    assert.deepEqual(discovery.skills.map((skill) => skill.name), ['quality:review']);
+    assert.equal(discovery.skills[0].description, 'Plugin review');
+    assert.equal(discovery.skills[0].providerPath, path.join(install, 'skills/review/SKILL.md'));
+    await assert.rejects(readFile(path.join(f.directory, 'args.jsonl')));
+  } finally { await f.cleanup(); }
+});
+
+test('Claude selected skills use a real leading slash and preserve native read-only permissions', async (t) => {
+  const f = await fixture('claude');
+  t.mock.method(os, 'homedir', () => path.join(f.directory, 'home'));
+  try {
+    const root = path.join(f.directory, '.claude/skills/review');
+    await mkdir(root, { recursive: true });
+    await writeFile(path.join(root, 'SKILL.md'), '---\ndisable-model-invocation: true\n---\nPRIVATE_BODY');
+    const discovery = await f.session.discoverProviderSkills();
+    const skill = discovery.skills.find((item) => item.name === 'review')!;
+    await f.session.send('Review this diff', 'Retain context', undefined, undefined, [skill]);
+    const call = (await f.logs())[0];
+    assert.equal(call.input, '/review Review this diff\n\n<task_context>\nRetain context\n</task_context>');
+    assert.equal(call.args.includes('--safe-mode'), false);
+    assert.equal(call.args.includes('--disable-slash-commands'), false);
+    assert.equal(call.args[call.args.indexOf('--tools') + 1], 'Read,Glob,Grep,Skill');
+    assert.equal(call.args[call.args.indexOf('--allowedTools') + 1], 'Read,Glob,Grep,Skill');
+    assert.equal(call.args[call.args.indexOf('--permission-mode') + 1], 'dontAsk');
+    const settings = JSON.parse(call.args[call.args.indexOf('--settings') + 1]);
+    assert.equal(settings.disableAllHooks, true);
+    assert.equal(settings.disableSkillShellExecution, true);
+    assert.equal(call.args[call.args.indexOf('--disallowedTools') + 1], 'Write,Edit,Bash,Task,WebFetch,WebSearch');
+    assert.ok(!call.input.includes('PRIVATE_BODY'));
+    await writeFile(skill.providerPath!, 'Changed');
+    await assert.rejects(f.session.send('stale', undefined, undefined, undefined, [skill]), /改变|不可用/);
+    assert.equal((await f.logs()).length, 1);
+  } finally { await f.cleanup(); }
+});
 
 test('Cursor discovers project skills before user skills with metadata and bounded nested entries', async (t) => {
   const f = await fixture('cursor');
@@ -354,8 +439,8 @@ for (const cli of cliIds) {
           .some((a) => /skip-permissions|^--yolo$|^--force$|^--approve-mcps$/.test(a)),
       );
       if (cli === 'claude') {
-        assert.equal(calls[0].args[calls[0].args.indexOf('--tools') + 1], '');
-        assert.ok(calls[0].args.includes('--safe-mode'));
+        assert.equal(calls[0].args[calls[0].args.indexOf('--tools') + 1], 'Read,Glob,Grep,Skill');
+        assert.equal(calls[0].args.includes('--safe-mode'), false);
         assert.equal(calls[0].args[calls[0].args.indexOf('--permission-prompts') + 1], 'none');
       } else if (cli === 'gemini') {
         assert.equal(calls[0].args[calls[0].args.indexOf('--approval-mode') + 1], 'plan');
@@ -515,6 +600,23 @@ for (const cli of ['claude', 'gemini'] as const)
       await f.cleanup();
     }
   });
+for (const mode of ['read-success', 'read-error', 'read-pending']) {
+  test(`Claude native ${mode} tracks real read evidence and never converts failure to success`, async () => {
+    const f = await fixture('claude', mode);
+    try {
+      if (mode === 'read-success') {
+        await f.session.send('Read evidence');
+        assert.deepEqual(f.events.filter((event) => event.type === 'tool').map((event) => event.call.status), ['running', 'done']);
+        assert.equal(JSON.stringify(f.events).includes('HIDDEN_TOOL_OUTPUT'), false);
+      } else {
+        await assert.rejects(f.session.send('Read evidence'));
+        assert.equal(f.events.some((event) => event.type === 'complete'), false);
+      }
+      assert.equal(f.hostCalls(), 0);
+    } finally { await f.cleanup(); }
+  });
+}
+
 test('claude: permission denial is not task success', async () => {
   const f = await fixture('claude', 'denied');
   try {
@@ -697,9 +799,8 @@ test('stream-cli-session: explicit close rejects an active turn instead of compl
     await f.cleanup();
   }
 });
-test('Claude and Gemini discovery report constrained capabilities without launching a CLI', async () => {
+test('Gemini discovery reports constrained capabilities without launching a CLI', async () => {
   for (const [cli, expected] of [
-    ['claude', /safe-mode environment disables slash commands and file-reading tools/],
     ['gemini', /blocked by the deny-all admin policy/],
   ] as const) {
     const f = await fixture(cli);

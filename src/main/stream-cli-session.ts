@@ -5,6 +5,7 @@ import { lstat, mkdtemp, open, opendir, readdir, realpath, rm, writeFile } from 
 import os from 'node:os';
 import path from 'node:path';
 import type { AgentSession, AgentSessionOptions } from './agent-session';
+import { discoverClaudeSkills } from './claude-skills';
 import { unavailableProviderSkillDiscovery } from '../shared/provider-skills';
 import type { AgentEvent, BrowserTool, ElementRef, ToolCall } from '../shared/types';
 import { selectProviderSkills } from './skill-injection';
@@ -288,11 +289,10 @@ export class StreamCliSession implements AgentSession {
   async discoverProviderSkills() {
     if (this.options.cli === 'cursor')
       return discoverCursorSkills(this.options.workspace);
+    if (this.options.cli === 'claude') return discoverClaudeSkills(this.options.workspace);
     const provider = this.options.cli;
-    const names = { claude: 'Claude Code', gemini: 'Gemini CLI' } as const;
-    const reason = provider === 'claude'
-      ? 'Claude Code discovery is unavailable while the selected safe-mode environment disables slash commands and file-reading tools.'
-      : 'Gemini skill activation is blocked by the deny-all admin policy, and no safe discovery RPC is verified.';
+    const names = { gemini: 'Gemini CLI' } as const;
+    const reason = 'Gemini skill activation is blocked by the deny-all admin policy, and no safe discovery RPC is verified.';
     return unavailableProviderSkillDiscovery({ id: provider, name: names[provider] }, reason);
   }
 
@@ -314,6 +314,17 @@ export class StreamCliSession implements AgentSession {
     this.sending = true;
     try {
       await this.prepare(selection);
+      if (this.options.cli === 'claude' && skills.length) {
+        const discovery = await discoverClaudeSkills(this.options.workspace);
+        const selected = selectProviderSkills(discovery.skills, skills.map((skill) => skill.name), 'claude', skills.map((skill) => ({
+          name: skill.name, providerId: skill.provider.id, providerPath: skill.providerPath, contentHash: skill.contentHash,
+        })));
+        // Claude expands only one slash command at the start of a text block. Earlier
+        // explicitly selected skills are read by path, never disguised as dollar mentions.
+        const last = selected.at(-1)!;
+        const earlier = selected.slice(0, -1).map((skill) => `The user also invoked /${skill.name}. Read and follow ${JSON.stringify(skill.providerPath)}.`);
+        prompt = `/${last.name} ${[prompt, ...earlier].join('\n\n')}`;
+      }
       if (this.options.cli === 'cursor' && (skills.length || /(^|\s)\$[a-zA-Z0-9]/.test(prompt))) {
         const discovery = await discoverCursorSkills(this.options.workspace);
         const selected = selectProviderSkills(discovery.skills, skills.map((skill) => skill.name), 'cursor', skills.map((skill) => ({
@@ -369,9 +380,14 @@ export class StreamCliSession implements AgentSession {
         'stream-json',
         '--verbose',
         '--include-partial-messages',
-        '--safe-mode',
         '--tools',
-        '',
+        'Read,Glob,Grep,Skill',
+        '--allowedTools',
+        'Read,Glob,Grep,Skill',
+        '--disallowedTools',
+        'Write,Edit,Bash,Task,WebFetch,WebSearch',
+        '--settings',
+        JSON.stringify({ disableAllHooks: true, disableSkillShellExecution: true }),
         '--strict-mcp-config',
         '--mcp-config',
         '{"mcpServers":{}}',
@@ -379,7 +395,6 @@ export class StreamCliSession implements AgentSession {
         'dontAsk',
         '--permission-prompts',
         'none',
-        '--disable-slash-commands',
         '--no-chrome',
         ...resume,
         ...model,
@@ -463,6 +478,7 @@ export class StreamCliSession implements AgentSession {
       cwd: this.options.workspace,
       env: {
         ...process.env,
+        ...(this.options.cli === 'claude' ? { CLAUDE_CODE_SAFE_MODE: '0' } : {}),
         PATH: `${path.dirname(this.options.executablePath)}${path.delimiter}${process.env.PATH ?? '/usr/bin:/bin'}`,
       },
       detached: process.platform !== 'win32',
@@ -700,8 +716,33 @@ export class StreamCliSession implements AgentSession {
       const full = contentText(r.message?.content);
       if (full.startsWith(run.messageText)) this.delta(run, full.slice(run.messageText.length));
       run.messageText = '';
-      if (r.message?.content?.some((p: Json) => p.type === 'tool_use'))
-        this.stop(run, 'CLI 返回了已禁用的工具调用');
+      for (const block of Array.isArray(r.message?.content) ? r.message.content : []) {
+        if (block.type !== 'tool_use') continue;
+        if (!['Read', 'Glob', 'Grep', 'Skill'].includes(block.name)) {
+          this.stop(run, 'CLI 返回了已禁用的工具调用');
+          return;
+        }
+        if (typeof block.id !== 'string' || !block.id || block.id.length > 512 || this.calls.has(block.id) || !object(block.input)) {
+          this.stop(run, 'Claude 原生工具开始记录无效');
+          return;
+        }
+        const call: ToolCall = { id: block.id, name: block.name, input: block.input, status: 'running' };
+        this.calls.set(call.id, call);
+        this.emit({ type: 'tool', call: { ...call } });
+      }
+    }
+    if (r.type === 'user') {
+      for (const block of Array.isArray(r.message?.content) ? r.message.content : []) {
+        if (block.type !== 'tool_result') continue;
+        const call = this.calls.get(block.tool_use_id);
+        if (!call || call.status !== 'running' || (block.is_error !== undefined && typeof block.is_error !== 'boolean')) {
+          this.stop(run, 'Claude 未返回匹配的原生工具结果');
+          return;
+        }
+        call.status = block.is_error === true ? 'error' : 'done';
+        this.emit({ type: 'tool', call: { ...call } });
+        if (call.status === 'error') { this.stop(run, 'Claude 原生工具执行失败'); return; }
+      }
     }
     if (r.type === 'result') {
       if (!run.text && typeof r.result === 'string') this.delta(run, r.result);

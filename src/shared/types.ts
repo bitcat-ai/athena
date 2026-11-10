@@ -421,6 +421,7 @@ export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   text: string;
+  displayText?: string;
   createdAt: number;
   status?: 'streaming' | 'done' | 'error';
   source?: 'desktop' | 'feishu';

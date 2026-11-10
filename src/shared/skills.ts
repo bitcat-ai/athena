@@ -16,6 +16,7 @@ export interface ProviderSkill {
   providerPath?: string;
   contentHash?: string;
   userInvocable: boolean;
+  userInvocableOnly?: boolean;
   source: 'provider';
   provider: ProviderIdentity;
 }

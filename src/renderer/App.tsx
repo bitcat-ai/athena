@@ -60,7 +60,9 @@ import {
   supportsBrowser,
 } from '../shared/agents';
 import type { ProviderSkill, WorkspaceSkill } from '../shared/skills';
-import { parseLeadingSkillReferences } from '../shared/skill-references';
+import { SkillComposer } from './SkillComposer';
+import type { JSONContent } from '@tiptap/core';
+import { emptySkillDocument, buildSkillSubmission, serializeSkillDocument, skillDocumentFromText } from './skill-composer-document';
 import type {
   AgentInfo,
   AppSnapshot,
@@ -237,7 +239,7 @@ export default function App() {
   const [selectedId, setConversationId] = useState<string>();
   const [recordings, setRecordings] = useState<Recording[]>([]);
   const [liveSteps, setLiveSteps] = useState<RecordedStep[]>([]);
-  const [drafts, setDrafts] = useState<Record<string, { text: string }>>({});
+  const [drafts, setDrafts] = useState<Record<string, { doc: JSONContent }>>({});
   const [selected, setSelected] = useState<ElementRef>();
   const [selectedEdit, setSelectedEdit] = useState<ElementEdit>();
   const [sidebar, setSidebar] = useState(true);
@@ -249,8 +251,7 @@ export default function App() {
   const [resizingBrowser, setResizingBrowser] = useState(false);
   const [settingsTab, setSettingsTab] = useState<SettingsTab | null>(null);
   const [agentMenu, setAgentMenu] = useState(false);
-  const [skillMenuActive, setSkillMenuActive] = useState(0);
-  const [skillMenuDismissed, setSkillMenuDismissed] = useState<string>();
+  const [slashSkillMenuOpen, setSlashSkillMenuOpen] = useState(false);
   const [statusLabel, setStatusLabel] = useState('已接收任务');
   const [pendingRequests, setPendingRequests] = useState<PendingAgentRequest[]>([]);
   const [reviewKey, setReviewKey] = useState<string>();
@@ -260,6 +261,7 @@ export default function App() {
   const [manualAppId, setManualAppId] = useState('');
   const [manualSecret, setManualSecret] = useState('');
   const composer = useRef<HTMLDivElement>(null);
+  const composerEditor = useRef<import('@tiptap/core').Editor | null>(null);
   const panels = useRef<HTMLDivElement>(null);
   const resizeStart = useRef<{ x: number; width: number } | undefined>(undefined);
   const revealBrowserOnTool = useRef(true);
@@ -280,17 +282,20 @@ export default function App() {
     conversationRequests.find((item) => requestKey(item) === reviewKey) ?? conversationRequests[0];
   const draftKey = JSON.stringify([settings.workspace, conversationId]);
   const draftEntry = drafts[draftKey];
-  const draft = draftEntry?.text ?? '';
+  const draftDocument = draftEntry?.doc ?? emptySkillDocument;
+  const draft = serializeSkillDocument(draftDocument).displayText;
   // Before the first send there is no host ID. Keep that draft reachable after navigation.
-  const sidebarConversations = drafts[JSON.stringify([settings.workspace, null])]?.text
+  const unsentDocument = drafts[JSON.stringify([settings.workspace, null])]?.doc;
+  const sidebarConversations = unsentDocument && serializeSkillDocument(unsentDocument).displayText
     ? [{ id: undefined, title: '未发送草稿', messages: [] }, ...workspaceConversations]
     : workspaceConversations;
-  const setDraft = (text: string) => {
-    if (text !== draft) setSkillMenuDismissed(undefined);
-    setDrafts((previous) => ({ ...previous, [draftKey]: { text } }));
+  const setDraftDocument = (doc: JSONContent) => {
+    if (doc !== draftEntry?.doc) setDrafts((previous) => ({ ...previous, [draftKey]: { doc } }));
   };
-  const slashSkillMenuOpen = skillMenuDismissed !== draft && /^(?:\/[a-z0-9]+(?:-[a-z0-9]+)*\s+)*\/[^\s/]*$/i.test(draft);
-  const selectedProviderSkillMetadata = [...new Set([...selectedSkills, ...parseLeadingSkillReferences(draft).names])]
+  const setDraft = (text: string) => setDraftDocument(skillDocumentFromText(text,
+    providerSkills.filter((skill) => skill.userInvocable).map((skill) => skill.name)));
+  const currentSkillNames = serializeSkillDocument(draftDocument).names;
+  const selectedProviderSkillMetadata = [...new Set([...selectedSkills, ...currentSkillNames])]
     .map((name) => providerSkills.find((skill) => skill.name === name))
     .filter((skill): skill is ProviderSkill => Boolean(skill))
     .map((skill) => ({
@@ -299,17 +304,6 @@ export default function App() {
       ...(skill.providerPath === undefined ? {} : { providerPath: skill.providerPath }),
       ...(skill.contentHash === undefined ? {} : { contentHash: skill.contentHash }),
     }));
-  const slashSkillOptions = [...(providerSkillDiscovery?.status === 'ready' ? providerSkills : [])].filter((skill) => skill.userInvocable)
-    .filter((skill, index, all) => all.findIndex((item) => item.name === skill.name) === index)
-    .filter((skill) => skill.name.toLowerCase().startsWith(draft.slice(draft.lastIndexOf('/') + 1).toLowerCase()));
-  const selectSlashSkill = (skill: WorkspaceSkill | ProviderSkill) => {
-    const selected = [...new Set([...selectedSkills, ...parseLeadingSkillReferences(draft).names])];
-    if (selected.includes(skill.name) || selected.length >= 3) return;
-    const prefix = draft.slice(0, draft.lastIndexOf('/') + 1);
-    setDraft(`${prefix}${skill.name} `);
-    setSkillMenuActive(0);
-    requestAnimationFrame(() => composer.current?.querySelector('textarea')?.focus());
-  };
   const currentView = {
     id: conversationId,
     workspace: settings.workspace,
@@ -712,7 +706,7 @@ export default function App() {
           ? '请将选中元素的页面预览改动应用到当前项目源码，并验证页面。'
           : '请在当前项目源码中定位选中的元素，先说明对应组件和可修改的位置。',
       );
-    composer.current?.querySelector('textarea')?.focus();
+    composerEditor.current?.commands.focus();
   };
   const newConversation = useCallback(async () => {
     setShowUsage(false);
@@ -725,7 +719,7 @@ export default function App() {
       setSelectedEdit(undefined);
       setInspectorOpen(false);
       stickToBottom.current = true;
-      composer.current?.querySelector('textarea')?.focus();
+      composerEditor.current?.commands.focus();
     }
   }, [action, upsert]);
   useEffect(() => {
@@ -805,14 +799,20 @@ export default function App() {
     const context = selected
       ? `选中元素引用：${selected.ref}\n页面预览修改（仅当前DOM，不代表源码已保存）：${JSON.stringify(selectedEdit ?? null)}\n当前页面：${pageSource(browser.url)}\n页面效果调整直接使用元素编辑工具。仅当用户要求修改或保存到源码时，核实项目与页面的对应关系、定位真实组件并验证修改；不要把DOM预览当成源码修改。`
       : undefined;
-    const parsed = parseLeadingSkillReferences(draft.trim());
+    const submission = buildSkillSubmission(composerEditor.current?.getJSON() ?? draftDocument, selectedSkills);
+    if (submission.selectedSkills.some((name) => !providerSkills.some((skill) => skill.name === name && skill.userInvocable)) ||
+        (submission.selectedSkills.length > 0 && providerSkillDiscovery?.status !== 'ready')) {
+      setToast({ text: '引用的 Skill 当前不可用，请刷新或移除引用后重试。', error: true });
+      return;
+    }
     const result = await action<{ conversationId: string }>('conversation:send', {
       id: conversationId,
-      text: draft.trim(),
+      text: submission.text,
+      displayText: serializeSkillDocument(composerEditor.current?.getJSON() ?? draftDocument).displayText.trim(),
       context,
       selectedRef: selected?.ref,
-      selectedSkills: [...new Set([...selectedSkills, ...parsed.names])],
-      selectedSkillMetadata: [...new Set([...selectedSkills, ...parsed.names])]
+      selectedSkills: submission.selectedSkills,
+      selectedSkillMetadata: submission.selectedSkills
         .map((name) => providerSkills.find((skill) => skill.name === name))
         .filter((skill): skill is ProviderSkill => Boolean(skill))
         .map((skill) => ({
@@ -985,7 +985,7 @@ export default function App() {
   const showCurrentPage = () => {
     if (!draft.trim()) setDraft('检查当前页面的主要内容和可交互元素。');
     setBrowserVisible(true);
-    composer.current?.querySelector('textarea')?.focus();
+    composerEditor.current?.commands.focus();
   };
   const selectPageElement = () => {
     setBrowserVisible(true);
@@ -1675,7 +1675,7 @@ export default function App() {
                             setShowUsage(false);
                             setBrowserVisible((value) => !value);
                             if (browserVisible)
-                              composer.current?.querySelector('textarea')?.focus();
+                              composerEditor.current?.commands.focus();
                           }}
                         >
                           <Icon icon={PanelRightOpenIcon} size={16} />
@@ -1748,7 +1748,7 @@ export default function App() {
                               {message.role === 'user' ? (
                                 <ProChatMessage.User>
                                   <ProChatMessage.Bubble className="user-message-text">
-                                    {message.text}
+                                    {message.displayText ?? message.text}
                                   </ProChatMessage.Bubble>
                                   {message.source === 'feishu' && (
                                     <div className="message-source">
@@ -1785,7 +1785,7 @@ export default function App() {
                                         setDraft(
                                           '请先核对当前任务的实际结果，再继续未完成的步骤。不要重复已生效的操作。',
                                         );
-                                        composer.current?.querySelector('textarea')?.focus();
+                                        composerEditor.current?.commands.focus();
                                       }}
                                     />
                                     {message.text && (
@@ -1866,7 +1866,7 @@ export default function App() {
                         onAction={action}
                         onClose={() => {
                           setInspectorOpen(false);
-                          composer.current?.querySelector('textarea')?.focus();
+                          composerEditor.current?.commands.focus();
                         }}
                         onSourceRequest={requestSource}
                       />
@@ -1918,63 +1918,17 @@ export default function App() {
                             </PromptInput.Attachments>
                           )}
                           <PromptInput.Content>
-                            {slashSkillMenuOpen && (
-                              <SkillSlashMenu
-                                draft={draft}
-                                skills={slashSkillOptions}
-                                selected={parseLeadingSkillReferences(draft).names}
-                                activeIndex={skillMenuActive}
-                                onActiveChange={setSkillMenuActive}
-                                onSelect={selectSlashSkill}
-                                discoveryStatus={providerSkillDiscovery}
-                              />
-                            )}
-                            <PromptInput.TextArea
-                              aria-label="发送给 Agent 的任务"
-                              aria-controls={slashSkillMenuOpen ? 'skill-slash-menu' : undefined}
-                              aria-expanded={slashSkillMenuOpen}
-                              aria-autocomplete="list"
-                              placeholder={
-                                selected
-                                  ? '对这个元素有什么想法？'
-                                  : '描述任务，或选中页面中的元素…'
-                              }
-                              onKeyDownCapture={(event) => {
-                                if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) {
-                                  if (event.key === 'Enter') event.stopPropagation();
-                                  return;
-                                }
-                                if (slashSkillMenuOpen) {
-                                  if (event.key === 'Escape') {
-                                    event.preventDefault();
-                                    event.stopPropagation();
-                                    setSkillMenuDismissed(draft);
-                                    const target = event.currentTarget;
-                                    requestAnimationFrame(() => target.focus());
-                                    return;
-                                  }
-                                  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-                                    event.preventDefault();
-                                    const delta = event.key === 'ArrowDown' ? 1 : -1;
-                                    setSkillMenuActive((index) => Math.max(0, Math.min(slashSkillOptions.length - 1, index + delta)));
-                                    return;
-                                  }
-                                  if (event.key === 'Enter' && slashSkillOptions[skillMenuActive]) {
-                                    event.preventDefault();
-                                    event.stopPropagation();
-                                    event.nativeEvent.stopImmediatePropagation();
-                                    selectSlashSkill(slashSkillOptions[skillMenuActive]);
-                                    return;
-                                  }
-                                }
-                                // beta.10 handles Enter before its consumer callback; composition must not submit.
-                                if (
-                                  event.key === 'Enter' &&
-                                  (event.nativeEvent.isComposing ||
-                                    event.nativeEvent.keyCode === 229)
-                                )
-                                  event.stopPropagation();
-                              }}
+                            <SkillComposer
+                              key={draftKey}
+                              value={draftDocument}
+                              skills={providerSkills}
+                              selectedSkills={selectedSkills}
+                              editorRef={composerEditor}
+                              discovery={providerSkillDiscovery}
+                              placeholder={selected ? '对这个元素有什么想法？' : '描述任务，或选中页面中的元素…'}
+                              onValueChange={setDraftDocument}
+                              onMenuOpenChange={setSlashSkillMenuOpen}
+                              onSubmit={() => void send()}
                             />
                           </PromptInput.Content>
                           <PromptInput.Toolbar className="composer-controls">
@@ -2258,7 +2212,7 @@ export default function App() {
                   onAnalyze={(id) => void analyze(id)}
                   onClose={() => {
                     setBrowserVisible(false);
-                    composer.current?.querySelector('textarea')?.focus();
+                    composerEditor.current?.commands.focus();
                   }}
                   inspectorOpen={editingElement}
                   onToggleInspector={() => setInspectorOpen((value) => !value)}

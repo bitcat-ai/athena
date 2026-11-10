@@ -201,6 +201,7 @@ test('Pi built-in extension isolation avoids removed flags and retains the host 
     const args = JSON.parse(await readFile(path.join(f.directory, 'arguments.json'), 'utf8'));
     assert.equal(args.includes('--no-mcp'), false);
     assert.ok(args.includes('--no-extensions'));
+    assert.equal(args.includes('--no-skills'), false, 'native Skill discovery must remain enabled');
     assert.ok(args.includes('--no-approve'));
     assert.equal(
       args[args.indexOf('--extension') + 1],

@@ -18,9 +18,9 @@
 ### Claude Code
 
 - [官方 headless 文档](https://code.claude.com/docs/en/headless)：`--print --output-format stream-json --verbose --include-partial-messages`；`stream_event.event.delta.type=text_delta` 的 `text`；最终 `result`；通过 `--resume <session-id>` 恢复明确会话。文档明确要求检查退出码，失败可能在 stdout result 中报告。
-- [官方 CLI 参数](https://code.claude.com/docs/en/cli-reference) 与本机 help：`--tools ""` 禁用全部内置工具；`--strict-mcp-config --mcp-config '{"mcpServers":{}}'` 不载入用户 MCP；`--safe-mode` 禁用 hooks/skills/plugins 等自定义行为，但保留认证与模型选择；不使用会跳过 OAuth/keychain 的 `--bare`。
-- 本机 help / headless 文档：`--permission-mode dontAsk --permission-prompts none`，无人审批时拒绝请求而非等待。`--disable-slash-commands --no-chrome` 不开放命令/浏览器旁路。
-- [官方 SDK 类型](https://platform.claude.com/docs/en/agent-sdk/typescript)：`SDKAssistantMessage.message.model`、`SDKResultMessage.usage` / `permission_denials` / `stop_reason`。只显示 text block，不显示 thinking，也不把 subagent 消息拼进主回复。
+- [官方 CLI 参数](https://code.claude.com/docs/en/cli-reference) 与本机 `claude 2.1.311 --help`：`--tools` 指定可用内置工具，`--allowedTools` 仅配置 permission allow 规则，二者重复但职责不同；当前均设 `Read,Glob,Grep,Skill`。`--disallowedTools` 显式拒绝 `Write,Edit,Bash,Task,WebFetch,WebSearch`；`--permission-mode dontAsk --permission-prompts none` 使其它需要审批的调用拒绝而不等待。`--strict-mcp-config --mcp-config '{"mcpServers":{}}'` 不载入用户 MCP。`--settings` 仅对该次进程设 `disableAllHooks` 和 `disableSkillShellExecution`，分别关闭配置/插件 hooks 与 Skill/custom command 的内联 shell；保留 slash Skill 原生分发。未使用 `--safe-mode`（该模式禁用 Skills），也未设置未经 CLI 支持承诺的环境变量。
+- 本机 help / headless 文档：`--permission-mode dontAsk --permission-prompts none`，无人审批时拒绝请求而非等待；保留 `--no-chrome`。Skill 正文中的 `allowed-tools` 不能视为用户或宿主授权；与启动工具白名单、既有 deny 的实际交集仍需独立 CLI 验证，模拟测试不能证明此边界。
+- [本机 headless 事件](https://code.claude.com/docs/en/headless) / 本机 help：使用原生 `assistant.message.content[].type=tool_use` 和后续 `user.message.content[].type=tool_result` 记录工具生命周期。仅接受 `Read,Glob,Grep,Skill` 的调用且校验对应结果完成；工具返回错误或结果缺失时任务失败。工具结果正文与 thinking 不进入用户可见事件。
 
 只对当前 assistant 消息内的模型字段发 `cli-message` 模型证据；初始化配置不算运行模型证明。usage 使用最终 result 的本轮累计数据；input 为明确给出的 uncached + cache-read + cache-write 之和，任一缺失则 input 未知；没有明确 total_tokens 时总 token 未知。不把 reasoning 或未报告 cache 字段填零。
 

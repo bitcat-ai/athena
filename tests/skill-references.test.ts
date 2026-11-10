@@ -18,6 +18,7 @@ test('does not interpret ordinary leading slash, paths, or inline slash', () => 
 });
 
 test('leaves malformed references and duplicate names observable for validation', () => {
-  assert.deepEqual(parseLeadingSkillReferences('/bad_name task'), { names: [], text: '/bad_name task' });
+  assert.deepEqual(parseLeadingSkillReferences('/bad/name task'), { names: [], text: '/bad/name task' });
+  assert.deepEqual(parseLeadingSkillReferences('/quality:review /read_files.v2 task'), { names: ['quality:review', 'read_files.v2'], text: 'task' });
   assert.deepEqual(parseLeadingSkillReferences('/review /review task'), { names: ['review', 'review'], text: 'task' });
 });

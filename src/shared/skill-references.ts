@@ -3,7 +3,7 @@ export interface ParsedSkillReferences {
   text: string;
 }
 
-const REFERENCE = /^\/([a-z0-9]+(?:-[a-z0-9]+)*)(?=\s|$)/;
+const REFERENCE = /^\/([a-zA-Z0-9][a-zA-Z0-9:._-]*)(?=\s|$)/;
 
 /** Parse only the consecutive, leading Skill references in a task draft. */
 export function parseLeadingSkillReferences(draft: string): ParsedSkillReferences {

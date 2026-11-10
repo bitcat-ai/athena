@@ -29,7 +29,7 @@ const profile = process.env.WORKBENCH_USER_DATA_DIR;
 const current = fs.readFileSync(path.join(profile, 'version'), 'utf8');
 const catalog = 'fixture-' + current + fs.readFileSync(path.join(profile, 'catalog-tag'), 'utf8');
 if (process.argv.includes('--version')) {console.log('codex-fixture ' + current); process.exit(0)}
-if (process.argv.includes('status')) {console.error('Logged in using fixture'); process.exit(0)}
+if (process.argv.includes('status')) {console.error(fs.existsSync(path.join(profile, 'logged-out')) ? 'Not logged in' : 'Logged in using fixture'); process.exit(0)}
 const send = (msg) => console.log(JSON.stringify(msg));
 let thread = 'new-' + process.pid;
 require('node:readline').createInterface({input:process.stdin}).on('line', line => {
@@ -207,6 +207,18 @@ try {
   await invoke('conversation:prepare', { conversationId: 'first' });
   const fresh = await invoke('models:list');
   assert.equal(fresh[0].model, 'fixture-2b');
+  assert.equal((await requests()).filter((r) => r.method === 'turn/start').length, 3);
+  // Authentication detection must not gate read-only Skills or model discovery.
+  await writeFile(path.join(profile, 'logged-out'), '');
+  await invoke('agents:refresh');
+  assert.equal((await snapshot()).agents.find((agent) => agent.id === 'codex')?.authentication, 'missing');
+  const unauthenticatedSkills = await invoke('skills:list', { conversationId: 'first' });
+  assert.equal(unauthenticatedSkills.status, 'ready');
+  assert.equal(unauthenticatedSkills.skills[0].name, 'review');
+  assert.equal((await invoke('models:list'))[0].model, 'fixture-2b');
+  await invoke('conversation:prepare', { conversationId: 'first' });
+  assert.equal((await snapshot()).codexConnection?.status, 'ready');
+  assert.equal((await snapshot()).providerSkillDiscovery?.status, 'ready');
   assert.equal((await requests()).filter((r) => r.method === 'turn/start').length, 3);
   console.log(
     'Verified empty-thread upgrade, independent catalog, refresh reuse, stale workspace, explicit reconnect without replay, and version change.',
