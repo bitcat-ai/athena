@@ -660,7 +660,7 @@ export default function App() {
           setProviderSkillDiscovery({
             status: 'unavailable', source: 'provider',
             provider: { id: currentAgentId, name: currentAgent?.name ?? currentAgentId }, skills: [],
-            diagnostics: [{ code: 'capability-degraded', message: errorText(error) }],
+            diagnostics: [{ code: 'capability-degraded', message: 'Provider Skills 当前不可用；可不登录继续使用其他功能' }],
           });
         }
       });

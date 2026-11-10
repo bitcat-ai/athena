@@ -831,7 +831,9 @@ export class CodexSession implements AgentSession {
         source: 'provider', provider, skills: [],
         diagnostics: [{
           code: 'capability-degraded',
-          message: authRequired ? '请先在终端登录 Codex，再刷新连接' : 'Codex Skill discovery is unavailable.',
+          message: authRequired
+            ? 'Provider Skills 当前不可用；可不登录继续使用其他功能'
+            : 'Codex Skill discovery is unavailable.',
         }],
       };
     }

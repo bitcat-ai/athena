@@ -1,5 +1,4 @@
 import path from 'node:path';
-import type { AgentId } from './types';
 import type { ProviderIdentity, ProviderSkill, ProviderSkillCapability, ProviderSkillDiscovery, SkillDiagnostic } from './skills';
 
 export interface ProviderSkillInput {
@@ -43,11 +42,6 @@ function contained(candidate: string, root: string): boolean {
 
 export function unavailableProviderSkillDiscovery(agent: Pick<ProviderIdentity, 'id' | 'name'>, message: string): ProviderSkillDiscovery {
   return { status: 'unavailable', source: 'provider', provider: agent, skills: [], diagnostics: [diagnostic('capability-degraded', message)] };
-}
-
-export function providerSkillDiscoveryForAgent(agent: { id: AgentId; name: string; authentication?: string }): ProviderSkillDiscovery | undefined {
-  if (agent.authentication !== 'missing') return undefined;
-  return unavailableProviderSkillDiscovery(agent, `请先在终端登录 ${agent.name}，再刷新连接`);
 }
 
 export function normalizeProviderSkillDiscovery(input: ProviderDiscoveryInput, policy: ProviderPathPolicy = { approvedRoot: process.cwd() }): ProviderSkillDiscovery {

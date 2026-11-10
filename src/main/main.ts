@@ -29,7 +29,6 @@ import { Store } from './store';
 import { UsageStore } from './usage';
 import { managedCodexPath, OnboardingRuntime } from './onboarding';
 import { discoverSkills } from './skill-registry';
-import { providerSkillDiscoveryForAgent } from '../shared/provider-skills';
 import type { WorkspaceSkill, SkillUsage } from '../shared/skills';
 import { buildSkillContext, selectProviderSkills, selectSkills } from './skill-injection';
 import { parseLeadingSkillReferences } from '../shared/skill-references';
@@ -1063,8 +1062,6 @@ async function invoke(action: string, payload: unknown) {
       const data = payload === undefined ? {} : record(payload);
       const conversation = data.conversationId === undefined ? selectedConversation() : getConversation(data.conversationId);
       const info = selectableAgent(conversationAgent(conversation));
-      const unavailable = providerSkillDiscoveryForAgent(info);
-      if (unavailable) return unavailable;
       return getSession(conversation, info.path!, toolsFor(conversation)).discoverProviderSkills();
     }
     case 'models:list': {

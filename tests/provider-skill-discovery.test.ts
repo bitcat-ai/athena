@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createProviderSkillDiscoveryAdapter } from '../src/main/provider-skill-discovery';
-import { providerSkillDiscoveryForAgent } from '../src/shared/provider-skills';
 
 const providers = [
   ['codex', 'Codex'],
@@ -30,14 +29,6 @@ for (const [id, name] of providers) {
     assert.equal(result.skills[0]?.provider.id, id);
   });
 }
-
-test('missing provider authentication is explicit and never masquerades as an empty list', () => {
-  const result = providerSkillDiscoveryForAgent({ id: 'codex', name: 'Codex', authentication: 'missing' });
-  assert.equal(result?.status, 'unavailable');
-  assert.deepEqual(result?.skills, []);
-  assert.match(result?.diagnostics[0]?.message ?? '', /请先在终端登录 Codex，再刷新连接/);
-  assert.equal(providerSkillDiscoveryForAgent({ id: 'codex', name: 'Codex', authentication: 'ready' }), undefined);
-});
 
 test('provider discovery reports unavailable and malformed without local fallback', async () => {
   const unavailable = createProviderSkillDiscoveryAdapter({ id: 'codex', name: 'Codex' }, async () => {

@@ -251,7 +251,7 @@ test('Codex discovery preserves failure states and never borrows a different cwd
       assert.equal(result.status, expected);
       assert.deepEqual(result.skills, []);
       if (options?.skillsError?.message.includes('Unauthorized'))
-        assert.match(result.diagnostics[0]?.message ?? '', /请先在终端登录 Codex，再刷新连接/);
+        assert.match(result.diagnostics[0]?.message ?? '', /Provider Skills 当前不可用；可不登录继续使用其他功能/);
     } finally { agent.close(); await f.cleanup(); }
   }
 });
