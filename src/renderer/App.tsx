@@ -801,10 +801,10 @@ export default function App() {
     const parsed = parseLeadingSkillReferences(draft.trim());
     const result = await action<{ conversationId: string }>('conversation:send', {
       id: conversationId,
-      text: parsed.text,
+      text: draft.trim(),
       context,
       selectedRef: selected?.ref,
-      selectedSkills: [...new Set([...selectedSkills.map((name) => providerSkills.some((skill) => skill.name === name) ? `codex:${name}` : name), ...parsed.names.map((name) => providerSkills.some((skill) => skill.name === name) ? `codex:${name}` : name)])],
+      selectedSkills: [...new Set([...selectedSkills, ...parsed.names])],
       selectedSkillMetadata: [...new Set([...selectedSkills, ...parsed.names])]
         .map((name) => providerSkills.find((skill) => skill.name === name))
         .filter((skill): skill is ProviderSkill => Boolean(skill))

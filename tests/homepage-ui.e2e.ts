@@ -345,11 +345,11 @@ try {
   await expect(composer).toHaveValue('/review ');
   await composer.fill('/review Check the changes');
   await composer.press('Enter');
-  await expect.poll(async () => (await calls('conversation:send')).at(-1)?.payload.selectedSkills).toEqual(['codex:review']);
+  await expect.poll(async () => (await calls('conversation:send')).at(-1)?.payload.selectedSkills).toEqual(['review']);
   const skillSend = (await calls('conversation:send')).at(-1)!.payload;
-  assert.equal(skillSend.text, 'Check the changes');
+  assert.equal(skillSend.text, '/review Check the changes');
   assert.deepEqual(skillSend.selectedSkillMetadata, [{name:'review',providerId:'codex',providerPath:'/opt/codex/review/SKILL.md'}]);
-  assert.deepEqual(skillSend.selectedSkills, ['codex:review']);
+  assert.deepEqual(skillSend.selectedSkills, ['review']);
   await page.getByRole('button', { name: '停止任务', exact: true }).click();
   await composer.fill('');
   const conversationA = page.locator('.conversation-link').filter({ hasText: '优化首页交互' });

@@ -679,7 +679,7 @@ async function runTurn(
     }
     await session.send(
       text,
-      [context, nativeContext].filter(Boolean).join('\n\n') || undefined,
+      [context, skillContext, nativeContext].filter(Boolean).join('\n\n') || undefined,
       selectedElement,
       modelSelection,
       selectedProviderSkills,
@@ -1175,12 +1175,12 @@ async function invoke(action: string, payload: unknown) {
             };
           })
         : [];
-      const selectedSkillExpectations = codexExpected.filter((item) => item.providerId.startsWith('codex:')).map((item) => ({ ...item, providerId: item.providerId.slice(6) }));
+      const selectedSkillExpectations = codexExpected.filter((item) => item.providerId === 'codex');
       const selected = selectedRef ? browser.getState().selectedElement : undefined;
       if (selectedRef && selected?.ref !== selectedRef)
         throw new Error('选中的元素已变化，请重新选取后发送。');
       const parsed = parseLeadingSkillReferences(string(data.text));
-      const explicitSkills = [...selectedSkillNames, ...parsed.names];
+      const explicitSkills = [...new Set([...selectedSkillNames, ...parsed.names])];
       const taskText = parsed.names.length ? parsed.text : string(data.text);
       const conversation = data.id ? getConversation(data.id) : createConversation();
       return startTurn(conversation, taskText, context, false, selected, explicitSkills, selectedSkillExpectations);
