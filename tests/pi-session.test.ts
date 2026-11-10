@@ -87,6 +87,18 @@ async function until(check: () => boolean) {
   throw new Error('Fixture condition timed out');
 }
 
+test('Pi 关闭等待可取消启动且不留下晚到的进程', async () => {
+  const f = await fixture();
+  try {
+    const preparing = f.session.prepare().catch(() => {});
+    await f.session.closeAndWait();
+    await preparing;
+    assert.equal(f.session.isClosed, true);
+    assert.equal(f.session.isReady, false);
+    await f.session.closeAndWait();
+  } finally { await f.cleanup(); }
+});
+
 test('Pi 扩展目录为空时仍提供可执行的内置 RPC 指令', async () => {
   const f = await fixture('empty-catalog');
   try {

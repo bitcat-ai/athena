@@ -42,6 +42,7 @@ export interface AgentSession {
     selection?: ModelSelection,
   ): Promise<void>;
   interrupt(): Promise<void>;
+  closeAndWait(): Promise<void>;
   resolveApproval(id: string, approved: boolean): void;
   resolveUserInput(id: string, answers: Record<string, string[]>): void;
   close(): void;

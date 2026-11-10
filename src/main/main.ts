@@ -21,6 +21,7 @@ import { dispatchBrowserAction } from './browser-actions';
 import { createCodexUpdateChecker, detectAgents } from './agents';
 import { createAgentSession } from './agent-factory';
 import type { AgentSession } from './agent-session';
+import { recordNativeSession } from './conversation-deletion';
 import { conversationAgent, conversationModelSelection, supportsBrowser } from '../shared/agents';
 import { NeoBrowserRuntime } from './neo-browser';
 import { FeishuConnector } from './feishu';
@@ -470,9 +471,12 @@ function getSession(
     session = undefined;
   }
   if (!session) {
-    session = createAgentSession(conversationAgent(conversation), {
-      ...nativeSessionOptions(),
-      workspace: store.data.settings.workspace,
+    const workspace = store.data.settings.workspace;
+    const nativeOptions = nativeSessionOptions();
+    const agent = conversationAgent(conversation);
+    session = createAgentSession(agent, {
+      ...nativeOptions,
+      workspace,
       executablePath,
       sessionId: conversation.agentSessionId,
       sessionToolsFingerprint: conversation.agentToolsFingerprint,
@@ -503,6 +507,19 @@ function getSession(
           connectionState({ status: 'error', conversationId: conversation.id, message });
       },
       onEvent: (event: AgentEvent) => {
+        const nativeId = event.type === 'run-started' ? event.threadId
+          : event.type === 'complete' ? event.sessionId : undefined;
+        if (nativeId && store.data.conversations.includes(conversation)) {
+          recordNativeSession(conversation, {
+            agent,
+            id: nativeId,
+            workspace,
+            executablePath,
+            ...(agent === 'pi' ? { storageRoot: nativeOptions.sessionDirectory } : {}),
+            scopeVerified: agent === 'pi',
+          });
+          store.schedule();
+        }
         if (event.type === 'usage') {
           if (usage.update(event.threadId, event.turnId, event.total, event.last)) saveUsage();
           return;

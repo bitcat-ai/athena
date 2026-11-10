@@ -48,6 +48,28 @@ test('workspace persists and interrupted responses do not look live after restar
   }
 });
 
+test('conversation deletion progress persists through workspace reload', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'workbench-store-'));
+  try {
+    const first = new Store(directory);
+    await first.load();
+    first.data.conversations.push({
+      id: 'deleting', title: '删除中', updatedAt: 1, messages: [],
+      deletion: {
+        targets: [{ agent: 'pi', id: 'native', workspace: '/project', storageRoot: '/sessions', scopeVerified: true }],
+        completed: ['["pi","/sessions","/project","native"]'],
+        lastError: '另一个目标删除失败',
+      },
+    });
+    await first.save();
+    const second = new Store(directory);
+    await second.load();
+    assert.deepEqual(second.data.conversations[0].deletion, first.data.conversations[0].deletion);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test('conversation archive timestamp persists through workspace reload', async () => {
   const directory = await mkdtemp(path.join(tmpdir(), 'workbench-store-'));
   try {

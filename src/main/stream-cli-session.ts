@@ -4,6 +4,7 @@ import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import type { AgentSession, AgentSessionOptions } from './agent-session';
+import { closeProcessGroup } from './process-close';
 import type { AgentEvent, BrowserTool, ElementRef, ToolCall } from '../shared/types';
 import {
   unknownTokens,
@@ -53,6 +54,7 @@ interface Run {
   policyDirectory?: string;
   workspaceTrusted?: boolean;
   workspaceTrust?: { id: string; resolve(): void };
+  launch?: Promise<void>;
 }
 
 /** One native JSONL print process per turn; only native IDs may be resumed. No host tool bridge. */
@@ -63,6 +65,7 @@ export class StreamCliSession implements AgentSession {
   private sending = false;
   private selection?: ModelSelection;
   private active?: Run;
+  private children = new Set<ChildProcessWithoutNullStreams>();
   private calls = new Map<string, ToolCall>();
 
   constructor(private options: StreamCliSessionOptions) {
@@ -170,7 +173,7 @@ export class StreamCliSession implements AgentSession {
     this.calls.clear();
     this.emit({ type: 'status', status: 'starting', label: `${this.options.cli} 正在启动` });
     // Launch asynchronously so the returned rejection is attached before a setup failure can settle it.
-    void this.launch(
+    run.launch = this.launch(
       run,
       [prompt, context ? `<task_context>\n${context}\n</task_context>` : '']
         .filter(Boolean)
@@ -289,6 +292,8 @@ export class StreamCliSession implements AgentSession {
       stdio: 'pipe',
     });
     run.child = child;
+    // 保留已结束轮次的进程组，leader 退出不代表后代已退出。
+    this.children.add(child);
     let diagnostic: 'quota' | 'authentication' | undefined;
     let diagnosticTail = '';
     child.stderr.on('data', (chunk: Buffer) => {
@@ -719,6 +724,18 @@ export class StreamCliSession implements AgentSession {
     }
     this.emit({ type: 'status', status: 'idle' });
     run.settleStopped();
+  }
+  async closeAndWait(): Promise<void> {
+    const run = this.active;
+    this.close();
+    if (run) {
+      await run.launch?.catch(() => {});
+      await run.stopped;
+    }
+    for (const child of this.children) {
+      await closeProcessGroup(child);
+      this.children.delete(child);
+    }
   }
   close() {
     if (this.closed) return;

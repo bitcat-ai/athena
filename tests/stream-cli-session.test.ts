@@ -66,11 +66,11 @@ process.stdin.setEncoding('utf8'); process.stdin.on('data',s=>input+=s); process
  const original=process.stdout.write.bind(process.stdout); let split=true;
  process.stdout.write=(s,...rest)=>{if(typeof s==='string'&&s.includes('你')&&split){split=false;const b=Buffer.from(s); const at=b.indexOf(Buffer.from('你'))+1; original(b.subarray(0,at)); original(b.subarray(at)); return true;} return original(s,...rest);};
  if(mode!=='snapshot-only')delta('你\\u2028好');
- if(mode==='slow'||mode==='leader-exits') {
-  const child=cp.spawn(process.execPath,['-e',"process.on('SIGTERM',()=>{});setInterval(()=>{},1000)"],{stdio:'inherit'});
+ if(mode==='slow'||mode==='leader-exits'||mode==='leader-exits-independent-stdio') {
+  const child=cp.spawn(process.execPath,['-e',"process.on('SIGTERM',()=>{});setInterval(()=>{},1000)"],{stdio:mode==='leader-exits-independent-stdio'?'ignore':'inherit'});
   fs.writeFileSync(dir+'/descendant',String(child.pid));
   process.on('SIGTERM',()=>{});
-  if(mode==='leader-exits'){setTimeout(()=>process.exit(7),100);return;}
+  if(mode.startsWith('leader-exits')){setTimeout(()=>process.exit(7),100);return;}
   setInterval(()=>{},1000);return;
  }
  if(mode==='no-result') return;
@@ -530,6 +530,38 @@ test('stream-cli-session: rejects host browser tools rather than silently enabli
     await f.cleanup();
   }
 });
+test('关闭等待必须等到在途参数准备和策略清理结束', async () => {
+  const f = await fixture('gemini');
+  let release!: () => void;
+  let entered!: () => void;
+  const started = new Promise<void>((resolve) => { entered = resolve; });
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  // 仅延迟真实参数准备，保留 Gemini 策略文件创建与清理的实际副作用。
+  const adapter = f.session as any;
+  const argumentsForRun = adapter.arguments.bind(adapter);
+  adapter.arguments = async (...args: unknown[]) => {
+    const result = await argumentsForRun(...args);
+    entered();
+    await gate;
+    return result;
+  };
+  try {
+    const rejected = assert.rejects(f.session.send('task'), /关闭/);
+    await started;
+    let settled = false;
+    const closing = f.session.closeAndWait().then(() => { settled = true; });
+    await rejected;
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(settled, false);
+    release();
+    await closing;
+    await assert.rejects(readFile(path.join(f.directory, 'args.jsonl')), { code: 'ENOENT' });
+  } finally {
+    release();
+    await f.cleanup();
+  }
+});
+
 test('stream-cli-session: closing during Gemini asynchronous policy setup cannot launch a late process', async () => {
   const f = await fixture('gemini');
   try {
@@ -564,6 +596,25 @@ for (const cli of ['claude', 'gemini'] as const)
       await f.cleanup();
     }
   });
+test('流式 CLI 在主进程先退出后关闭等待仍覆盖存活后代', async () => {
+  const f = await fixture('gemini', 'leader-exits-independent-stdio');
+  try {
+    const rejected = assert.rejects(f.session.send('task'), /失败/);
+    await until(async () => {
+      try {
+        return Number(await readFile(path.join(f.directory, 'descendant'), 'utf8')) > 0;
+      } catch { return false; }
+    });
+    const pid = Number(await readFile(path.join(f.directory, 'descendant'), 'utf8'));
+    await rejected;
+    await f.session.closeAndWait();
+    assert.equal(alive(pid), false);
+    await f.session.closeAndWait();
+  } finally {
+    await f.cleanup();
+  }
+});
+
 test('stream-cli-session: descendant is killed even when its group leader has already exited', async () => {
   const f = await fixture('gemini', 'leader-exits');
   try {

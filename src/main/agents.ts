@@ -28,6 +28,7 @@ import {
 
 const execFileAsync = promisify(execFile);
 import { cliEnvironment } from './agent-process';
+import { closeProcessGroup } from './process-close';
 export { cliEnvironment } from './agent-process';
 export { detectAgents } from './agent-discovery';
 
@@ -579,6 +580,13 @@ export class CodexSession implements AgentSession {
 
   close(): void {
     this.shutdown('Codex 会话已关闭');
+  }
+
+  async closeAndWait(): Promise<void> {
+    this.close();
+    await this.startup?.catch(() => {});
+    await this.connection?.catch(() => {});
+    await closeProcessGroup(this.child);
   }
 
   private emit(event: AgentEvent): void {

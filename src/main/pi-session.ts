@@ -4,6 +4,7 @@ import { promisify } from 'node:util';
 import path from 'node:path';
 import { piIsolationArguments } from './agent-discovery';
 import { cliEnvironment } from './agent-process';
+import { closeProcessGroup } from './process-close';
 import type { AgentSession, AgentSessionOptions } from './agent-session';
 import type { AgentEvent, BrowserTool, ElementRef, ToolCall } from '../shared/types';
 import {
@@ -714,6 +715,11 @@ export class PiSession implements AgentSession {
     const timer = setTimeout(() => kill('SIGKILL'), 1500);
     timer.unref();
     this.options.onClose?.(reason);
+  }
+  async closeAndWait(): Promise<void> {
+    this.close();
+    await this.startup?.catch(() => {});
+    await closeProcessGroup(this.child);
   }
   close() {
     this.shutdown('Pi 会话已关闭');

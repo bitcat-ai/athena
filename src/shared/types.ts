@@ -430,6 +430,14 @@ export interface ChatMessage {
   model?: import('./usage').ExecutionModel;
   failure?: string;
 }
+export interface NativeSessionRef {
+  agent: AgentId;
+  id: string;
+  workspace: string;
+  storageRoot?: string;
+  executablePath?: string;
+  scopeVerified: boolean;
+}
 export interface Conversation {
   id: string;
   title: string;
@@ -441,6 +449,8 @@ export interface Conversation {
   agentSessionId?: string;
   agentToolsFingerprint?: string;
   previousAgentSessionIds?: string[];
+  nativeSessionRefs?: NativeSessionRef[];
+  deletion?: { targets: NativeSessionRef[]; completed: string[]; lastError?: string };
   workspace?: string;
   remoteChatId?: string;
   archivedAt?: number;
