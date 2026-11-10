@@ -12,6 +12,7 @@ const tail = (text: string, lines = 12) => text.trimEnd().split('\n').slice(-lin
 export function OutcomeCard({
   message,
   outcome,
+  readOnly,
   busy,
   onConfirm,
   onShowBrowser,
@@ -20,6 +21,8 @@ export function OutcomeCard({
 }: {
   message: ChatMessage;
   outcome: 'blocked' | 'failed';
+  /** Leaves out the actions that change the conversation or continue it. */
+  readOnly?: boolean;
   busy: boolean;
   onConfirm: () => void;
   onShowBrowser: () => void;
@@ -45,17 +48,19 @@ export function OutcomeCard({
             ? `要核对的是「${summary}」。页面上没有读到这处改动。`
             : summary || '操作结果尚未核对，请先检查页面。'}
         </p>
-        <div className="req-foot">
-          <Button size="sm" variant="ghost" onPress={onConfirm}>
-            标记为已完成
-          </Button>
-          <Button size="sm" variant="secondary" onPress={onShowBrowser}>
-            查看网页 ↗
-          </Button>
-          <Button size="sm" variant="primary" isDisabled={busy} onPress={onFollowUp}>
-            再核对一次
-          </Button>
-        </div>
+        {!readOnly && (
+          <div className="req-foot">
+            <Button size="sm" variant="ghost" onPress={onConfirm}>
+              标记为已完成
+            </Button>
+            <Button size="sm" variant="secondary" onPress={onShowBrowser}>
+              查看网页 ↗
+            </Button>
+            <Button size="sm" variant="primary" isDisabled={busy} onPress={onFollowUp}>
+              再核对一次
+            </Button>
+          </div>
+        )}
       </div>
     );
   }
@@ -90,16 +95,20 @@ export function OutcomeCard({
       ) : (
         <pre>{message.failure || '这一轮没有完成。'}</pre>
       )}
-      <div className="req-foot">
-        {failed && (
-          <Button size="sm" variant="ghost" onPress={() => onShowOutput(failed.tool.id)}>
-            查看完整输出
-          </Button>
-        )}
-        <Button size="sm" variant="primary" isDisabled={busy} onPress={onFollowUp}>
-          {failed ? '修复并重试' : '重试'}
-        </Button>
-      </div>
+      {(failed || !readOnly) && (
+        <div className="req-foot">
+          {failed && (
+            <Button size="sm" variant="ghost" onPress={() => onShowOutput(failed.tool.id)}>
+              查看完整输出
+            </Button>
+          )}
+          {!readOnly && (
+            <Button size="sm" variant="primary" isDisabled={busy} onPress={onFollowUp}>
+              {failed ? '修复并重试' : '重试'}
+            </Button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -33,7 +33,7 @@ export async function checkTaskPanels(page: Page) {
   await page.getByRole('button', { name: '展开浏览器', exact: true }).click();
   await page
     .locator('.conversation-list')
-    .getByRole('button', { name: /优化首页交互/ })
+    .getByRole('button', { name: /^优化首页交互/ })
     .click();
   const draft = page.getByRole('textbox', { name: '发送给 Agent 的任务' });
   const before = ['这段草稿', '属于当前对话', '请保留', '所有内容', '以及', '换行'].join('\n');
@@ -63,7 +63,7 @@ export async function checkTaskPanels(page: Page) {
   });
   // A request from another conversation never takes over: it shows in the sidebar and waits.
   const request = page.getByRole('group', { name: '需要你的回答' });
-  const waitingRow = page.locator('.conversation-list').getByRole('button', { name: /核对记录/ });
+  const waitingRow = page.locator('.conversation-list').getByRole('button', { name: /^核对记录/ });
   await expect(waitingRow.locator('em')).toHaveText('等你回答');
   await expect(waitingRow.locator('.phase-glyph.g-wait.still')).toBeVisible();
   await expect(page.getByRole('region', { name: '工作台提示' })).toHaveCount(0);

@@ -27,6 +27,13 @@ import { copyText } from './clipboard';
 import { FeishuConnector } from './feishu';
 import { TurnNotifications } from './notifications';
 import { Store } from './store';
+import {
+  assertOpenConversation,
+  defaultConversation,
+  deleteConversationRecord,
+  feishuConversation,
+  setConversationArchived,
+} from './conversation-records';
 import { UsageStore } from './usage';
 import { managedCodexPath, OnboardingRuntime } from './onboarding';
 import type { ModelOption } from '../shared/usage';
@@ -124,7 +131,7 @@ let active:
 /** Turn errors already shown inline on their message; they must not also raise a toast. */
 const inlineFailures = new WeakSet<object>();
 let startingTurn = false;
-let preparingTurn: { cancelled: boolean } | undefined;
+let preparingTurn: { cancelled: boolean; conversationId: string } | undefined;
 let lastFrame: BrowserFrame | undefined;
 let demoServer: Server | undefined;
 let demoUrl = '';
@@ -201,16 +208,25 @@ function assertTaskEnvironment() {
 }
 function selectedConversation() {
   return (
-    store.data.conversations.find(
-      (item) =>
-        item.id === selectedConversationId &&
-        (!item.workspace || item.workspace === store.data.settings.workspace),
-    ) ??
-    store.data.conversations.find(
-      (item) => !item.workspace || item.workspace === store.data.settings.workspace,
-    ) ??
-    createConversation()
+    defaultConversation(
+      store.data.conversations,
+      store.data.settings.workspace,
+      selectedConversationId,
+    ) ?? createConversation()
   );
+}
+/** 正在执行或正在启动任务的对话；它在任务结束前不能归档或删除。 */
+function runningConversationId() {
+  return active?.conversationId ?? preparingTurn?.conversationId;
+}
+/** 归档或删除后，这段对话不再占用 CLI 连接，也不再是默认打开的对话。 */
+function releaseConversation(id: string) {
+  warming.delete(id);
+  const session = sessions.get(id);
+  sessions.delete(id);
+  session?.close();
+  if (selectedConversationId === id) selectedConversationId = undefined;
+  if (codexConnection.conversationId === id) connectionState({ status: 'idle' });
 }
 async function listModels(refresh = false, conversation?: Conversation) {
   assertTaskEnvironment();
@@ -300,6 +316,7 @@ function invalidateCliConfiguration() {
 function prepareConversation(conversation: Conversation): Promise<void> {
   try {
     assertTaskEnvironment();
+    assertOpenConversation(store.data.conversations, conversation);
   } catch (error) {
     return Promise.reject(error);
   }
@@ -332,6 +349,8 @@ function prepareConversation(conversation: Conversation): Promise<void> {
     if (quitting || revision !== connectionRevision) throw new Error('连接配置已改变');
     // A send may have started while the browser connection was being prepared.
     if (active || startingTurn) return;
+    // 等待浏览器期间这段对话可能已被归档或删除，不再为它启动 CLI。
+    assertOpenConversation(store.data.conversations, conversation);
     const session = getSession(conversation, info.path, toolsFor(conversation));
     await session.prepare(conversationModelSelection(store.data.settings, conversation));
     if (quitting || revision !== connectionRevision || sessions.get(conversation.id) !== session)
@@ -674,6 +693,7 @@ async function runTurn(
 ) {
   assertTaskEnvironment();
   if (active || startingTurn) throw new Error('当前任务还在进行，请先停止或等待完成');
+  assertOpenConversation(store.data.conversations, conversation);
   if (conversation.workspace && conversation.workspace !== store.data.settings.workspace)
     throw new Error('这段对话属于另一个工作目录。请切换回原目录，或新建对话。');
   const info = agentInfo(conversationAgent(conversation));
@@ -707,7 +727,7 @@ async function runTurn(
   conversation.messages.push(user, assistant);
   conversation.updatedAt = Date.now();
   startingTurn = true;
-  const preparing = { cancelled: false };
+  const preparing = { cancelled: false, conversationId: conversation.id };
   preparingTurn = preparing;
   await store.save().catch((error) => {
     startingTurn = false;
@@ -954,6 +974,7 @@ function startTurn(
 ) {
   assertTaskEnvironment();
   if (active || startingTurn) throw new Error('当前任务还在进行，请先停止');
+  assertOpenConversation(store.data.conversations, conversation);
   void runTurn(conversation, text, context, 'desktop', readonly, selectedElement, mentions).catch(
     (error) => {
       // A failure that already sits on its message is not repeated as a toast.
@@ -977,10 +998,8 @@ async function handleFeishuMessage(message: FeishuMessage) {
     return;
   }
   const conversation =
-    store.data.conversations.find(
-      (item) =>
-        item.remoteChatId === message.chatId && item.workspace === store.data.settings.workspace,
-    ) || createConversation(`飞书 · ${message.text.slice(0, 22)}`);
+    feishuConversation(store.data.conversations, store.data.settings.workspace, message.chatId) ||
+    createConversation(`飞书 · ${message.text.slice(0, 22)}`);
   conversation.remoteChatId = message.chatId;
   let reply: string;
   try {
@@ -1310,6 +1329,28 @@ async function invoke(action: string, payload: unknown) {
     case 'conversation:stop':
       await stopTurn();
       return true;
+    case 'conversation:archive': {
+      const data = record(payload);
+      if (typeof data.archived !== 'boolean') throw new Error('请求格式不正确');
+      const conversation = await setConversationArchived(
+        store,
+        string(data.conversationId, 100),
+        data.archived,
+        runningConversationId(),
+      );
+      if (data.archived) releaseConversation(conversation.id);
+      emit({ type: 'conversation:updated', conversation });
+      return conversation;
+    }
+    case 'conversation:delete': {
+      const conversation = await deleteConversationRecord(
+        store,
+        string(record(payload).conversationId, 100),
+        runningConversationId(),
+      );
+      releaseConversation(conversation.id);
+      return true;
+    }
     case 'agent:approval': {
       const data = record(payload);
       if (
@@ -1376,6 +1417,7 @@ async function invoke(action: string, payload: unknown) {
     case 'conversation:confirm-outcome': {
       const data = record(payload);
       const conversation = getConversation(data.conversationId);
+      assertOpenConversation(store.data.conversations, conversation);
       const message = conversation.messages.find((item) => item.id === string(data.messageId, 100));
       const phase = message && phaseOfMessage(message);
       if (!message || phase?.kind !== 'ended' || phase.outcome !== 'blocked')

@@ -12,10 +12,13 @@ import {
 } from '@heroui-pro/react';
 import athenaLogo from './assets/brand/athena-profile.png';
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
+  Archive01Icon,
   ArrowDown01Icon,
+  ArrowLeft01Icon,
   ArrowUpRight01Icon,
   ChartNoAxesCombinedIcon,
   CircleIcon,
@@ -50,6 +53,7 @@ import { UsagePanel } from './UsagePanel';
 import { AgentIcon } from './AgentIcon';
 import { WorkbenchNotices, useCodexUpdate } from './WorkbenchNotices';
 import { ConversationSearch } from './ConversationSearch';
+import { ConversationMenu, DeleteConversationDialog } from './ConversationMenu';
 import { UserMenu, WebContextMenu, useAppearance } from './HomeMenus';
 import { Onboarding } from './Onboarding';
 import type { OnboardingState } from '../shared/onboarding';
@@ -69,6 +73,7 @@ import {
   conversationModelSelection,
   supportsBrowser,
 } from '../shared/agents';
+import { isArchived } from '../shared/types';
 import type {
   ElementMention,
   AgentInfo,
@@ -207,6 +212,9 @@ export default function App() {
   const [feishu, setFeishu] = useState<FeishuState>(emptyFeishu);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedId, setConversationId] = useState<string>();
+  const [showArchived, setShowArchived] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Conversation>();
+  const [deleting, setDeleting] = useState(false);
   const [recordings, setRecordings] = useState<Recording[]>([]);
   const [liveSteps, setLiveSteps] = useState<RecordedStep[]>([]);
   const [drafts, setDrafts] = useState<Record<string, DraftEntry>>({});
@@ -237,8 +245,13 @@ export default function App() {
   const workspaceConversations = conversations.filter(
     (item) => !item.workspace || item.workspace === settings.workspace,
   );
+  const openConversations = workspaceConversations.filter((item) => !isArchived(item));
+  const archivedConversations = workspaceConversations.filter(isArchived);
+  // 没有已归档的对话时回到对话列表，之后再归档也不会被带进归档列表。
+  if (showArchived && !archivedConversations.length) setShowArchived(false);
   const conversation = workspaceConversations.find((item) => item.id === selectedId);
   const conversationId = conversation?.id;
+  const archived = Boolean(conversation && isArchived(conversation));
   const conversationRequests = pendingRequests.filter(
     (item) => item.conversationId === conversationId,
   );
@@ -246,9 +259,11 @@ export default function App() {
   const draftEntry = drafts[draftKey];
   const draft = draftEntry?.text ?? '';
   // Before the first send there is no host ID. Keep that draft reachable after navigation.
-  const sidebarConversations = drafts[JSON.stringify([settings.workspace, null])]?.text
-    ? [{ id: undefined, title: '未发送草稿', messages: [] }, ...workspaceConversations]
-    : workspaceConversations;
+  const sidebarConversations = showArchived
+    ? archivedConversations
+    : drafts[JSON.stringify([settings.workspace, null])]?.text
+      ? [{ id: undefined, title: '未发送草稿', messages: [] }, ...openConversations]
+      : openConversations;
   const field = draftEntry?.field ?? EMPTY_FIELD;
   const storeField = (next: TokenFieldValue<ElementMention>) =>
     setDrafts((previous) => ({ ...previous, [draftKey]: { text: next.toString(), field: next } }));
@@ -450,7 +465,11 @@ export default function App() {
     );
     const view = viewedConversation.current;
     // A host-created conversation must not take over an unsent first draft.
-    if (!view.hasDraft && (!next.workspace || next.workspace === view.workspace))
+    if (
+      !isArchived(next) &&
+      !view.hasDraft &&
+      (!next.workspace || next.workspace === view.workspace)
+    )
       setConversationId((previous) => previous ?? next.id);
   }, []);
   useEffect(() => {
@@ -643,7 +662,9 @@ export default function App() {
         setConversations(snapshot.conversations);
         setRecordings(snapshot.recordings);
         const scoped = snapshot.conversations.filter(
-          (item) => !item.workspace || item.workspace === snapshot.settings.workspace,
+          (item) =>
+            !isArchived(item) &&
+            (!item.workspace || item.workspace === snapshot.settings.workspace),
         );
         setConversationId(
           scoped.find((item) => item.id === snapshot.codexConnection?.conversationId)?.id ??
@@ -671,6 +692,7 @@ export default function App() {
       !workbenchMounted ||
       onboardingVisible ||
       !conversationId ||
+      archived ||
       !currentAgent?.supported
     )
       return;
@@ -692,12 +714,17 @@ export default function App() {
     workbenchMounted,
     onboardingVisible,
     conversationId,
+    archived,
     currentAgentId,
     currentAgent?.supported,
     settings.workspace,
     currentSelection?.model,
     currentSelection?.effort,
   ]);
+  useEffect(() => {
+    // 打开一段未归档的对话时，侧栏回到对话列表。
+    if (conversationId && !archived) setShowArchived(false);
+  }, [conversationId, archived]);
   useEffect(() => {
     if (!onboardingVisible && !settingsTab && !showUsage && stickToBottom.current)
       scroll.current?.scrollTo({ top: scroll.current.scrollHeight, behavior: 'instant' });
@@ -941,7 +968,9 @@ export default function App() {
     }
     if (workspacePath !== settings.workspace) {
       setConversationId(
-        conversations.find((item) => !item.workspace || item.workspace === workspacePath)?.id,
+        conversations.find(
+          (item) => !isArchived(item) && (!item.workspace || item.workspace === workspacePath),
+        )?.id,
       );
       setDraft('');
       setInspectorOpen(false);
@@ -973,6 +1002,66 @@ export default function App() {
     setSettingsTab(null);
     setConversationId(id);
     stickToBottom.current = true;
+  };
+  const rowKey = (item: { id?: string }) => item.id ?? 'unsent-draft';
+  /** 这一行离开列表后接手键盘焦点的相邻对话：优先下一行，其次上一行。 */
+  const neighborKey = (id: string) => {
+    const index = sidebarConversations.findIndex((item) => item.id === id);
+    const neighbor = sidebarConversations[index + 1] ?? sidebarConversations[index - 1];
+    return neighbor && rowKey(neighbor);
+  };
+  /** 被操作的那一行消失后焦点会落到页面之外：交给相邻的对话，没有就交给“新对话”。 */
+  const focusConversationRow = (key?: string) => {
+    if (document.activeElement !== document.body) return;
+    const nav = document.querySelector<HTMLElement>('.athena-sidebar');
+    const row = key
+      ? nav?.querySelector<HTMLElement>(
+          `.conversation-row[data-conversation="${CSS.escape(key)}"] .conversation-link`,
+        )
+      : undefined;
+    (
+      row ??
+      nav?.querySelector<HTMLElement>('.conversation-link') ??
+      nav?.querySelector<HTMLElement>('.new-conversation')
+    )?.focus();
+  };
+  /** 归档或恢复一段对话，以宿主保存后的结果为准。 */
+  const setArchived = async (item: Conversation, archive: boolean) => {
+    const next = neighborKey(item.id);
+    const result = await action<Conversation>('conversation:archive', {
+      conversationId: item.id,
+      archived: archive,
+    });
+    if (!result) return;
+    flushSync(() => {
+      upsert(result);
+      if (archive) setConversationId((previous) => (previous === item.id ? undefined : previous));
+      else {
+        setShowArchived(false);
+        selectConversation(result.id);
+      }
+    });
+    if (archive) focusConversationRow(next);
+    else focusComposer();
+    showToast(archive ? '已归档对话' : '已恢复对话');
+  };
+  /** 确认后才删除 Athena 保存的这段记录；宿主拒绝时这一行原样保留。 */
+  const confirmDelete = async () => {
+    if (!deleteTarget || deleting) return;
+    const { id } = deleteTarget;
+    const next = neighborKey(id);
+    setDeleting(true);
+    const deleted = await action<boolean>('conversation:delete', { conversationId: id });
+    flushSync(() => {
+      setDeleting(false);
+      setDeleteTarget(undefined);
+      if (!deleted) return;
+      setConversations((previous) => previous.filter((item) => item.id !== id));
+      setConversationId((previous) => (previous === id ? undefined : previous));
+    });
+    if (!deleted) return;
+    focusConversationRow(next);
+    showToast('已删除对话');
   };
   const showCurrentPage = () => {
     if (!draft.trim()) setDraft('检查当前页面的主要内容和可交互元素。');
@@ -1510,27 +1599,53 @@ export default function App() {
                 <span>{workspaceLabel}</span>
                 <Icon icon={ArrowDown01Icon} size={13} />
               </ActionButton>
-              <div className="sidebar-section-label">对话</div>
-              <Sidebar.Content className="conversation-list" aria-label="对话列表">
+              <div className="sidebar-section-row">
+                <div className="sidebar-section-label">{showArchived ? '已归档' : '对话'}</div>
+                {archivedConversations.length > 0 && (
+                  <ActionButton
+                    className="archived-toggle"
+                    onPress={() => setShowArchived((value) => !value)}
+                  >
+                    <Icon icon={showArchived ? ArrowLeft01Icon : Archive01Icon} size={14} />
+                    <span>{showArchived ? '返回对话列表' : '已归档'}</span>
+                  </ActionButton>
+                )}
+              </div>
+              <Sidebar.Content
+                className="conversation-list"
+                aria-label={showArchived ? '已归档的对话' : '对话列表'}
+              >
                 {sidebarConversations.length ? (
                   sidebarConversations.map((item) => {
+                    const current = item.id === conversationId && !showUsage && !settingsTab;
+                    const running = item.messages.some((message) => message.status === 'streaming');
                     const echo = conversationEcho(item);
                     return (
-                      <ActionButton
-                        key={item.id ?? 'unsent-draft'}
-                        className={`conversation-link ${item.id === conversationId && !showUsage && !settingsTab ? 'active' : ''}`}
-                        aria-current={
-                          item.id === conversationId && !showUsage && !settingsTab
-                            ? 'page'
-                            : undefined
-                        }
-                        onPress={() => selectConversation(item.id)}
-                        title={item.title}
+                      <div
+                        key={rowKey(item)}
+                        className={`conversation-row ${current ? 'is-current' : ''}`}
+                        data-conversation={rowKey(item)}
                       >
-                        {echo && <PhaseGlyph kind={echo.glyph} still={echo.still} />}
-                        <span>{item.title}</span>
-                        {echo && <em>{echo.label}</em>}
-                      </ActionButton>
+                        <ActionButton
+                          className={`conversation-link ${current ? 'active' : ''}`}
+                          aria-current={current ? 'page' : undefined}
+                          onPress={() => selectConversation(item.id)}
+                          title={item.title}
+                        >
+                          {echo && <PhaseGlyph kind={echo.glyph} still={echo.still} />}
+                          <span>{item.title}</span>
+                          {echo && <em>{echo.label}</em>}
+                        </ActionButton>
+                        {item.id && (
+                          <ConversationMenu
+                            title={item.title}
+                            archived={isArchived(item)}
+                            running={running}
+                            onArchive={() => void setArchived(item, !isArchived(item))}
+                            onDelete={() => setDeleteTarget(item)}
+                          />
+                        )}
+                      </div>
                     );
                   })
                 ) : (
@@ -1733,6 +1848,7 @@ export default function App() {
                                         (pending) => pending.messageId === message.id,
                                       )}
                                       last={message === messages.at(-1)}
+                                      readOnly={archived}
                                       busy={busy}
                                       onAction={action}
                                       onShowBrowser={() => setBrowserVisible(true)}
@@ -1819,8 +1935,21 @@ export default function App() {
                       />
                     </Tabs.Panel>
                     <div className="composer-area">
+                      {archived && conversation && (
+                        <div className="archived-notice">
+                          <Icon icon={Archive01Icon} size={16} />
+                          <span>这段对话已归档，恢复后可以继续。</span>
+                          <ActionButton
+                            variant="secondary"
+                            onPress={() => void setArchived(conversation, false)}
+                          >
+                            恢复对话
+                          </ActionButton>
+                        </div>
+                      )}
                       <PromptInput
                         ref={composer}
+                        hidden={archived}
                         className={`composer ${busy ? 'is-busy' : ''}`}
                         status={busy ? 'streaming' : 'ready'}
                         lockInputOnRun={false}
@@ -1969,7 +2098,7 @@ export default function App() {
                           </PromptInput.Toolbar>
                         </PromptInput.Shell>
                       </PromptInput>
-                      {!loaded ? (
+                      {archived ? null : !loaded ? (
                         <p className="composer-availability" role="status">
                           <Icon icon={Loading02Icon} size={14} className="spin" />
                           正在读取本机配置…
@@ -2002,7 +2131,8 @@ export default function App() {
                           </div>
                         )
                       )}
-                      {loaded &&
+                      {!archived &&
+                        loaded &&
                         currentAgent?.available &&
                         currentAgent.authentication !== 'missing' &&
                         currentConnection?.status === 'error' && (
@@ -2019,7 +2149,7 @@ export default function App() {
                             </ActionButton>
                           </div>
                         )}
-                      {isHome && (
+                      {isHome && !archived && (
                         <PromptSuggestion className="mt-7">
                           <PromptSuggestion.Items className="welcome-suggestions">
                             <PromptSuggestion.Item onPress={showCurrentPage}>
@@ -2160,6 +2290,14 @@ export default function App() {
               onSelect={selectConversation}
               onNew={() => void newConversation()}
             />
+            {deleteTarget && (
+              <DeleteConversationDialog
+                title={deleteTarget.title}
+                pending={deleting}
+                onCancel={() => setDeleteTarget(undefined)}
+                onConfirm={() => void confirmDelete()}
+              />
+            )}
             {toast && (
               <div
                 className={`app-toast ${toast.error ? 'error' : ''}`}

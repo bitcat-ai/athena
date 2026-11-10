@@ -339,7 +339,7 @@ try {
   await page.goto(`http://127.0.0.1:${port}`);
   const list = page.locator('.conversation-list');
   const open = async (state: string) => {
-    await list.getByRole('button', { name: `状态 ${state}` }).click();
+    await list.getByRole('button', { name: new RegExp(`^状态 ${state}`) }).click();
     await expect(page.locator('.topbar-title')).toContainText(`状态 ${state}`);
   };
   const activity = page.locator('.activity');
