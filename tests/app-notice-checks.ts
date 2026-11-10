@@ -11,7 +11,7 @@ export async function checkAppNotices(page: Page) {
   // Requests live in the conversation that raised them; the notice area only reports app news.
   const cards = page.locator('.req');
   const conversations = page.locator('.conversation-list');
-  const row = (title: RegExp) => conversations.getByRole('button', { name: title });
+  const row = (title: RegExp) => conversations.locator('.conversation-link', { hasText: title });
   const close = notice.getByRole('button', { name: '收起提醒' });
   const update = notice.getByRole('button', { name: '查看更新说明' });
   const releaseUrl = 'https://github.com/openai/codex/releases/tag/rust-v0.102.0';
@@ -71,7 +71,7 @@ export async function checkAppNotices(page: Page) {
   await page.getByRole('menuitemradio', { name: '深色', exact: true }).click();
   await page
     .locator('.conversation-list')
-    .getByRole('button', { name: /检查网页表单/ })
+    .getByRole('button', { name: /^检查网页表单/ })
     .click();
   await page.getByRole('button', { name: '展开浏览器', exact: true }).click();
   const draft = page.getByRole('textbox', { name: '发送给 Agent 的任务' });

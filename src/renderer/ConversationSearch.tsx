@@ -9,7 +9,7 @@ import {
   XIcon,
 } from '@hugeicons-pro/core-stroke-rounded';
 import { Icon } from './ui';
-import type { Conversation } from '../shared/types';
+import { isArchived, type Conversation } from '../shared/types';
 
 export function ConversationSearch({
   open,
@@ -32,7 +32,11 @@ export function ConversationSearch({
   const results = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase();
     return [...conversations]
-      .filter((conversation) => !conversation.workspace || conversation.workspace === workspace)
+      .filter(
+        (conversation) =>
+          !isArchived(conversation) &&
+          (!conversation.workspace || conversation.workspace === workspace),
+      )
       .sort((a, b) => b.updatedAt - a.updatedAt)
       .flatMap((conversation) => {
         const message = needle

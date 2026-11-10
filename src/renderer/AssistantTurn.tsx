@@ -17,6 +17,7 @@ export function AssistantTurn({
   agent,
   requests,
   last,
+  readOnly,
   busy,
   onAction,
   onShowBrowser,
@@ -30,6 +31,8 @@ export function AssistantTurn({
   requests: PendingAgentRequest[];
   /** Only the latest turn can be followed up. */
   last: boolean;
+  /** An archived conversation is only read: its outcome is shown without follow-up actions. */
+  readOnly?: boolean;
   busy: boolean;
   onAction: <T = unknown>(action: string, payload?: unknown) => Promise<T>;
   onShowBrowser: () => void;
@@ -90,6 +93,7 @@ export function AssistantTurn({
         <OutcomeCard
           message={message}
           outcome={outcome}
+          readOnly={readOnly}
           busy={busy}
           onConfirm={() => void onAction('conversation:confirm-outcome', target)}
           onShowBrowser={onShowBrowser}

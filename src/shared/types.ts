@@ -465,6 +465,12 @@ export interface Conversation {
   previousAgentSessionIds?: string[];
   workspace?: string;
   remoteChatId?: string;
+  /** 归档时间。缺省表示未归档；归档只是从主列表收起，记录本身保留。 */
+  archivedAt?: number;
+}
+/** 归档的对话保留全部记录，但不出现在主列表，也不再准备连接或接收新任务。 */
+export function isArchived(conversation: Pick<Conversation, 'archivedAt'>): boolean {
+  return conversation.archivedAt !== undefined;
 }
 export interface FeishuState {
   status: 'restoring' | 'disconnected' | 'configuring' | 'connecting' | 'connected' | 'error';

@@ -2116,10 +2116,59 @@ select {
 .sidebar-section-label {
   padding: 12px 10px 6px;
 }
+/* 标题与“已归档”入口同处一行；入口比标题高，由这一行统一居中。 */
+.sidebar-section-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 34px;
+  padding-top: 6px;
+}
+.sidebar-section-row .sidebar-section-label {
+  padding-block: 0;
+}
+.archived-toggle {
+  min-height: 28px;
+  padding-inline: 8px;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 11px;
+}
 .conversation-link {
   font-size: 13px;
   border-radius: 16px;
   padding-inline: 10px;
+}
+/* 每段对话右侧的操作菜单：平时收起，悬停、聚焦、展开或当前对话时显示。 */
+.conversation-row {
+  position: relative;
+}
+.conversation-row .conversation-link {
+  padding-right: 36px;
+}
+.conversation-menu-trigger {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  min-height: 28px;
+  margin-top: -14px;
+  border-radius: 50%;
+  color: var(--secondary);
+  opacity: 0;
+}
+.conversation-row:hover .conversation-menu-trigger,
+.conversation-row:focus-within .conversation-menu-trigger,
+.conversation-row.is-current .conversation-menu-trigger,
+.conversation-menu-trigger[aria-expanded='true'] {
+  opacity: 1;
+}
+@media (hover: none) {
+  .conversation-menu-trigger {
+    opacity: 1;
+  }
 }
 .conversation-link.active,
 .sidebar-settings.active,
@@ -2234,6 +2283,36 @@ select {
   margin: 12px 4px 0;
   color: var(--secondary);
   font-size: 12px;
+}
+/* 已归档的对话只读：输入区的位置换成说明和恢复入口，沿用输入区的表面。 */
+.archived-notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 56px;
+  padding: 12px 12px 12px 18px;
+  border-radius: 24px;
+  background: var(--surface);
+  box-shadow: var(--surface-shadow);
+  color: var(--secondary);
+  font-size: 13px;
+}
+.archived-notice > svg {
+  flex: none;
+}
+.archived-notice > span {
+  flex: 1;
+  min-width: 0;
+}
+:is(.dark, [data-theme='dark']) .archived-notice {
+  background: var(--surface-secondary);
+}
+.conversation-delete-dialog [data-slot='alert-dialog-body'] p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.conversation-delete-dialog [data-slot='alert-dialog-body'] p + p {
+  margin-top: 8px;
 }
 .composer-footer {
   flex-shrink: 0;
@@ -2364,7 +2443,8 @@ select {
 }
 .local-user-menu,
 .web-context-menu,
-.appearance-menu {
+.appearance-menu,
+.conversation-menu {
   border: 0;
   border-radius: 22px;
   padding: 8px;
@@ -2384,6 +2464,7 @@ select {
 .local-user-menu [role='menuitem'],
 .local-user-menu [role='menuitemradio'],
 .web-context-menu [role='menuitem'],
+.conversation-menu [role='menuitem'],
 .appearance-menu [role='menuitemradio'] {
   min-height: 40px;
   border-radius: 12px;
@@ -2394,8 +2475,13 @@ select {
 .local-user-menu .description {
   font-size: 11px;
 }
-.appearance-menu {
+.appearance-menu,
+.conversation-menu {
   min-width: 180px;
+}
+/* 删除项的图标与文字同为危险色。 */
+.conversation-menu .menu-item--danger svg {
+  color: var(--danger);
 }
 .web-context-menu {
   width: 320px;
@@ -2408,7 +2494,8 @@ select {
   line-height: 20px;
   font-weight: 500;
 }
-.web-context-note {
+.web-context-note,
+.conversation-menu-note {
   font-size: 12px;
   line-height: 18px;
   color: var(--muted);
