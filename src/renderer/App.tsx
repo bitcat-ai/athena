@@ -1,6 +1,16 @@
 import { TurnIcon } from './HoverIcons';
 import { ActionButton, Icon } from './ui';
-import { Button, Card, Dropdown, Label, Description, Input, Tabs, Tooltip } from '@heroui/react';
+import {
+  Button,
+  Card,
+  Dropdown,
+  Label,
+  Description,
+  Input,
+  Menu,
+  Tabs,
+  Tooltip,
+} from '@heroui/react';
 import {
   Sidebar,
   PromptInput,
@@ -49,6 +59,7 @@ import { ElementInspector } from './ElementInspector';
 import { AssistantTurn } from './AssistantTurn';
 import { PhaseGlyph } from './PhaseGlyph';
 import { ModelPicker } from './ModelPicker';
+import { SkillPicker } from './SkillPicker';
 import { UsagePanel } from './UsagePanel';
 import { AgentIcon } from './AgentIcon';
 import { WorkbenchNotices, useCodexUpdate } from './WorkbenchNotices';
@@ -73,12 +84,21 @@ import {
   conversationModelSelection,
   supportsBrowser,
 } from '../shared/agents';
+import type { ProviderSkill } from '../shared/skills';
+import {
+  MAX_SKILLS,
+  buildSkillSubmission,
+  isSkillToken,
+  referencedSkills,
+  slashSkillOptions,
+  type ComposerToken,
+} from './composer-skills';
 import { isArchived } from '../shared/types';
 import type {
   ElementMention,
   AgentInfo,
-  AppEvent,
   AppSnapshot,
+  AppEvent,
   BrowserFrame,
   BrowserState,
   ChatMessage,
@@ -144,19 +164,19 @@ function sessionLabel(info?: AgentInfo, connection?: CodexConnectionState) {
 
 interface DraftEntry {
   text: string;
-  field?: TokenFieldValue<ElementMention>;
+  field?: TokenFieldValue<ComposerToken>;
 }
-const EMPTY_FIELD = new TokenFieldValue<ElementMention>([]);
+const EMPTY_FIELD = new TokenFieldValue<ComposerToken>([]);
 const TOKEN_PATTERN = /^\[ele(\d+)\]$/;
 function fieldFromText(text: string) {
   if (!text) return EMPTY_FIELD;
-  return new TokenFieldValue<ElementMention>([{ type: 'text', text }]).withCaretPosition({
+  return new TokenFieldValue<ComposerToken>([{ type: 'text', text }]).withCaretPosition({
     index: 0,
     offset: text.length,
   });
 }
 /** Next unused [eleN] label; numbers are never reused within a draft so the agent's replies stay unambiguous. */
-function nextToken(field: TokenFieldValue<ElementMention>) {
+function nextToken(field: TokenFieldValue<ComposerToken>) {
   const used = field.segments.map((segment) =>
     segment.type === 'token' ? Number(TOKEN_PATTERN.exec(segment.text)?.[1] ?? 0) : 0,
   );
@@ -201,6 +221,11 @@ export default function App() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [showUsage, setShowUsage] = useState(false);
   const [settings, setSettings] = useState<Settings>({ workspace: '', agent: 'codex' });
+  const [skills, setSkills] = useState<AppSnapshot['skills']>([]);
+  const [providerSkills, setProviderSkills] = useState<ProviderSkill[]>([]);
+  const [providerSkillDiscovery, setProviderSkillDiscovery] = useState<AppSnapshot['providerSkillDiscovery']>();
+  const [pendingExternalConnections, setPendingExternalConnections] = useState<NonNullable<AppSnapshot['pendingExternalConnections']>>([]);
+  const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
   const workspaceLabel =
     settings.workspaceMode === 'personal' ? '不绑定文件夹' : basename(settings.workspace);
   const [agents, setAgents] = useState<AgentInfo[]>([]);
@@ -264,30 +289,42 @@ export default function App() {
       ? [{ id: undefined, title: '未发送草稿', messages: [] }, ...openConversations]
       : openConversations;
   const field = draftEntry?.field ?? EMPTY_FIELD;
-  const storeField = (next: TokenFieldValue<ElementMention>) =>
+  const storeField = (next: TokenFieldValue<ComposerToken>) =>
     setDrafts((previous) => ({ ...previous, [draftKey]: { text: next.toString(), field: next } }));
-  // Page elements live in the draft as inline [eleN] tokens; no trigger characters are needed.
-  const tokens = usePromptInputTokens<ElementMention>({
-    triggers: [],
+  // Page elements live in the draft as inline [eleN] tokens and need no trigger character.
+  // A slash at the start of a word opens the Skills of the current CLI.
+  const tokens = usePromptInputTokens<ComposerToken>({
+    triggers: ['/'],
     value: field,
     onChange: storeField,
   });
+  const skillMenuOpen = tokens.isOpen && tokens.trigger === '/';
+  const skillOptions = slashSkillOptions(providerSkills, providerSkillDiscovery, tokens.query);
+  const chosenSkills = new Set([...selectedSkills, ...referencedSkills(field.segments)]);
+  const skillMenuVisible = skillMenuOpen && skillOptions.length > 0;
+  const skillUnavailable = (name: string) =>
+    chosenSkills.has(name) || chosenSkills.size >= MAX_SKILLS;
+  const insertSkill = (name: string) =>
+    tokens.insertToken(`/${name}`, { value: { skill: name } });
   const focusComposer = () => tokens.inputRef.current?.focus();
   const setDraft = (text: string) => storeField(fieldFromText(text));
   /** Elements referenced by tokens in the current draft, in order of appearance. */
   const mentions = field.segments.flatMap((segment) =>
-    segment.type === 'token' && segment.value ? [segment.value] : [],
+    segment.type === 'token' && segment.value && !isSkillToken(segment.value)
+      ? [segment.value]
+      : [],
   );
   /**
    * Embeds a page element in the draft as an inline token at the caret. Picking the same element
    * again reuses its token, and an inspector edit attaches to that token instead of adding one.
    */
   const insertMention = (element: ElementRef, edit?: ElementEdit, surround?: [string, string]) => {
+    const existing = mentions.find((item) => item.ref === element.ref);
     const index = field.segments.findIndex(
-      (segment) => segment.type === 'token' && segment.value?.ref === element.ref,
+      (segment) => segment.type === 'token' && segment.value === existing,
     );
-    const current = index >= 0 ? field.segments[index] : undefined;
-    const previousEdit = current?.type === 'token' ? current.value?.edit : undefined;
+    const current = existing ? field.segments[index] : undefined;
+    const previousEdit = existing?.edit;
     const token = current?.text ?? nextToken(field);
     const carried = edit ?? previousEdit;
     const mention: ElementMention = {
@@ -298,7 +335,7 @@ export default function App() {
       role: element.role,
       ...(carried ? { edit: carried } : {}),
     };
-    let next: TokenFieldValue<ElementMention>;
+    let next: TokenFieldValue<ComposerToken>;
     if (current) {
       next = field.replaceRangeWithSegments(
         { index, offset: 0 },
@@ -307,7 +344,7 @@ export default function App() {
         false,
       );
     } else if (surround && !field.toString().trim()) {
-      next = new TokenFieldValue<ElementMention>([
+      next = new TokenFieldValue<ComposerToken>([
         { type: 'text', text: surround[0] },
         { type: 'token', text: token, value: mention },
         { type: 'text', text: surround[1] },
@@ -490,6 +527,8 @@ export default function App() {
     const handle = (event: AppEvent) => {
       if (event.type === 'onboarding:state') {
         acceptOnboardingState(event.state);
+      } else if (event.type === 'mcp:connections') {
+        setPendingExternalConnections(event.connections ?? []);
       } else if (event.type === 'codex:state') {
         if (
           event.state.conversationId &&
@@ -644,6 +683,10 @@ export default function App() {
         setLocalUserName(snapshot.localUser?.name || '');
         if (!neoUpdated) setNeo(snapshot.neo ?? { status: 'stopped' });
         setAgents(snapshot.agents);
+        setSkills(snapshot.skills ?? []);
+        setProviderSkills(snapshot.providerSkills ?? []);
+        setProviderSkillDiscovery(snapshot.providerSkillDiscovery);
+        setPendingExternalConnections(snapshot.pendingExternalConnections ?? []);
         if (!codexUpdated) setCodexConnection(snapshot.codexConnection ?? { status: 'idle' });
         if (!browserUpdated) {
           activeBrowserTab.current = snapshot.browser.activeTabId;
@@ -724,6 +767,29 @@ export default function App() {
     // 打开一段未归档的对话时，侧栏回到对话列表。
     if (conversationId && !archived) setShowArchived(false);
   }, [conversationId, archived]);
+  useEffect(() => {
+    if (!loaded || !workbenchMounted || onboardingVisible) return;
+    // Match the existing effect cancellation pattern: old conversation responses
+    // must never populate the new conversation's menu.
+    let disposed = false;
+    void window.workbench.invoke<AppSnapshot['providerSkillDiscovery']>('skills:list', { conversationId })
+      .then((discovery) => {
+        if (disposed) return;
+        setProviderSkills(discovery?.skills ?? []);
+        setProviderSkillDiscovery(discovery);
+      })
+      .catch((error) => {
+        if (!disposed) {
+          setProviderSkills([]);
+          setProviderSkillDiscovery({
+            status: 'unavailable', source: 'provider',
+            provider: { id: currentAgentId, name: currentAgent?.name ?? currentAgentId }, skills: [],
+            diagnostics: [{ code: 'capability-degraded', message: 'Provider Skills 当前不可用；可不登录继续使用其他功能' }],
+          });
+        }
+      });
+    return () => { disposed = true; };
+  }, [loaded, workbenchMounted, onboardingVisible, conversationId, currentAgentId, settings.workspace, skillMenuOpen]);
   useEffect(() => {
     if (!onboardingVisible && !settingsTab && !showUsage && stickToBottom.current)
       scroll.current?.scrollTo({ top: scroll.current.scrollHeight, behavior: 'instant' });
@@ -846,10 +912,22 @@ export default function App() {
     )
       return;
     setInspectorOpen(false);
+    // Skills picked in the toolbar belong to the workspace and inline references to the CLI.
+    const submission = buildSkillSubmission({
+      segments: field.segments,
+      picked: selectedSkills,
+      localSkills: skills ?? [],
+      providerSkills,
+      discovery: providerSkillDiscovery,
+    });
+    if ('error' in submission) {
+      showToast(submission.error, true);
+      return;
+    }
     // The host resolves each token against the live page and builds the element context.
     const result = await action<{ conversationId: string }>('conversation:send', {
       id: conversationId,
-      text: draft.trim(),
+      ...submission,
       context: mentions.length ? `当前页面：${pageSource(browser.url)}` : undefined,
       mentions: mentions.length
         ? mentions.map(({ token, ref, edit }) => ({ token, ref, ...(edit ? { edit } : {}) }))
@@ -893,7 +971,12 @@ export default function App() {
   const workspace = async () => {
     const result = await action<Settings>('settings:workspace');
     if (result) {
-      if (result.workspace !== settings.workspace) setDraft('');
+      if (result.workspace !== settings.workspace) {
+        setDraft('');
+        setSelectedSkills([]);
+        const snapshot = await action<AppSnapshot>('app:snapshot');
+        if (snapshot) setSkills(snapshot.skills ?? []);
+      }
       setSettings(result);
       await newConversation();
     }
@@ -923,6 +1006,8 @@ export default function App() {
     if (result) {
       upsert(result);
       setConversationId(result.id);
+      setSelectedSkills([]);
+      setProviderSkillDiscovery(undefined);
       setInspectorOpen(false);
     }
     setAgentMenu(false);
@@ -952,6 +1037,7 @@ export default function App() {
       workspacePath = snapshot.settings.workspace;
       setSettings(snapshot.settings);
       setAgents(snapshot.agents);
+      setSkills(snapshot.skills ?? []);
       setBrowser(snapshot.browser);
       setNeo(snapshot.neo ?? { status: 'stopped' });
       lastFrame.current = snapshot.browserFrame ?? lastFrame.current;
@@ -1237,6 +1323,28 @@ export default function App() {
                   </ActionButton>
                 </Card.Content>
               </Card>
+              {pendingExternalConnections.length > 0 && (
+                <Card className="settings-workspace-card" aria-label="外部连接审批">
+                  <Card.Content>
+                    <div>
+                      <span>外部 Agent 连接</span>
+                      {pendingExternalConnections.map((connection) => (
+                        <div key={connection.id}>
+                          <strong>{connection.agent.name} · {connection.requestedMode}</strong>
+                          {connection.status === 'pending' ? (
+                            <>
+                              <ActionButton onPress={() => void action('mcp:connection', { id: connection.id, operation: 'approve' })}>批准</ActionButton>
+                              <ActionButton variant="secondary" onPress={() => void action('mcp:connection', { id: connection.id, operation: 'reject' })}>拒绝</ActionButton>
+                            </>
+                          ) : connection.status === 'approved' ? (
+                            <ActionButton variant="secondary" onPress={() => void action('mcp:connection', { id: connection.id, operation: 'revoke' })}>撤销</ActionButton>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  </Card.Content>
+                </Card>
+              )}
               <ActionButton
                 className="text-button onboarding-reopen"
                 isDisabled={openingOnboarding}
@@ -1744,187 +1852,193 @@ export default function App() {
                 {settingsWorkspace}
                 {showUsage && !settingsTab && <UsagePanel />}
                 <div className="conversation-column" hidden={showUsage || Boolean(settingsTab)}>
-                  <Tabs
-                    variant="primary"
-                    selectedKey={editingElement ? 'element' : 'conversation'}
-                    onSelectionChange={(key) => {
-                      setInspectorOpen(key === 'element');
-                      if (key === 'element') setBrowserVisible(true);
-                    }}
+                  <div
                     className={`chat-panel ${editingElement ? 'is-editing' : ''} ${isHome ? 'is-home' : ''}`}
-                    aria-label="AI 工作区"
                   >
-                    <Tabs.ListContainer className="workspace-view-tabs">
-                      <Tabs.List aria-label="工作区视图">
-                        <Tabs.Tab id="conversation">
-                          <Icon icon={MessageSquareIcon} size={14} />
-                          对话
-                          <Tabs.Indicator />
-                        </Tabs.Tab>
-                        <Tabs.Tab id="element" isDisabled={browser.status !== 'ready'}>
-                          <Icon icon={Settings02Icon} size={14} />
-                          元素
-                          <Tabs.Indicator />
-                        </Tabs.Tab>
-                      </Tabs.List>
-                    </Tabs.ListContainer>
-                    <Tabs.Panel
-                      id="conversation"
-                      shouldForceMount
-                      hidden={editingElement}
-                      className="chat-scroll"
-                      ref={scroll}
-                      onScroll={() => {
-                        const node = scroll.current;
-                        if (node)
-                          stickToBottom.current =
-                            node.scrollHeight - node.scrollTop - node.clientHeight < 120;
+                    {/* Tabs renders its children a second time to collect its tabs. The composer
+                        stays outside it, so its Skill menu is not collected as well. */}
+                    <Tabs
+                      variant="primary"
+                      selectedKey={editingElement ? 'element' : 'conversation'}
+                      onSelectionChange={(key) => {
+                        setInspectorOpen(key === 'element');
+                        if (key === 'element') setBrowserVisible(true);
                       }}
+                      className="chat-tabs"
+                      aria-label="AI 工作区"
                     >
-                      {!messages.length ? (
-                        <div className="welcome">
-                          <img className="welcome-symbol" src={athenaLogo} alt="Athena" />
-                          <h1>今天想完成什么？</h1>
-                          <p>打开网页、调整界面，或把任务交给 Athena。</p>
-                        </div>
-                      ) : (
-                        <div className="messages">
-                          {messages.map((message) => (
-                            <article
-                              key={message.id}
-                              className={`message ${message.role} ${message.status === 'error' ? 'message-error' : ''}`}
-                            >
-                              {message.role === 'user' ? (
-                                <ProChatMessage.User>
-                                  <ProChatMessage.Bubble className="user-message-text">
-                                    <MentionText text={message.text} mentions={message.mentions} />
-                                  </ProChatMessage.Bubble>
-                                  {message.source === 'feishu' && (
-                                    <div className="message-source">
-                                      <Icon icon={Link02Icon} size={11} />
-                                      来自飞书
-                                    </div>
-                                  )}
-                                  {message.context && message.source !== 'feishu' && (
-                                    <div className="message-context">
-                                      <Icon icon={Cursor01Icon} size={11} />
-                                      已附加页面上下文
-                                    </div>
-                                  )}
-                                  {message.text && (
-                                    <ChatMessageActions>
-                                      <Tooltip delay={500}>
-                                        <ChatMessageActions.Copy
-                                          aria-label="复制消息"
-                                          isCopied={toast?.copiedMessageId === message.id}
-                                          onPress={() => copyMessage(message)}
-                                        />
-                                        <Tooltip.Content>复制消息</Tooltip.Content>
-                                      </Tooltip>
-                                    </ChatMessageActions>
-                                  )}
-                                </ProChatMessage.User>
-                              ) : (
-                                <ProChatMessage.Assistant>
-                                  <ProChatMessage.Body>
-                                    <div className="assistant-label">
-                                      <ProChatMessage.Avatar src={athenaLogo} alt="" />
-                                      <span>Athena</span>
-                                    </div>
-                                    <AssistantTurn
-                                      message={message}
-                                      conversationId={conversationId!}
-                                      agent={currentAgentId}
-                                      requests={conversationRequests.filter(
-                                        (pending) => pending.messageId === message.id,
-                                      )}
-                                      last={message === messages.at(-1)}
-                                      readOnly={archived}
-                                      busy={busy}
-                                      onAction={action}
-                                      onShowBrowser={() => setBrowserVisible(true)}
-                                      actions={
-                                        message.status !== 'streaming' &&
-                                        (copyableText(message, message === messages.at(-1)) ||
-                                          message.neoSessionId) && (
-                                          <ChatMessageActions>
-                                            {copyableText(message, message === messages.at(-1)) && (
-                                              <Tooltip delay={500}>
-                                                <ChatMessageActions.Copy
-                                                  aria-label="复制回答"
-                                                  isCopied={toast?.copiedMessageId === message.id}
-                                                  onPress={() => copyMessage(message)}
-                                                />
-                                                <Tooltip.Content>复制回答</Tooltip.Content>
-                                              </Tooltip>
-                                            )}
-                                            {message.neoSessionId && (
-                                              <ProChatMessage.Action
-                                                isIconOnly={false}
-                                                onPress={() => {
-                                                  setNativeRecordId(message.neoSessionId);
-                                                  setBrowserVisible(true);
-                                                }}
-                                              >
-                                                查看网页执行过程
-                                              </ProChatMessage.Action>
-                                            )}
-                                          </ChatMessageActions>
-                                        )
-                                      }
-                                    >
-                                      {replyText(message) && (
-                                        <ProChatMessage.Content className="markdown">
-                                          <Markdown
-                                            remarkPlugins={[remarkGfm]}
-                                            components={{
-                                              img: () => null,
-                                              a: ({ href, children }) => (
-                                                <a
-                                                  href={href}
-                                                  onClick={(event) => {
-                                                    event.preventDefault();
-                                                    if (href) openLink(href);
+                      <Tabs.ListContainer className="workspace-view-tabs">
+                        <Tabs.List aria-label="工作区视图">
+                          <Tabs.Tab id="conversation">
+                            <Icon icon={MessageSquareIcon} size={14} />
+                            对话
+                            <Tabs.Indicator />
+                          </Tabs.Tab>
+                          <Tabs.Tab id="element" isDisabled={browser.status !== 'ready'}>
+                            <Icon icon={Settings02Icon} size={14} />
+                            元素
+                            <Tabs.Indicator />
+                          </Tabs.Tab>
+                        </Tabs.List>
+                      </Tabs.ListContainer>
+                      <Tabs.Panel
+                        id="conversation"
+                        shouldForceMount
+                        hidden={editingElement}
+                        className="chat-scroll"
+                        ref={scroll}
+                        onScroll={() => {
+                          const node = scroll.current;
+                          if (node)
+                            stickToBottom.current =
+                              node.scrollHeight - node.scrollTop - node.clientHeight < 120;
+                        }}
+                      >
+                        {!messages.length ? (
+                          <div className="welcome">
+                            <img className="welcome-symbol" src={athenaLogo} alt="Athena" />
+                            <h1>今天想完成什么？</h1>
+                            <p>打开网页、调整界面，或把任务交给 Athena。</p>
+                          </div>
+                        ) : (
+                          <div className="messages">
+                            {messages.map((message) => (
+                              <article
+                                key={message.id}
+                                className={`message ${message.role} ${message.status === 'error' ? 'message-error' : ''}`}
+                              >
+                                {message.role === 'user' ? (
+                                  <ProChatMessage.User>
+                                    <ProChatMessage.Bubble className="user-message-text">
+                                      <MentionText text={message.displayText ?? message.text} mentions={message.mentions} />
+                                    </ProChatMessage.Bubble>
+                                    {message.source === 'feishu' && (
+                                      <div className="message-source">
+                                        <Icon icon={Link02Icon} size={11} />
+                                        来自飞书
+                                      </div>
+                                    )}
+                                    {message.context && message.source !== 'feishu' && (
+                                      <div className="message-context">
+                                        <Icon icon={Cursor01Icon} size={11} />
+                                        已附加页面上下文
+                                      </div>
+                                    )}
+                                    {message.text && (
+                                      <ChatMessageActions>
+                                        <Tooltip delay={500}>
+                                          <ChatMessageActions.Copy
+                                            aria-label="复制消息"
+                                            isCopied={toast?.copiedMessageId === message.id}
+                                            onPress={() => copyMessage(message)}
+                                          />
+                                          <Tooltip.Content>复制消息</Tooltip.Content>
+                                        </Tooltip>
+                                      </ChatMessageActions>
+                                    )}
+                                  </ProChatMessage.User>
+                                ) : (
+                                  <ProChatMessage.Assistant>
+                                    <ProChatMessage.Body>
+                                      <div className="assistant-label">
+                                        <ProChatMessage.Avatar src={athenaLogo} alt="" />
+                                        <span>Athena</span>
+                                      </div>
+                                      <AssistantTurn
+                                        message={message}
+                                        conversationId={conversationId!}
+                                        agent={currentAgentId}
+                                        requests={conversationRequests.filter(
+                                          (pending) => pending.messageId === message.id,
+                                        )}
+                                        last={message === messages.at(-1)}
+                                        readOnly={archived}
+                                        busy={busy}
+                                        onAction={action}
+                                        onShowBrowser={() => setBrowserVisible(true)}
+                                        actions={
+                                          message.status !== 'streaming' &&
+                                          (copyableText(message, message === messages.at(-1)) ||
+                                            message.neoSessionId) && (
+                                            <ChatMessageActions>
+                                              {copyableText(message, message === messages.at(-1)) && (
+                                                <Tooltip delay={500}>
+                                                  <ChatMessageActions.Copy
+                                                    aria-label="复制回答"
+                                                    isCopied={toast?.copiedMessageId === message.id}
+                                                    onPress={() => copyMessage(message)}
+                                                  />
+                                                  <Tooltip.Content>复制回答</Tooltip.Content>
+                                                </Tooltip>
+                                              )}
+                                              {message.neoSessionId && (
+                                                <ProChatMessage.Action
+                                                  isIconOnly={false}
+                                                  onPress={() => {
+                                                    setNativeRecordId(message.neoSessionId);
+                                                    setBrowserVisible(true);
                                                   }}
                                                 >
-                                                  {children}
-                                                </a>
-                                              ),
-                                            }}
-                                          >
-                                            {replyText(message)}
-                                          </Markdown>
-                                        </ProChatMessage.Content>
-                                      )}
-                                    </AssistantTurn>
-                                  </ProChatMessage.Body>
-                                </ProChatMessage.Assistant>
-                              )}
-                            </article>
-                          ))}
-                        </div>
-                      )}
-                    </Tabs.Panel>
-                    <Tabs.Panel
-                      id="element"
-                      shouldForceMount
-                      className="element-workspace"
-                      hidden={!editingElement}
-                    >
-                      <ElementInspector
+                                                  查看网页执行过程
+                                                </ProChatMessage.Action>
+                                              )}
+                                            </ChatMessageActions>
+                                          )
+                                        }
+                                      >
+                                        {replyText(message) && (
+                                          <ProChatMessage.Content className="markdown">
+                                            <Markdown
+                                              remarkPlugins={[remarkGfm]}
+                                              components={{
+                                                img: () => null,
+                                                a: ({ href, children }) => (
+                                                  <a
+                                                    href={href}
+                                                    onClick={(event) => {
+                                                      event.preventDefault();
+                                                      if (href) openLink(href);
+                                                    }}
+                                                  >
+                                                    {children}
+                                                  </a>
+                                                ),
+                                              }}
+                                            >
+                                              {replyText(message)}
+                                            </Markdown>
+                                          </ProChatMessage.Content>
+                                        )}
+                                      </AssistantTurn>
+                                    </ProChatMessage.Body>
+                                  </ProChatMessage.Assistant>
+                                )}
+                              </article>
+                            ))}
+                          </div>
+                        )}
+                      </Tabs.Panel>
+                      <Tabs.Panel
+                        id="element"
+                        shouldForceMount
+                        className="element-workspace"
                         hidden={!editingElement}
-                        selected={browser.selectedElement}
-                        tabId={browser.activeTabId}
-                        previews={browser.previewEdits ?? []}
-                        controlSurface={browser.elementControls}
-                        onAction={action}
-                        onClose={() => {
-                          setInspectorOpen(false);
-                          focusComposer();
-                        }}
-                        onSourceRequest={requestSource}
-                      />
-                    </Tabs.Panel>
+                      >
+                        <ElementInspector
+                          hidden={!editingElement}
+                          selected={browser.selectedElement}
+                          tabId={browser.activeTabId}
+                          previews={browser.previewEdits ?? []}
+                          controlSurface={browser.elementControls}
+                          onAction={action}
+                          onClose={() => {
+                            setInspectorOpen(false);
+                            focusComposer();
+                          }}
+                          onSourceRequest={requestSource}
+                        />
+                      </Tabs.Panel>
+                    </Tabs>
                     <div className="composer-area">
                       {archived && conversation && (
                         <div className="archived-notice">
@@ -1945,38 +2059,83 @@ export default function App() {
                         status={busy ? 'streaming' : 'ready'}
                         lockInputOnRun={false}
                         maxHeight={160}
-                        onSubmit={() => void send()}
+                        onSubmit={() => {
+                          // Skills can arrive after the slash was typed, so the menu shows with
+                          // nothing highlighted. Enter then takes its first Skill, not the query.
+                          const first = skillMenuVisible
+                            ? skillOptions.find((skill) => !skillUnavailable(skill.name))
+                            : undefined;
+                          if (first) insertSkill(first.name);
+                          else void send();
+                        }}
                         onStop={() => void action('conversation:stop')}
                       >
                         <PromptInput.Shell>
-                          <PromptInput.Content>
-                            <PromptInput.TokenInput
+                          {/* Only the field and its Skill menu sit in Tokens: a toolbar menu
+                              inside it would join the suggestions. */}
+                          <PromptInput.Tokens>
+                            <PromptInput.Content>
+                              <PromptInput.TokenInput
+                                tokens={tokens}
+                                aria-label="发送给 Agent 的任务"
+                                placeholder={
+                                  mentions.length
+                                    ? '想对这些元素做什么？'
+                                    : '描述任务，或在页面中选取元素…'
+                                }
+                              >
+                                {(segment) => {
+                                  const value = segment.value;
+                                  if (isSkillToken(value))
+                                    return (
+                                      <PromptInput.Token className="composer-skill-reference">
+                                        {segment.text}
+                                      </PromptInput.Token>
+                                    );
+                                  return (
+                                    <PromptInput.Token className="element-token">
+                                      <span
+                                        className="element-token-body"
+                                        title={
+                                          value
+                                            ? `${value.tag}${value.role ? ` · ${value.role}` : ''}`
+                                            : undefined
+                                        }
+                                      >
+                                        <Icon icon={Cursor01Icon} size={11} aria-hidden />
+                                        <span>{value?.name ?? segment.text}</span>
+                                        <small>{segment.text.slice(1, -1)}</small>
+                                      </span>
+                                    </PromptInput.Token>
+                                  );
+                                }}
+                              </PromptInput.TokenInput>
+                            </PromptInput.Content>
+                            <PromptInput.TokenSuggestions
                               tokens={tokens}
-                              aria-label="发送给 Agent 的任务"
-                              placeholder={
-                                mentions.length
-                                  ? '想对这些元素做什么？'
-                                  : '描述任务，或在页面中选取元素…'
-                              }
+                              isOpen={skillMenuVisible}
+                              placement="top start"
+                              className="skill-slash-menu"
+                              maxHeight={320}
                             >
-                              {(segment) => (
-                                <PromptInput.Token className="element-token">
-                                  <span
-                                    className="element-token-body"
-                                    title={
-                                      segment.value
-                                        ? `${segment.value.tag}${segment.value.role ? ` · ${segment.value.role}` : ''}`
-                                        : undefined
-                                    }
+                              <Menu aria-label="可用 Skill">
+                                {skillOptions.map((skill) => (
+                                  <Menu.Item
+                                    key={skill.name}
+                                    id={skill.name}
+                                    textValue={skill.name}
+                                    isDisabled={skillUnavailable(skill.name)}
+                                    onAction={() => insertSkill(skill.name)}
                                   >
-                                    <Icon icon={Cursor01Icon} size={11} aria-hidden />
-                                    <span>{segment.value?.name ?? segment.text}</span>
-                                    <small>{segment.text.slice(1, -1)}</small>
-                                  </span>
-                                </PromptInput.Token>
-                              )}
-                            </PromptInput.TokenInput>
-                          </PromptInput.Content>
+                                    <div className="skill-option-copy">
+                                      <Label>/{skill.name}</Label>
+                                      <Description>{skill.description}</Description>
+                                    </div>
+                                  </Menu.Item>
+                                ))}
+                              </Menu>
+                            </PromptInput.TokenSuggestions>
+                          </PromptInput.Tokens>
                           <PromptInput.Toolbar className="composer-controls">
                             <PromptInput.ToolbarStart>
                               <WebContextMenu
@@ -2054,6 +2213,13 @@ export default function App() {
                                   </Dropdown.Menu>
                                 </Dropdown.Popover>
                               </Dropdown>
+                              <SkillPicker
+                                skills={skills ?? []}
+                                selected={selectedSkills}
+                                full={chosenSkills.size >= MAX_SKILLS}
+                                disabled={busy}
+                                onChange={setSelectedSkills}
+                              />
                               <ModelPicker
                                 settings={conversationSettings}
                                 conversationId={conversationId}
@@ -2191,7 +2357,7 @@ export default function App() {
                         </span>
                       )}
                     </div>
-                  </Tabs>
+                  </div>
                 </div>
               </div>
               <aside

@@ -6,6 +6,7 @@ import type {
   ToolResult,
 } from '../shared/types';
 import type { ModelOption, ModelSelection } from '../shared/usage';
+import type { ProviderSkill, ProviderSkillDiscovery } from '../shared/skills';
 
 /** Host boundary: adapters own their wire protocol, never the host's authorization. */
 export interface AgentSessionOptions {
@@ -32,11 +33,13 @@ export interface AgentSession {
   matchesConfiguration(workspace: string, executablePath: string, tools: BrowserTool[]): boolean;
   prepare(selection?: ModelSelection): Promise<void>;
   listModels(): Promise<ModelOption[]>;
+  discoverProviderSkills(): Promise<ProviderSkillDiscovery>;
   send(
     text: string,
     context?: string,
     selectedElement?: ElementRef,
     selection?: ModelSelection,
+    skills?: ProviderSkill[],
   ): Promise<void>;
   interrupt(): Promise<void>;
   resolveApproval(id: string, approved: boolean): void;

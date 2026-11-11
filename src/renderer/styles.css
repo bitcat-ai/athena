@@ -353,6 +353,10 @@ select {
   gap: 0;
   min-height: 0;
 }
+/* The view tabs and their panels are laid out by the chat panel itself. */
+.chat-tabs {
+  display: contents;
+}
 .workspace-view-tabs {
   padding: 0 24px;
   flex-shrink: 0;
@@ -2222,6 +2226,35 @@ select {
 }
 .composer-area {
   padding-bottom: 0;
+}
+/* Skills of the current CLI, offered at the caret after a slash. */
+.skill-slash-menu {
+  max-width: 360px;
+}
+.composer-controls .skill-picker {
+  flex: none;
+  gap: 4px;
+}
+.skill-picker-count {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+}
+.skill-menu {
+  width: 320px;
+}
+.skill-menu .skill-option-copy {
+  flex: 1;
+}
+.skill-option-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+.skill-option-copy .description {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .composer [data-slot='prompt-input-shell'] {
   border: 0;

@@ -419,7 +419,7 @@ try {
   await expect(archivedNotice).toContainText('这段对话已归档');
   await expect(archivedNotice.getByRole('button', { name: '恢复对话', exact: true })).toBeVisible();
   await expect(current).toHaveText('整理发布计划');
-  await expect(page.locator('.agent-status-caption')).toHaveText('已登录');
+  await expect(page.locator('.agent-status-caption')).toHaveText('已检测');
   await page.waitForTimeout(300);
   assert.equal(
     await preparedSince(mark, 'plan'),
