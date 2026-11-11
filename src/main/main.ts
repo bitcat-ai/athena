@@ -1554,7 +1554,7 @@ async function invoke(action: string, payload: unknown) {
       return restored;
     }
     case 'feishu:disconnect':
-      await feishu.disconnect();
+      await feishu.disconnectUser();
       return feishu.getState();
     case 'app:copy':
       return copyText(clipboard, record(payload).text);
@@ -1778,7 +1778,7 @@ async function launch() {
   const restoreConnections = () => {
     if (restorationStarted) return;
     restorationStarted = true;
-    void feishu.retryRestore().catch(() => {});
+    void feishu.restoreConnection().catch(() => {});
   };
   // A visible, focused host gives macOS a place to present any Keychain authorization.
   window.once('focus', restoreConnections);

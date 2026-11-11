@@ -210,6 +210,105 @@ test('configuration is encrypted and never exposed in state', async () => {
   }
 });
 
+test('连接意愿跨退出恢复，主动断开与旧配置保持手动连接', async () => {
+  const h = await harness();
+  let restored: FeishuConnector | undefined;
+  try {
+    await h.connectAndPair();
+    await h.connector.dispose();
+    const count = h.connections;
+    restored = new FeishuConnector({ ...h.options, deferRestore: true }, h.dependencies);
+    await restored.restoreConnection();
+    assert.equal(h.connections, count + 1);
+    assert.equal(restored.getState().status, 'connected');
+    await restored.disconnectUser();
+    await restored.dispose();
+    restored = new FeishuConnector({ ...h.options, deferRestore: true }, h.dependencies);
+    await restored.restoreConnection();
+    assert.equal(h.connections, count + 1);
+    assert.equal(restored.getState().status, 'disconnected');
+    await restored.connect();
+    await restored.dispose();
+    await rm(path.join(h.storageDir, 'connection-intent.json'));
+    restored = new FeishuConnector({ ...h.options, deferRestore: true }, h.dependencies);
+    await restored.restoreConnection();
+    assert.equal(h.connections, count + 2);
+    assert.equal(restored.getState().status, 'disconnected');
+  } finally {
+    await restored?.dispose();
+    await h.cleanup();
+  }
+});
+
+test('恢复连接不生成新配对码，不重放历史 pending 指令或配对回复', async () => {
+  let dispatched = 0;
+  const h = await harness(async () => {
+    dispatched++;
+  });
+  let restored: FeishuConnector | undefined;
+  try {
+    await h.connectAndPair();
+    const message = {
+      id: 'old-pending',
+      senderId: OWNER,
+      chatId: CHAT,
+      text: '创建应用',
+      timestamp: 1,
+    };
+    const key = createHash('sha256').update(`${APP_ID}:${message.id}`).digest('hex');
+    await writeFile(
+      path.join(h.storageDir, 'inbox', `${key}.enc`),
+      await h.options.encrypt(
+        JSON.stringify({
+          appId: APP_ID,
+          message,
+          kind: 'command',
+          status: 'pending',
+        }),
+      ),
+    );
+    await h.connector.dispose();
+    const sent = h.sent.length;
+    restored = new FeishuConnector({ ...h.options, deferRestore: true }, h.dependencies);
+    await restored.restoreConnection();
+    await delay(30);
+    assert.equal(dispatched, 0);
+    assert.equal(h.sent.length, sent);
+    assert.match(restored.getState().error ?? '', /未自动重试/);
+    await restored.dispose();
+    const credentials = JSON.parse(
+      await h.decrypt(await readFile(path.join(h.storageDir, 'credentials.enc'), 'utf8')),
+    );
+    delete credentials.binding;
+    await writeFile(
+      path.join(h.storageDir, 'credentials.enc'),
+      await h.options.encrypt(JSON.stringify(credentials)),
+    );
+    const count = h.connections;
+    restored = new FeishuConnector({ ...h.options, deferRestore: true }, h.dependencies);
+    await restored.restoreConnection();
+    assert.equal(h.connections, count);
+    assert.equal(restored.getState().pairingCode, undefined);
+  } finally {
+    await restored?.dispose();
+    await h.cleanup();
+  }
+});
+
+test('连接意愿落盘失败时不建立新连接，并保留可操作错误', async () => {
+  const h = await harness();
+  try {
+    await h.connector.configure({ appId: APP_ID, appSecret: SECRET });
+    await rm(path.join(h.storageDir, 'connection-intent.json'));
+    await mkdir(path.join(h.storageDir, 'connection-intent.json'));
+    await assert.rejects(h.connector.connect(), /连接意愿保存失败/);
+    assert.equal(h.connections, 0);
+    assert.notEqual(h.connector.getState().status, 'connected');
+  } finally {
+    await h.cleanup();
+  }
+});
+
 test('restore has a deadline, preserves saved ciphertext, blocks replacement and discards late results', async () => {
   const h = await harness();
   let restored: FeishuConnector | undefined;
