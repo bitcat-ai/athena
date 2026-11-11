@@ -309,6 +309,76 @@ test('连接意愿落盘失败时不建立新连接，并保留可操作错误',
   }
 });
 
+test('连接意愿文件损坏时不阻塞配置恢复，只回到手动连接', async () => {
+  const h = await harness();
+  let restored: FeishuConnector | undefined;
+  try {
+    await h.connectAndPair();
+    await h.connector.dispose();
+    const count = h.connections;
+    const intent = path.join(h.storageDir, 'connection-intent.json');
+    for (const content of ['{"version":1,"appId"', 'null']) {
+      await writeFile(intent, content);
+      restored = new FeishuConnector({ ...h.options, deferRestore: true }, h.dependencies);
+      await restored.restoreConnection();
+      assert.equal(restored.getState().status, 'disconnected');
+      assert.equal(restored.getState().restoreFailed, false);
+      assert.equal(restored.getState().paired, true);
+      assert.equal(h.connections, count);
+      await restored.dispose();
+    }
+    await rm(intent);
+    await mkdir(intent);
+    restored = new FeishuConnector({ ...h.options, deferRestore: true }, h.dependencies);
+    await restored.restoreConnection();
+    assert.equal(restored.getState().status, 'disconnected');
+    assert.equal(h.connections, count);
+    await rm(intent, { recursive: true });
+    await restored.connect();
+    assert.equal(h.connections, count + 1);
+    assert.deepEqual(JSON.parse(await readFile(intent, 'utf8')), {
+      version: 1,
+      appId: APP_ID,
+      desired: true,
+    });
+  } finally {
+    await restored?.dispose();
+    await h.cleanup();
+  }
+});
+
+test('并发连接请求共用同一条连接，不误报已取消', async () => {
+  const h = await harness();
+  try {
+    await h.connector.configure({ appId: APP_ID, appSecret: SECRET });
+    await Promise.all([h.connector.connect(), h.connector.connect()]);
+    assert.equal(h.connections, 1);
+    assert.equal(h.connector.getState().status, 'connected');
+  } finally {
+    await h.cleanup();
+  }
+});
+
+test('连接意愿落盘失败时不废弃仍在重连的现有连接', async () => {
+  const h = await harness();
+  try {
+    await h.connector.configure({ appId: APP_ID, appSecret: SECRET });
+    await h.connector.connect();
+    h.callbacks.onError(new Error('socket dropped'));
+    assert.equal(h.connector.getState().status, 'error');
+    const intent = path.join(h.storageDir, 'connection-intent.json');
+    await rm(intent);
+    await mkdir(intent);
+    await assert.rejects(h.connector.connect(), /连接意愿保存失败/);
+    assert.equal(h.connections, 1);
+    assert.equal(h.closes, 0);
+    h.callbacks.onReconnected();
+    assert.equal(h.connector.getState().status, 'connected');
+  } finally {
+    await h.cleanup();
+  }
+});
+
 test('restore has a deadline, preserves saved ciphertext, blocks replacement and discards late results', async () => {
   const h = await harness();
   let restored: FeishuConnector | undefined;

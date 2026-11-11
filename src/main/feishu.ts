@@ -516,13 +516,23 @@ export class FeishuConnector {
   async connect(remember = true): Promise<FeishuState> {
     await this.ensureRestored();
     this.assertActive();
-    if (this.transport && (this.state.status === 'connected' || this.state.status === 'connecting'))
-      return this.getState();
+    const connecting = () =>
+      this.transport && (this.state.status === 'connected' || this.state.status === 'connecting');
+    if (connecting()) return this.getState();
     if (!this.credentials) throw new Error('请先创建或配置 Athena 专用飞书机器人。');
     const credentials = this.credentials;
+    if (remember) {
+      // 意愿落盘前不接管现有连接：保存失败时原连接仍可自行重连；期间被断开或改配置则取消。
+      const requested = this.generation;
+      await this.saveConnectionIntent(true, credentials.appId);
+      if (this.disposed) throw new Error('飞书连接已取消');
+      if (requested !== this.generation) {
+        // 并发的连接请求已先行建立连接，共用其结果。
+        if (connecting() && this.credentials === credentials) return this.getState();
+        throw new Error('飞书连接已取消');
+      }
+    }
     const generation = ++this.generation;
-    if (remember) await this.saveConnectionIntent(true, credentials.appId);
-    if (generation !== this.generation || this.disposed) throw new Error('飞书连接已取消');
     this.transport?.close();
     if (!credentials.binding) this.newPairingCode();
     this.update({
@@ -867,17 +877,16 @@ export class FeishuConnector {
       inbox.set(key, entry);
     }
     checkCurrent();
-    let connectionDesired = false;
-    try {
-      const intent = JSON.parse(
-        await readFile(path.join(this.options.storageDir, 'connection-intent.json'), 'utf8'),
-      );
-      checkCurrent();
-      connectionDesired =
-        intent.version === 1 && intent.appId === credentials?.appId && intent.desired === true;
-    } catch (error) {
-      if (errorCode(error) !== 'ENOENT') throw new Error('无法读取飞书连接意愿');
-    }
+    // 连接意愿只是明文偏好：缺失、损坏或不可读时回到手动连接，不连带判定加密配置恢复失败。
+    const intent = await readFile(
+      path.join(this.options.storageDir, 'connection-intent.json'),
+      'utf8',
+    )
+      .then((text) => JSON.parse(text) as Record<string, unknown> | null)
+      .catch(() => null);
+    checkCurrent();
+    const connectionDesired =
+      intent?.version === 1 && intent.appId === credentials?.appId && intent.desired === true;
     return { credentials, inbox, recoveryWarning, connectionDesired };
   }
 
