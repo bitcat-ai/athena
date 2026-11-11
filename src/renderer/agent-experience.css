@@ -1,3 +1,10 @@
+.composer .composer-skill-reference {
+  padding: 0 4px;
+  border-radius: 4px;
+  color: var(--skill-reference-foreground);
+  background: var(--skill-reference-background);
+}
+
 .sidebar-usage {
   justify-content: flex-start;
   width: 100%;
