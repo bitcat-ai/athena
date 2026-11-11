@@ -8,6 +8,7 @@ import {
   agentModelSelection,
   conversationModelSelection,
   supportsBrowser,
+  supportsSelectedElement,
 } from '../src/shared/agents';
 import {
   discoverExecutables,
@@ -35,9 +36,12 @@ test('default changes never rebind existing or legacy conversations or leak mode
   assert.equal(conversationAgent(pi), 'pi');
   assert.equal(pi.agentSessionId, 'pi-native-id');
   assert.equal(conversationAgent(legacy), 'codex');
-  assert.equal(supportsBrowser('pi'), false);
-  assert.equal(supportsBrowser('cursor'), false);
+  for (const agent of ['claude', 'pi', 'cursor'] as const)
+    assert.equal(supportsBrowser(agent), true);
   assert.equal(supportsBrowser('codex'), true);
+  assert.equal(supportsBrowser('gemini'), false);
+  assert.equal(supportsSelectedElement('codex'), true);
+  assert.equal(supportsSelectedElement('pi'), true);
 });
 
 async function executable(file: string, body: string) {
@@ -58,7 +62,7 @@ test('discovery deduplicates real installations and finds a healthy CLI after a 
     );
     await executable(
       path.join(first, 'cursor-agent'),
-      'if [ "$1" = "--version" ]; then echo "Cursor fixture"; else echo "Start the Cursor Agent --mode --output-format --trust"; fi',
+      'if [ "$1" = "--version" ]; then echo "Cursor fixture"; else echo "Start the Cursor Agent --mode --output-format --approve-mcps"; fi',
     );
     await symlink(path.join(first, 'cursor-agent'), path.join(first, 'agent'));
     assert.equal((await discoverExecutables(['cursor-agent', 'agent'], [first])).length, 1);

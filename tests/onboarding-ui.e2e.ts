@@ -731,10 +731,11 @@ try {
     coreReady: true,
     workspace: { status: 'ready', mode: 'personal', path: '/fixture/personal' },
   });
-  await expect(current(cursor)).toContainText('进入工作台后新建一个 Codex 对话');
-  checks.push(
-    'A selected non-Codex Agent can prepare the browser without being promised unsupported Agent browser tools',
+  await expect(current(cursor)).toContainText('一边聊，一边操作右侧的页面');
+  await expect(current(cursor)).not.toContainText(
+    '可新建 Codex、Claude Code、Cursor Agent 或 Pi 对话',
   );
+  checks.push('Cursor 已支持网页工具，引导无需要求切换到其他 Agent');
   await cursor.close();
 
   const darkCursor = await createPage('fresh', true);

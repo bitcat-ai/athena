@@ -136,7 +136,7 @@ export async function detectAgents(
                 : id === 'gemini'
                   ? ['--admin-policy', '--approval-mode']
                   : id === 'cursor'
-                    ? ['--mode', '--output-format', '--trust']
+                    ? ['--mode', '--output-format', '--approve-mcps']
                     : [];
             if (
               required.some((flag) => !help.stdout.includes(flag)) ||
@@ -165,13 +165,15 @@ export async function detectAgents(
               .split('\n')[0]
               .slice(0, 120),
             detail:
-              id === 'claude' || id === 'gemini'
-                ? '支持文本任务；本地文件和命令工具不可用'
-                : id === 'cursor'
-                  ? '支持只读任务；不执行文件修改或命令'
-                  : supported
-                    ? '沿用本机登录与模型服务配置，工具操作逐项确认'
-                    : '已检测到本机安装',
+              id === 'claude'
+                ? '支持 Neo 网页工具；本地文件和命令工具不可用'
+                : id === 'gemini'
+                  ? '支持文本任务；本地文件和命令工具不可用'
+                  : id === 'cursor'
+                    ? '本地目录只读，Neo 网页工具由 Athena 授权'
+                    : supported
+                      ? '沿用本机登录与模型服务配置，工具操作逐项确认'
+                      : '已检测到本机安装',
           };
         } catch {
           found = {

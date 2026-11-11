@@ -1,9 +1,14 @@
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
-import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
+import { execFile, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { promisify } from 'node:util';
+import { createHash, randomUUID } from 'node:crypto';
+import { lstat, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
+import { homedir } from 'node:os';
 import os from 'node:os';
 import path from 'node:path';
 import type { AgentSession, AgentSessionOptions } from './agent-session';
+import { selectedElementContext } from './agent-session';
+import { HostToolBridge } from './host-tool-bridge';
+import { cliEnvironment } from './agent-process';
 import type { AgentEvent, BrowserTool, ElementRef, ToolCall } from '../shared/types';
 import {
   unknownTokens,
@@ -51,11 +56,20 @@ interface Run {
   escalation?: ReturnType<typeof setTimeout>;
   killStarted?: boolean;
   policyDirectory?: string;
+  mcpConfiguration?: { command: string; args: string[]; env: Record<string, string> };
+  cursorProjectDirectory?: string;
+  cursorHome?: string;
+  cursorConfigDirectory?: string;
+  spawnDirectory?: string;
+  promptPrefix?: string;
+  finishing?: boolean;
+  setupComplete?: boolean;
+  supportsTrust?: boolean;
   workspaceTrusted?: boolean;
   workspaceTrust?: { id: string; resolve(): void };
 }
 
-/** One native JSONL print process per turn; only native IDs may be resumed. No host tool bridge. */
+/** 每轮使用独立原生 JSONL 进程，仅使用原生会话 ID 续聊。 */
 export class StreamCliSession implements AgentSession {
   private id?: string;
   private ready = false;
@@ -64,6 +78,8 @@ export class StreamCliSession implements AgentSession {
   private selection?: ModelSelection;
   private active?: Run;
   private calls = new Map<string, ToolCall>();
+  private hostBridge?: HostToolBridge;
+  private cursorRuntimeDirectory?: string;
 
   constructor(private options: StreamCliSessionOptions) {
     if (!['claude', 'gemini', 'cursor'].includes(options.cli)) throw new Error('不支持的 CLI 协议');
@@ -82,7 +98,7 @@ export class StreamCliSession implements AgentSession {
     return this.id;
   }
   get toolsFingerprint() {
-    return undefined;
+    return createHash('sha256').update(JSON.stringify(this.options.tools)).digest('hex');
   }
   get replacedSessionId() {
     return undefined;
@@ -97,8 +113,7 @@ export class StreamCliSession implements AgentSession {
     return (
       workspace === this.options.workspace &&
       executablePath === this.options.executablePath &&
-      tools.length === 0 &&
-      this.options.tools.length === 0
+      JSON.stringify(tools) === JSON.stringify(this.options.tools)
     );
   }
   private emit(event: AgentEvent) {
@@ -106,9 +121,14 @@ export class StreamCliSession implements AgentSession {
   }
   async prepare(selection?: ModelSelection) {
     if (this.closed) throw new Error('CLI 会话已关闭');
+    if (this.options.cli === 'gemini' && this.options.tools.length)
+      throw new Error('Gemini 尚未接通宿主工具');
     if (selection && this.active) throw new Error('任务进行中，不能切换 CLI 模型');
-    if (this.options.tools.length)
-      throw new Error('此 CLI 尚未接通宿主浏览器工具，请禁用浏览器能力');
+    if (
+      this.options.tools.length &&
+      (!this.options.mcpServerPath || !path.isAbsolute(this.options.mcpServerPath))
+    )
+      throw new Error('当前执行器缺少 Athena MCP 服务文件');
     if (
       selection &&
       (!selection.model.trim() ||
@@ -139,10 +159,13 @@ export class StreamCliSession implements AgentSession {
     if (this.active || this.sending) throw new Error('请等待当前 CLI 任务完成，或先停止');
     if (!prompt.trim() || prompt.length > 20000 || (context?.length ?? 0) > 60000)
       throw new Error('CLI 消息格式或长度无效');
-    if (selectedElement) throw new Error('此 CLI 尚未接通所选网页元素');
+    let elementContext = '';
+    if (this.options.cli === 'gemini' && selectedElement)
+      throw new Error('Gemini 尚未接通网页元素上下文');
     this.sending = true;
     try {
       await this.prepare(selection);
+      elementContext = await selectedElementContext(this.options, selectedElement);
     } finally {
       this.sending = false;
     }
@@ -172,17 +195,164 @@ export class StreamCliSession implements AgentSession {
     // Launch asynchronously so the returned rejection is attached before a setup failure can settle it.
     void this.launch(
       run,
-      [prompt, context ? `<task_context>\n${context}\n</task_context>` : '']
+      [prompt, context ? `<task_context>\n${context}\n</task_context>` : '', elementContext]
         .filter(Boolean)
         .join('\n\n'),
       this.selection,
-    ).catch(() => this.stop(run, '无法启动本机 CLI，请检查安装与受限模式支持'));
+    )
+      .catch(() => this.stop(run, '无法启动本机 CLI，请检查安装与受限模式支持'))
+      .finally(() => {
+        run.setupComplete = true;
+        if (this.active === run && run.failure && !run.child) this.finish(run, run.failure);
+      });
     return run.done;
+  }
+  private async startToolBridge(run: Run) {
+    if (!this.options.tools.length) return;
+    if (!this.options.mcpServerPath || !path.isAbsolute(this.options.mcpServerPath))
+      throw new Error('当前执行器缺少 Athena MCP 服务文件');
+    this.hostBridge = new HostToolBridge(
+      this.options.tools,
+      (name, args) => {
+        if (this.active !== run || run.failure || run.finishing || run.terminal || !run.initialized)
+          return Promise.resolve({ text: '当前任务已停止或尚未就绪', isError: true });
+        return this.options.callTool(name, args);
+      },
+      (event) => this.emit(event),
+    );
+    const endpoint = await this.hostBridge.start();
+    run.mcpConfiguration = {
+      command: process.execPath,
+      args: [this.options.mcpServerPath],
+      env: {
+        WORKBENCH_MCP_URL: endpoint.url,
+        WORKBENCH_MCP_TOKEN: endpoint.token,
+        WORKBENCH_MCP_TOOLS: JSON.stringify(this.options.tools),
+        ...(process.versions.electron ? { ELECTRON_RUN_AS_NODE: '1' } : {}),
+      },
+    };
+  }
+  private async privateDirectory(run: Run) {
+    run.policyDirectory ??= await mkdtemp(path.join(os.tmpdir(), 'athena-cli-tools-'));
+    return run.policyDirectory;
+  }
+  private async configureCursor(run: Run) {
+    if (!run.mcpConfiguration) return;
+    if (!this.options.toolRuntimeDirectory || !path.isAbsolute(this.options.toolRuntimeDirectory))
+      throw new Error('Cursor 缺少 Athena 私有工具目录');
+    let root = this.options.workspace;
+    for (let current = root; ; current = path.dirname(current)) {
+      try {
+        await lstat(path.join(current, '.git'));
+        root = current;
+        break;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      }
+      if (path.dirname(current) === current) break;
+    }
+    for (let current = this.options.workspace; ; current = path.dirname(current)) {
+      for (const file of ['mcp.json', 'hooks.json', 'cli.json']) {
+        try {
+          await lstat(path.join(current, '.cursor', file));
+          throw new Error('Cursor 项目已有 MCP、hook 或 CLI 权限配置，不能隔离审批范围');
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+        }
+      }
+      if (current === root || path.dirname(current) === current) break;
+    }
+    await mkdir(this.options.toolRuntimeDirectory, { recursive: true, mode: 0o700 });
+    const directory = await mkdtemp(path.join(this.options.toolRuntimeDirectory, 'cursor-'));
+    this.cursorRuntimeDirectory = directory;
+    const home = path.join(directory, 'home');
+    const config = path.join(directory, 'config');
+    await Promise.all([
+      mkdir(path.join(home, '.cursor'), { recursive: true, mode: 0o700 }),
+      mkdir(config, { recursive: true, mode: 0o700 }),
+    ]);
+    await writeFile(
+      path.join(home, '.cursor', 'mcp.json'),
+      JSON.stringify({ mcpServers: { athena_workbench: run.mcpConfiguration } }),
+      { mode: 0o600, flag: 'wx' },
+    );
+    const originalConfigDirectory =
+      process.env.CURSOR_CONFIG_DIR ||
+      (process.env.XDG_CONFIG_HOME
+        ? path.join(process.env.XDG_CONFIG_HOME, 'cursor')
+        : path.join(homedir(), '.cursor'));
+    let original: Json = {};
+    try {
+      const value = JSON.parse(
+        await readFile(path.join(originalConfigDirectory, 'cli-config.json'), 'utf8'),
+      );
+      if (!object(value)) throw new Error('Cursor 本机配置无效');
+      original = value;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    }
+    const retained = Object.fromEntries(
+      ['model', 'hasChangedDefaultModel', 'maxMode', 'privacyCache', 'authInfo', 'network']
+        .filter((key) => original[key] !== undefined)
+        .map((key) => [key, original[key]]),
+    );
+    await writeFile(
+      path.join(config, 'cli-config.json'),
+      JSON.stringify({
+        version: 1,
+        editor: { vimMode: false },
+        ...retained,
+        approvalMode: 'allowlist',
+        permissions: {
+          allow: this.options.tools.map((tool) => `Mcp(athena_workbench:${tool.name})`),
+          deny: [],
+        },
+      }),
+      { mode: 0o600, flag: 'wx' },
+    );
+    // 只链接 CLI 自己管理的认证文件，不读取令牌；原生会话继续保存在原数据目录。
+    if (process.platform !== 'win32') {
+      const originalAuth =
+        process.platform === 'darwin'
+          ? path.join(homedir(), '.cursor', 'auth.json')
+          : path.join(
+              process.env.XDG_CONFIG_HOME || path.join(homedir(), '.config'),
+              'cursor',
+              'auth.json',
+            );
+      try {
+        await lstat(originalAuth);
+        const authDirectory =
+          process.platform === 'darwin'
+            ? path.join(home, '.cursor')
+            : path.join(home, 'xdg', 'cursor');
+        await mkdir(authDirectory, { recursive: true, mode: 0o700 });
+        await symlink(originalAuth, path.join(authDirectory, 'auth.json'));
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      }
+    }
+    run.cursorProjectDirectory = this.options.workspace;
+    run.cursorHome = home;
+    run.cursorConfigDirectory = config;
+    run.spawnDirectory = this.options.workspace;
   }
   private async arguments(run: Run, selection?: ModelSelection): Promise<string[]> {
     const resume = run.expectedSession ? ['--resume', run.expectedSession] : [];
     const model = selection ? ['--model', selection.model] : [];
-    if (this.options.cli === 'claude')
+    if (this.options.cli === 'claude') {
+      let config = '{"mcpServers":{}}';
+      if (run.mcpConfiguration) {
+        const directory = await this.privateDirectory(run);
+        config = path.join(directory, 'claude-mcp.json');
+        await writeFile(
+          config,
+          JSON.stringify({ mcpServers: { athena_workbench: run.mcpConfiguration } }),
+          {
+            mode: 0o600,
+          },
+        );
+      }
       return [
         '--print',
         '--output-format',
@@ -194,7 +364,13 @@ export class StreamCliSession implements AgentSession {
         '',
         '--strict-mcp-config',
         '--mcp-config',
-        '{"mcpServers":{}}',
+        config,
+        ...(run.mcpConfiguration
+          ? [
+              '--allowedTools',
+              ...this.options.tools.map((tool) => `mcp__athena_workbench__${tool.name}`),
+            ]
+          : []),
         '--permission-mode',
         'dontAsk',
         '--permission-prompts',
@@ -205,7 +381,9 @@ export class StreamCliSession implements AgentSession {
         ...model,
         ...(selection?.effort ? ['--effort', selection.effort] : []),
       ];
-    if (this.options.cli === 'cursor')
+    }
+    if (this.options.cli === 'cursor') {
+      await this.configureCursor(run);
       return [
         '--print',
         '--output-format',
@@ -213,10 +391,12 @@ export class StreamCliSession implements AgentSession {
         '--stream-partial-output',
         '--mode',
         'ask',
-        ...(run.workspaceTrusted ? ['--trust'] : []),
+        ...(run.mcpConfiguration ? ['--approve-mcps'] : []),
+        ...(run.workspaceTrusted && run.supportsTrust ? ['--trust'] : []),
         ...resume,
         ...model,
       ];
+    }
     // Gemini ignores supplemental policies when system policies exist. Refuse instead of weakening them.
     const systemPolicies =
       process.platform === 'darwin'
@@ -231,8 +411,7 @@ export class StreamCliSession implements AgentSession {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     }
     // Plan can fall back to default in user settings. Deny tools independently, at the admin tier.
-    const directory = await mkdtemp(path.join(os.tmpdir(), 'athena-gemini-policy-'));
-    run.policyDirectory = directory;
+    const directory = await this.privateDirectory(run);
     const policy = path.join(directory, 'deny-tools.toml');
     await writeFile(policy, '[[rule]]\ntoolName = "*"\ndecision = "deny"\npriority = 999\n', {
       mode: 0o600,
@@ -252,6 +431,13 @@ export class StreamCliSession implements AgentSession {
   }
   private async launch(run: Run, prompt: string, selection?: ModelSelection) {
     if (this.options.cli === 'cursor') {
+      const help = await promisify(execFile)(this.options.executablePath, ['--help'], {
+        timeout: 8000,
+        maxBuffer: 256 * 1024,
+        env: cliEnvironment(this.options.executablePath),
+      });
+      run.supportsTrust = help.stdout.includes('--trust');
+      if (this.closed || run.failure) return;
       await new Promise<void>((resolve) => {
         const id = `cursor-workspace:${run.turnId}`;
         run.workspaceTrust = { id, resolve };
@@ -266,24 +452,32 @@ export class StreamCliSession implements AgentSession {
             id,
             kind: 'other',
             title: '允许 Cursor 使用这个工作目录？',
-            detail: `${this.options.workspace}\n\n仅限本次任务。Cursor 将读取目录并加载项目配置；其中的 hooks 或 MCP 可能执行代码，请仅确认你信任的目录。模型仍以 Ask 只读模式运行。`,
+            detail: `${this.options.workspace}\n\n仅限本次任务。Cursor 以 Ask 模式读取此目录，Athena 通过独立 MCP 连接 Neo；网页写入仍受 Athena 的任务范围和确认控制。`,
           },
         });
       });
-      if (this.active !== run || this.closed || !run.workspaceTrusted) return;
+      if (this.active !== run || this.closed || run.failure || !run.workspaceTrusted) return;
       clearTimeout(run.deadline);
     }
+    await this.startToolBridge(run);
     const args = await this.arguments(run, selection);
-    if (this.active !== run || this.closed) {
-      await this.removePolicy(run);
+    if (this.active !== run || this.closed || run.failure) {
       return;
     }
     // Prompt travels on stdin, never as an option/argv. Never answer native permission prompts here.
     const child = spawn(this.options.executablePath, args, {
-      cwd: this.options.workspace,
+      cwd: run.spawnDirectory ?? this.options.workspace,
       env: {
         ...process.env,
         PATH: `${path.dirname(this.options.executablePath)}${path.delimiter}${process.env.PATH ?? '/usr/bin:/bin'}`,
+        ...(this.options.cli === 'cursor' && run.cursorProjectDirectory
+          ? {
+              HOME: run.cursorHome!,
+              XDG_CONFIG_HOME: path.join(run.cursorHome!, 'xdg'),
+              CURSOR_CONFIG_DIR: run.cursorConfigDirectory!,
+              CURSOR_DATA_DIR: process.env.CURSOR_DATA_DIR ?? path.join(homedir(), '.cursor'),
+            }
+          : {}),
       },
       detached: process.platform !== 'win32',
       stdio: 'pipe',
@@ -360,7 +554,7 @@ export class StreamCliSession implements AgentSession {
       this.options.cli === 'cursor' ? 60000 : 30000,
     );
     run.deadline = setTimeout(() => this.stop(run, 'CLI 任务超时，已停止'), 15 * 60 * 1000);
-    child.stdin.end(prompt);
+    child.stdin.end(run.promptPrefix ? `${run.promptPrefix}\n\n${prompt}` : prompt);
   }
   private initialize(run: Run, id: unknown) {
     if (!identifier(id) || (run.expectedSession && id !== run.expectedSession)) {
@@ -417,7 +611,7 @@ export class StreamCliSession implements AgentSession {
       });
   }
   private handle(run: Run, record: Json) {
-    if (run.failure || this.active !== run) return;
+    if (run.failure || run.finishing || this.active !== run) return;
     const cli = this.options.cli;
     if (
       record.type === 'control_request' ||
@@ -520,7 +714,13 @@ export class StreamCliSession implements AgentSession {
       const full = contentText(r.message?.content);
       if (full.startsWith(run.messageText)) this.delta(run, full.slice(run.messageText.length));
       run.messageText = '';
-      if (r.message?.content?.some((p: Json) => p.type === 'tool_use'))
+      if (
+        r.message?.content?.some(
+          (p: Json) =>
+            p.type === 'tool_use' &&
+            !this.options.tools.some((tool) => p.name === `mcp__athena_workbench__${tool.name}`),
+        )
+      )
         this.stop(run, 'CLI 返回了已禁用的工具调用');
     }
     if (r.type === 'result') {
@@ -596,8 +796,22 @@ export class StreamCliSession implements AgentSession {
         return;
       }
       const [name, detail] = entries[0] as [string, Json];
+      const isMcp = name === 'mcpToolCall';
+      const mcpArgs = detail.args;
+      if (
+        isMcp &&
+        (!object(mcpArgs) ||
+          mcpArgs.providerIdentifier !== 'athena_workbench' ||
+          mcpArgs.name !== `athena_workbench-${mcpArgs.toolName}` ||
+          !this.options.tools.some((tool) => tool.name === mcpArgs.toolName) ||
+          !object(mcpArgs.args))
+      ) {
+        this.stop(run, 'Cursor 返回了未授权的 MCP 工具');
+        return;
+      }
+      const toolName = isMcp ? mcpArgs.toolName : name;
       if (r.subtype === 'started') {
-        // Ask mode is the authorization boundary; unknown/mutating tools are not accepted as supported.
+        // 原生文件工具保持 Ask 模式；网页能力只接受本轮注册的 Athena 工具。
         if (
           ![
             'readToolCall',
@@ -605,31 +819,43 @@ export class StreamCliSession implements AgentSession {
             'grepToolCall',
             'globToolCall',
             'semSearchToolCall',
-          ].includes(name)
+          ].includes(name) &&
+          !isMcp
         ) {
           this.stop(run, 'Cursor 请求了只读适配之外的工具，已停止');
           return;
         }
         const call: ToolCall = {
           id: r.call_id,
-          name,
-          input: object(detail.args) ? detail.args : {},
+          name: toolName,
+          input: isMcp ? mcpArgs.args : object(detail.args) ? detail.args : {},
           status: 'running',
         };
+        if (this.calls.has(call.id)) {
+          this.stop(run, 'Cursor 返回了重复的工具调用');
+          return;
+        }
         this.calls.set(call.id, call);
-        this.emit({ type: 'tool', call: { ...call } });
+        // 宿主桥负责网页工具的真实开始/结束事件，原生事件仅用于协议核对。
+        if (!isMcp) this.emit({ type: 'tool', call: { ...call } });
       } else if (r.subtype === 'completed') {
         const call = this.calls.get(r.call_id);
-        if (!call || call.name !== name || call.status !== 'running') {
+        if (!call || call.name !== toolName || call.status !== 'running') {
           this.stop(run, 'Cursor 未返回匹配的工具开始记录');
           return;
         }
+        const success = detail.result?.success;
         call.status =
-          object(detail.result) && (object(detail.result.success) || detail.result.success === true)
+          object(detail.result) &&
+          (isMcp
+            ? object(success) && success.isError !== true
+            : object(success) || success === true || detail.result.isError === false)
             ? 'done'
             : 'error';
-        this.emit({ type: 'tool', call: { ...call } });
-        if (call.status === 'error') this.stop(run, 'Cursor 原生工具执行失败');
+        if (!isMcp) this.emit({ type: 'tool', call: { ...call } });
+        // MCP 正常返回的工具错误允许 Agent 观察和恢复；传输/权限失败则停止。
+        if (call.status === 'error' && (!isMcp || !object(success)))
+          this.stop(run, 'Cursor 原生工具执行失败');
       }
     }
     if (r.type === 'result' && typeof r.result === 'string') {
@@ -688,17 +914,53 @@ export class StreamCliSession implements AgentSession {
   private stop(run: Run, reason: string) {
     if (this.active !== run) return;
     run.failure ??= reason;
+    if (run.workspaceTrust) {
+      const pending = run.workspaceTrust;
+      run.workspaceTrust = undefined;
+      this.emit({ type: 'request-resolved', id: pending.id });
+      pending.resolve();
+    }
     this.killGroup(run);
-    if (!run.child) this.finish(run, run.failure);
+    if (!run.child && run.setupComplete) this.finish(run, run.failure);
   }
   private async removePolicy(run: Run) {
     if (run.policyDirectory) await rm(run.policyDirectory, { recursive: true, force: true });
   }
   private finish(run: Run, failure?: string) {
-    if (this.active !== run) return;
+    if (this.active !== run || run.finishing) return;
+    if (!run.child && !run.setupComplete) return;
+    run.finishing = true;
     clearTimeout(run.startup);
     clearTimeout(run.deadline);
     // Do not cancel escalation: surviving descendants must still receive SIGKILL after leader exit.
+    void this.finishAfterCleanup(run, failure);
+  }
+  private async finishAfterCleanup(run: Run, failure?: string) {
+    let cleanupFailed = false;
+    try {
+      await this.hostBridge?.close();
+    } catch {
+      cleanupFailed = true;
+    }
+    this.hostBridge = undefined;
+    try {
+      await this.removePolicy(run);
+    } catch {
+      cleanupFailed = true;
+    }
+    if (this.cursorRuntimeDirectory) {
+      try {
+        await rm(this.cursorRuntimeDirectory, { recursive: true, force: true });
+      } catch {
+        cleanupFailed = true;
+      }
+      this.cursorRuntimeDirectory = undefined;
+    }
+    if (cleanupFailed)
+      failure = [failure, '本机工具运行时清理未完成，请检查 Athena 私有运行目录后再继续。']
+        .filter(Boolean)
+        .join('；');
+    if (this.active !== run) return;
     this.active = undefined;
     if (run.workspaceTrust) {
       const pending = run.workspaceTrust;
@@ -706,7 +968,6 @@ export class StreamCliSession implements AgentSession {
       this.emit({ type: 'request-resolved', id: pending.id });
       pending.resolve();
     }
-    void this.removePolicy(run).catch(() => {});
     if (failure) {
       this.closed = true;
       this.ready = false;
