@@ -51,7 +51,7 @@ Athena 会检查本机 Codex CLI 的官方稳定版。发现新版本时会显�
 
 在「设置与连接」选择新对话默认 CLI；输入栏的 Agent 菜单可为新对话改选 CLI，已有执行记录的对话不会迁移到其他 CLI。旧档案未记录执行器的对话继续使用 Codex。未安装时，请在终端安装后刷新；登录与模型服务配置沿用 CLI 自身的设置，不会自动安装或切换。
 
-当前包含 Codex、Pi、Claude Code、Gemini CLI 和 Cursor Agent 的协议适配。Pi 的本地工具逐项请求确认；Claude Code 限文本任务，Cursor 限只读任务，浏览器工具仍仅向 Codex 开放。Pi 与 Claude 的隔离真实模型验证已通过；Cursor 登录未就绪、Gemini 未安装，尚未完成其真实模型验收。OpenCode 仍只检测安装。详细能力与验证状态见 [本机 CLI 适配](mainstream-cli-support.md)。
+当前包含 Codex、Pi、Claude Code、Gemini CLI 和 Cursor Agent 的协议适配。Codex、Claude Code、Cursor Agent 和 Pi 均已接入 Neo 浏览器工具。Pi 的本地工具逐项请求确认；Claude 的内置工具关闭，Cursor 的本地工具保持 Ask 模式。新增浏览器适配与各自真实模型验收分别记录，详见 [本机 CLI 适配](mainstream-cli-support.md)。Gemini 保留文本任务，OpenCode 仍只检测安装。
 
 输入框的 Agent 按钮显示当前服务图标，悬停可查看名称。连接状态对应当前工作目录里的这段对话。同一对话就绪后会复用现有 CLI 会话；打开模型选择器无需重新登录。即使某段历史会话无法恢复，也可以单独刷新模型目录。
 

@@ -21,7 +21,12 @@ import { dispatchBrowserAction } from './browser-actions';
 import { createCodexUpdateChecker, detectAgents } from './agents';
 import { createAgentSession } from './agent-factory';
 import type { AgentSession } from './agent-session';
-import { conversationAgent, conversationModelSelection, supportsBrowser } from '../shared/agents';
+import {
+  conversationAgent,
+  conversationModelSelection,
+  supportsBrowser,
+  supportsSelectedElement,
+} from '../shared/agents';
 import { NeoBrowserRuntime } from './neo-browser';
 import { copyText } from './clipboard';
 import { FeishuConnector } from './feishu';
@@ -100,6 +105,7 @@ const modelCatalogs = new Map<
   { models?: ModelOption[]; request?: Promise<ModelOption[]>; probe?: AgentSession }
 >();
 let piPermissionsPath = '';
+let athenaMcpServerPath = '';
 const preDiscoverySessions = new WeakSet<AgentSession>();
 let codexConnection: CodexConnectionState = { status: 'idle' };
 let selectedConversationId: string | undefined;
@@ -182,9 +188,21 @@ async function selectDefaultAgent(value: unknown) {
   await store.save();
   return store.data.settings;
 }
-function nativeSessionOptions() {
+function nativeSessionOptions(conversationId?: string) {
   return {
     permissionsExtensionPath: piPermissionsPath,
+    mcpServerPath: athenaMcpServerPath,
+    ...(conversationId
+      ? {
+          toolRuntimeDirectory: path.join(
+            app.getPath('userData'),
+            'runtime',
+            'athena-cli',
+            'sessions',
+            createHash('sha256').update(conversationId).digest('hex').slice(0, 24),
+          ),
+        }
+      : {}),
     sessionDirectory: path.join(
       app.getPath('userData'),
       'cli-sessions',
@@ -624,7 +642,7 @@ function getSession(
   }
   if (!session) {
     session = createAgentSession(conversationAgent(conversation), {
-      ...nativeSessionOptions(),
+      ...nativeSessionOptions(conversation.id),
       workspace: store.data.settings.workspace,
       executablePath,
       sessionId: conversation.agentSessionId,
@@ -692,7 +710,7 @@ async function runTurn(
   if (conversation.workspace && conversation.workspace !== store.data.settings.workspace)
     throw new Error('这段对话属于另一个工作目录。请切换回原目录，或新建对话。');
   const info = selectableAgent(conversationAgent(conversation));
-  if (!supportsBrowser(info.id) && selectedElement)
+  if (!supportsSelectedElement(info.id) && selectedElement)
     throw new Error('当前 CLI 尚未接通网页元素工具，请移除元素上下文后发送');
   if (!text.trim()) throw new Error('请输入任务');
   if (resetAfterTurn) resetConnections();
@@ -1629,6 +1647,12 @@ async function launch() {
   await writeFile(
     piPermissionsPath,
     await readFile(path.join(app.getAppPath(), 'resources/cli/pi-permissions.mjs')),
+    { mode: 0o600 },
+  );
+  athenaMcpServerPath = path.join(cliRuntime, 'athena-mcp-stdio.mjs');
+  await writeFile(
+    athenaMcpServerPath,
+    await readFile(path.join(app.getAppPath(), 'resources/cli/athena-mcp-stdio.mjs')),
     { mode: 0o600 },
   );
   usage = new UsageStore(app.getPath('userData'));

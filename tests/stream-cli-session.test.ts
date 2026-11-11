@@ -22,6 +22,7 @@ async function fixture(
 const fs = require('node:fs'); const cp = require('node:child_process');
 const cli=${JSON.stringify(cli)}, mode=${JSON.stringify(mode)}, dir=${JSON.stringify(directory)};
 const args=process.argv.slice(2); let input='';
+if(args.includes('--help')){console.log('Start the Cursor Agent --mode --output-format --trust --approve-mcps');process.exit(0);}
 process.stdin.setEncoding('utf8'); process.stdin.on('data',s=>input+=s); process.stdin.on('end',()=>{
  fs.appendFileSync(dir+'/args.jsonl', JSON.stringify({args,input})+'\\n');
  const pi=args.indexOf('--admin-policy'); if(pi>=0) fs.writeFileSync(dir+'/policy.txt',fs.readFileSync(args[pi+1]));
@@ -508,7 +509,7 @@ test('stream-cli-session: startup failure, input guards and model effort support
     await f.cleanup();
   }
 });
-test('stream-cli-session: rejects host browser tools rather than silently enabling an unbridged capability', async () => {
+test('stream-cli-session: 缺少宿主 MCP 服务文件时明确拒绝', async () => {
   const f = await fixture('claude');
   try {
     const session = new StreamCliSession({
@@ -522,7 +523,7 @@ test('stream-cli-session: rejects host browser tools rather than silently enabli
       },
     });
     try {
-      await assert.rejects(session.prepare(), /禁用浏览器/);
+      await assert.rejects(session.prepare(), /MCP 服务文件/);
     } finally {
       session.close();
     }

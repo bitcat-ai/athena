@@ -6,7 +6,10 @@ export function conversationAgent(conversation: Pick<Conversation, 'agent'>): Ag
   return conversation.agent ?? 'codex';
 }
 export function supportsBrowser(agent: AgentId) {
-  return agent === 'codex';
+  return ['codex', 'claude', 'pi', 'cursor'].includes(agent);
+}
+export function supportsSelectedElement(agent: AgentId) {
+  return supportsBrowser(agent);
 }
 export function agentModelSelection(
   settings: Settings,

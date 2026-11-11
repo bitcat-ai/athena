@@ -358,7 +358,7 @@
               <summary>这里用的是哪个 Agent？</summary>
               <p>
                 使用你在准备过程中选择的本机 Agent。新对话可以选择其他已支持的
-                Agent，已有对话保留原来的连接。需要 Agent 操作网页时，请新建 Codex 对话。
+                Agent，已有对话保留原来的连接。Codex、Claude Code、Cursor Agent 和 Pi 都可操作网页。
               </p>
             </details>
             <details>
@@ -396,7 +396,7 @@
       });
       const examples = {
         code: '“帮我把这个想法，做成一个可以运行的小应用。”',
-        web: '先新建一个 Codex 对话，再说：“看看当前网页，一起把它调整成我喜欢的样子。”',
+        web: '“看看当前网页，一起把它调整成我喜欢的样子。”',
         idea: '“我有一个还没想清楚的想法，陪我一起梳理一下。”',
       };
       for (const button of document.querySelectorAll('[data-example]')) {

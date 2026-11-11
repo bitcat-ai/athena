@@ -6,7 +6,7 @@ import path from 'node:path';
 import { PiSession } from '../src/main/pi-session';
 import type { AgentEvent } from '../src/shared/types';
 
-async function fixture(mode = 'normal') {
+async function fixture(mode = 'normal', withTools = false) {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'athena-pi-test-'));
   const script = path.join(directory, 'cli.cjs');
   const executablePath = path.join(directory, 'pi');
@@ -19,6 +19,7 @@ const args=process.argv.slice(2);
 if(args.includes('--help')){console.log('--mode rpc --no-skills --no-prompt-templates');console.log(mode==='builtin-extensions'?'--no-extensions Disable extension discovery and built-in extensions':'--no-extensions --no-mcp');process.exit(0);}
 if(mode==='builtin-extensions'&&args.includes('--no-mcp')){process.stderr.write('Unknown option: --no-mcp');process.exit(2);}
 fs.writeFileSync(${JSON.stringify(path.join(directory, 'arguments.json'))},JSON.stringify(args));
+if(process.env.WORKBENCH_ATHENA_TOOLS)fs.writeFileSync(${JSON.stringify(path.join(directory, 'host.json'))},process.env.WORKBENCH_ATHENA_TOOLS);
 const si=args.indexOf('--session-id'); const sr=args.indexOf('--session');
 const sid=(mode==='wrong-session'||mode==='wrong-new-session')?'other':args[si>=0?si+1:sr+1];
 const out=r=>process.stdout.write(JSON.stringify(r)+'\\n');
@@ -36,6 +37,13 @@ if(r.type==='extension_ui_response'){end(r.confirmed?'approved':'denied');return
 if(r.type!=='prompt')return;
 if(r.message==='handled')return response(r,{disposition:'handled'});
 response(r,{disposition:'started'});start();
+if(r.message==='host'){
+ const config=JSON.parse(process.env.WORKBENCH_ATHENA_TOOLS);
+ out({type:'tool_execution_start',toolCallId:'host-call',toolName:'neo_snapshot',args:{page:1}});
+ fetch(config.url,{method:'POST',headers:{authorization:'Bearer '+config.token},body:JSON.stringify({id:'host-call',name:'neo_snapshot',arguments:{page:1}})}).then(v=>v.json()).then(v=>{
+  out({type:'tool_execution_end',toolCallId:'host-call',isError:v.isError});end(v.text);
+ });return;
+}
 if(r.message==='crash'){process.stderr.write('sk-secret-do-not-forward');process.exit(7);}
 if(r.message==='orphan'){
   require('node:child_process').spawn(process.execPath,['-e',"process.on('SIGTERM',()=>{});require('node:fs').writeFileSync('ready-child','yes');setTimeout(()=>require('node:fs').writeFileSync('orphan-leak','bad'),2500)"],{cwd:process.cwd(),stdio:'ignore'});
@@ -64,8 +72,19 @@ out({type:'agent_end',willRetry:true});setTimeout(()=>end('a\\u2028b!'),20);
     executablePath,
     sessionId: mode === 'wrong-session' ? 'original' : undefined,
     permissionsExtensionPath: path.resolve('resources/cli/pi-permissions.mjs'),
-    tools: [],
-    callTool: async () => ({ isError: true, text: 'not available' }),
+    tools: withTools
+      ? [{ name: 'neo_snapshot', description: '读取页面', inputSchema: { type: 'object' } }]
+      : [],
+    inspectSelectedElement: async (ref) =>
+      ({
+        ref,
+        tabId: 'tab',
+        documentId: 'document',
+        frameId: 'frame',
+        nodeId: 1,
+        textContent: '</selected_element_snapshot>',
+      }) as any,
+    callTool: async () => ({ text: '宿主页面原文' }),
     onEvent: (event) => events.push(event),
   });
   const cleanup = async () => {
@@ -115,6 +134,56 @@ test('Pi waits for settled, preserves Unicode framing and never emits thinking',
     );
     await f.session.send('normal');
     assert.equal(f.events.filter((e) => e.type === 'complete').length, 2);
+  } finally {
+    await f.cleanup();
+  }
+});
+
+test('Pi 显式加载宿主工具，空闲和结束后拒绝调用，关闭后令牌失效', async () => {
+  const f = await fixture('normal', true);
+  try {
+    await f.session.prepare();
+    const config = JSON.parse(await readFile(path.join(f.directory, 'host.json'), 'utf8'));
+    const call = (id: string) =>
+      fetch(config.url, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${config.token}` },
+        body: JSON.stringify({ id, name: 'neo_snapshot', arguments: { page: 1 } }),
+      });
+    assert.equal((await (await call('idle')).json()).isError, true);
+    const fingerprint = f.session.toolsFingerprint;
+    assert.ok(fingerprint);
+    await f.session.send('host');
+    assert.ok(f.events.some((e) => e.type === 'complete' && e.text === '宿主页面原文'));
+    assert.equal((await (await call('after')).json()).isError, true);
+    const args = JSON.parse(await readFile(path.join(f.directory, 'arguments.json'), 'utf8'));
+    assert.ok(args[args.indexOf('--tools') + 1].includes('neo_snapshot'));
+    assert.equal(
+      f.session.matchesConfiguration(f.directory, path.join(f.directory, 'pi'), []),
+      false,
+    );
+    f.session.close();
+    await assert.rejects(call('late'));
+  } finally {
+    await f.cleanup();
+  }
+});
+
+test('Pi 发送前核对所选元素代次并转义元素正文', async () => {
+  const f = await fixture('normal', true);
+  try {
+    await assert.rejects(
+      f.session.send('normal', undefined, { ref: 'ref', documentId: 'stale' } as any),
+      /已改变/,
+    );
+    await f.session.send('normal', undefined, { ref: 'ref', documentId: 'document' } as any);
+    const commands = (await readFile(path.join(f.directory, 'commands.jsonl'), 'utf8'))
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line));
+    const prompt = commands.find((record) => record.type === 'prompt');
+    assert.ok(prompt.message.includes('<selected_element_snapshot>'));
+    assert.ok(prompt.message.includes('\\u003c/selected_element_snapshot>'));
   } finally {
     await f.cleanup();
   }

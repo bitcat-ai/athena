@@ -1,10 +1,12 @@
 import { execFile, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { promisify } from 'node:util';
 import path from 'node:path';
 import { piIsolationArguments } from './agent-discovery';
 import { cliEnvironment } from './agent-process';
+import { HostToolBridge } from './host-tool-bridge';
 import type { AgentSession, AgentSessionOptions } from './agent-session';
+import { selectedElementContext } from './agent-session';
 import type { AgentEvent, BrowserTool, ElementRef, ToolCall } from '../shared/types';
 import {
   unknownTokens,
@@ -60,6 +62,7 @@ export class PiSession implements AgentSession {
     { method: string; run: Run; options?: string[]; timer?: ReturnType<typeof setTimeout> }
   >();
   private tools = new Map<string, ToolCall>();
+  private hostBridge?: HostToolBridge;
 
   constructor(private options: AgentSessionOptions) {
     if (
@@ -76,7 +79,7 @@ export class PiSession implements AgentSession {
     return this.id;
   }
   get toolsFingerprint() {
-    return undefined;
+    return createHash('sha256').update(JSON.stringify(this.options.tools)).digest('hex');
   }
   get replacedSessionId() {
     return undefined;
@@ -87,8 +90,12 @@ export class PiSession implements AgentSession {
   get isClosed() {
     return this.closed;
   }
-  matchesConfiguration(workspace: string, executablePath: string, _tools: BrowserTool[]) {
-    return workspace === this.options.workspace && executablePath === this.options.executablePath;
+  matchesConfiguration(workspace: string, executablePath: string, tools: BrowserTool[]) {
+    return (
+      workspace === this.options.workspace &&
+      executablePath === this.options.executablePath &&
+      JSON.stringify(tools) === JSON.stringify(this.options.tools)
+    );
   }
   private emit(event: AgentEvent) {
     this.options.onEvent(event);
@@ -96,7 +103,10 @@ export class PiSession implements AgentSession {
 
   async prepare(selection?: ModelSelection) {
     if (this.closed) throw new Error('Pi 会话已关闭');
-    this.startup ??= this.start();
+    this.startup ??= this.start().catch((error) => {
+      this.shutdown(error instanceof Error ? error.message : 'Pi 初始化失败');
+      throw error;
+    });
     await this.startup;
     if (selection) await this.selectModel(selection);
   }
@@ -122,6 +132,17 @@ export class PiSession implements AgentSession {
     }
     if (this.closed) throw new Error('Pi 会话已关闭');
     const id = this.id ?? randomUUID();
+    let hostConfiguration: Record<string, unknown> | undefined;
+    if (this.options.tools.length) {
+      this.hostBridge = new HostToolBridge(this.options.tools, (name, args) => {
+        if (!this.active || this.active.cancelled || !this.active.started || this.closed)
+          return Promise.resolve({ text: 'Pi 当前没有可执行的任务', isError: true });
+        return this.options.callTool(name, args);
+      });
+      const endpoint = await this.hostBridge.start();
+      hostConfiguration = { ...endpoint, tools: this.options.tools };
+      if (this.closed) throw new Error('Pi 会话已关闭');
+    }
     const args = [
       '--mode',
       'rpc',
@@ -129,7 +150,16 @@ export class PiSession implements AgentSession {
       '--extension',
       this.options.permissionsExtensionPath!,
       '--tools',
-      'read,bash,write,edit,grep,find,ls',
+      [
+        'read',
+        'bash',
+        'write',
+        'edit',
+        'grep',
+        'find',
+        'ls',
+        ...this.options.tools.map((tool) => tool.name),
+      ].join(','),
       ...(this.options.sessionDirectory ? ['--session-dir', this.options.sessionDirectory] : []),
       ...(this.id ? ['--session', this.id] : ['--session-id', id]),
     ];
@@ -138,6 +168,7 @@ export class PiSession implements AgentSession {
       env: {
         ...process.env,
         PATH: `${path.dirname(this.options.executablePath)}${path.delimiter}${process.env.PATH ?? '/usr/bin:/bin'}`,
+        ...(hostConfiguration ? { WORKBENCH_ATHENA_TOOLS: JSON.stringify(hostConfiguration) } : {}),
       },
       detached: process.platform !== 'win32',
       stdio: 'pipe',
@@ -228,13 +259,15 @@ export class PiSession implements AgentSession {
     if (this.active || this.sending) throw new Error('请等待 Pi 当前任务完成，或先停止');
     if (!prompt.trim() || prompt.length > 20000 || (context?.length ?? 0) > 60000)
       throw new Error('Pi 消息格式或长度无效');
-    if (selectedElement) throw new Error('Pi 尚未接通所选网页元素，请移除元素上下文后发送');
+    let elementContext = '';
     this.sending = true;
     try {
       await this.prepare(selection);
+      elementContext = await selectedElementContext(this.options, selectedElement);
     } finally {
       this.sending = false;
     }
+    if (this.closed) throw new Error('Pi 会话已关闭');
     if (this.active) throw new Error('请等待 Pi 当前任务完成，或先停止');
     const done = new Promise<void>((resolve, reject) => {
       this.active = {
@@ -264,7 +297,11 @@ export class PiSession implements AgentSession {
     void this.request(
       'prompt',
       {
-        message: [prompt, context ? `<task_context>\n${context}\n</task_context>` : '']
+        message: [
+          prompt,
+          context ? `<task_context>\n${context}\n</task_context>` : '',
+          elementContext,
+        ]
           .filter(Boolean)
           .join('\n\n'),
       },
@@ -282,7 +319,10 @@ export class PiSession implements AgentSession {
   }
   async interrupt() {
     const run = this.active;
-    if (!run) return;
+    if (!run) {
+      if (this.sending) this.shutdown('Pi 会话已关闭');
+      return;
+    }
     run.cancelled = true;
     this.cancelRequests();
     this.emit({ type: 'status', status: 'waiting', label: '正在停止 Pi' });
@@ -594,6 +634,8 @@ export class PiSession implements AgentSession {
     this.closed = true;
     this.startupAbort.abort();
     this.ready = false;
+    void this.hostBridge?.close();
+    this.hostBridge = undefined;
     for (const pending of this.pending.values()) {
       clearTimeout(pending.timer);
       pending.reject(new Error(reason));

@@ -14,6 +14,8 @@ export interface AgentSessionOptions {
   sessionId?: string;
   sessionDirectory?: string;
   permissionsExtensionPath?: string;
+  mcpServerPath?: string;
+  toolRuntimeDirectory?: string;
   sessionToolsFingerprint?: string;
   historyForToolUpgrade?: string;
   tools: BrowserTool[];
@@ -42,4 +44,17 @@ export interface AgentSession {
   resolveApproval(id: string, approved: boolean): void;
   resolveUserInput(id: string, answers: Record<string, string[]>): void;
   close(): void;
+}
+
+export async function selectedElementContext(options: AgentSessionOptions, selected?: ElementRef) {
+  if (!selected) return '';
+  if (!selected.ref || !options.inspectSelectedElement)
+    throw new Error('无法读取所选网页元素，请重新选择后重试');
+  const current = await options.inspectSelectedElement(selected.ref);
+  for (const key of ['ref', 'tabId', 'frameId', 'documentId', 'nodeId'] as const)
+    if (selected[key] !== undefined && current[key] !== selected[key])
+      throw new Error('所选网页元素已改变，请重新选择后重试');
+  const snapshot = JSON.stringify(current).replace(/</g, '\\u003c');
+  if (snapshot.length > 60_000) throw new Error('所选网页元素上下文过长，请选择更具体的元素');
+  return `<selected_element_snapshot>\n${snapshot}\n</selected_element_snapshot>`;
 }

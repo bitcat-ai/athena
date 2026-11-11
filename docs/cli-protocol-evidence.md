@@ -19,6 +19,7 @@
 
 - [官方 headless 文档](https://code.claude.com/docs/en/headless)：`--print --output-format stream-json --verbose --include-partial-messages`；`stream_event.event.delta.type=text_delta` 的 `text`；最终 `result`；通过 `--resume <session-id>` 恢复明确会话。文档明确要求检查退出码，失败可能在 stdout result 中报告。
 - [官方 CLI 参数](https://code.claude.com/docs/en/cli-reference) 与本机 help：`--tools ""` 禁用全部内置工具；`--strict-mcp-config --mcp-config '{"mcpServers":{}}'` 不载入用户 MCP；`--safe-mode` 禁用 hooks/skills/plugins 等自定义行为，但保留认证与模型选择；不使用会跳过 OAuth/keychain 的 `--bare`。
+- 本轮有宿主工具时，将空 MCP 配置替换为私有配置文件，仅注册 `athena_workbench`；`--allowedTools` 逐名列出 `mcp__athena_workbench__<工具名>`。非白名单工具事件立即停止，不通过宽前缀推断许可。
 - 本机 help / headless 文档：`--permission-mode dontAsk --permission-prompts none`，无人审批时拒绝请求而非等待。`--disable-slash-commands --no-chrome` 不开放命令/浏览器旁路。
 - [官方 SDK 类型](https://platform.claude.com/docs/en/agent-sdk/typescript)：`SDKAssistantMessage.message.model`、`SDKResultMessage.usage` / `permission_denials` / `stop_reason`。只显示 text block，不显示 thinking，也不把 subagent 消息拼进主回复。
 
@@ -40,10 +41,12 @@
 ### Cursor Agent
 
 - [官方参数](https://cursor.com/docs/cli/reference/parameters) 与本机 help：`--print --output-format stream-json --stream-partial-output --mode ask`；`--resume <chatId>`。本机 help 明确 ask 只读。
-- [官方使用说明](https://cursor.com/docs/cli/using)：Ask 用于探索代码，不编辑文件；默认 print 模式有写权限，**不能仅依赖 print 模式作为限制**。保留用户现有配置，未使用 `--force` / `--approve-mcps`。
+- [官方使用说明](https://cursor.com/docs/cli/using)：Ask 用于探索代码，不编辑文件；默认 print 模式有写权限，**不能仅依赖 print 模式作为限制**。不使用 `--force`；有 Athena 宿主工具时仅对私有单服务配置使用 `--approve-mcps`。
 - [官方输出格式](https://cursor.com/docs/cli/reference/output-format)：init 原生 session_id；assistant.message.content text；result.subtype=success / is_error=false / result / session_id；失败以非零退出、stderr 报告，可能没有最终 result。
 - 官方 partial 去重规则：仅追加有 `timestamp_ms` 且**没有** `model_call_id` 的 assistant 事件；有 model_call_id 的 pre-tool flush 与没有 timestamp 的 final flush 都是重复。最终 result 为全部文本，可补齐未收到的尾部；不同前缀则报协议错误，不拼接伪造输出。
 - 官方工具事件：tool_call.started/completed，以 call_id 关联；readToolCall.args 与 result.success。适配器只接收已知读取/搜索类工具名，公开 input/status，不转发原始工具输出；错误、未完成或非只读工具事件会失败并终止进程组。此检查不能替代启动时 ask 权限模式。
+- 本机 `2026.01.23-916f423` 安装包的 MCP 事件为 `tool_call.mcpToolCall`，参数含 `name`、`providerIdentifier`、`toolName` 和 `args`。只接受 `athena_workbench` 与本轮白名单的确切组合，检查 `result.success.isError`，不重复显示宿主桥已记录的工具事件。宿主返回的工具错误允许观察恢复；传输、权限或工具缺失失败停止本轮。
+- 同版本的 CLI 配置按 `CURSOR_CONFIG_DIR/cli-config.json` 加载，工具许可用 `Mcp(athena_workbench:<工具名>)` 逐项放行；`--approve-mcps` 本身只处理 MCP 服务启动。私有 HOME 下配置单个 MCP，项目 MCP/hooks/CLI 权限配置存在时拒绝运行。认证文件由 CLI 原生管理并链接使用；模型和非工具连接配置按白名单保留，原生数据目录保持不变。
 
 Cursor 文档只提供 init 的模型显示名称，没有当前 assistant 的运行模型证明或正式 token 用量字段，因此两者保持未知；不套用 Claude 的 usage 协议。ask 的 CLI 级只读不等于 OS 沙箱；现有 MCP/hooks 配置的可信性仍由本机环境负责。未接通原生工具审批，不把接收到的 tool.started 当作宿主批准。
 
@@ -52,7 +55,7 @@ Cursor 文档只提供 init 的模型显示名称，没有当前 assistant 的�
 - 父任务负责 main/UI/store/discovery/onboarding；本文件不改这些入口。按对话固定 CLI，只有同 CLI 的原生 session ID 可以恢复；不能从 Codex/Pi/其他 CLI ID 或拼接历史创建“恢复”。
 - `prepare()` 只校验配置，不启动模型；`isReady` 不代表已登录或恢复成功。`listModels()` 返回空目录，而不是用模型调用发现目录或捏造可选项。已知外部模型标识可通过 `selection.model` 传入，CLI 最终决定是否支持；effort 仅接受本机 Claude help 中明确的值。
 - 首次 `send()` 等待原生 init 才发 run-started；恢复 ID 不同立即失败，缺失 session 不重试建新。失败/停止后 adapter 关闭，宿主可显式新建 adapter 并使用已保存的原生 ID 再恢复，不自动重放消息。
-- 必须传 `tools: []`，隐藏/禁用浏览器与元素能力；非空 tools 和 selectedElement 明确报错。`callTool` 不调用。Cursor 的宿主目录信任请求需逐次批准；其余原生工具审批/提问仍不支持，收到未桥接请求会停止。目录信任不等同于任意命令或文件写入授权。
+- Claude/Cursor 支持本轮宿主工具与经宿主重新核实的元素上下文；Gemini 继续要求 `tools: []`，不接受元素上下文。Cursor 的宿主目录信任请求需逐次批准；其余原生工具审批/提问仍不支持，收到未桥接请求会停止。目录信任不等同于任意命令或文件写入授权。
 - prompt/context 走 stdin 并 EOF，不经过 shell，不修改凭据。stderr 排空但不展示；协议错误使用固定错误文案。stdout 仅解析已知公开文本/元数据，不发 thinking 或完整协议记录。
 - 每回合都必须具备匹配的 init、成功原生 result、正常退出码，才发 complete。只见 delta、只见退出码 0、权限拒绝、错误 result、无 result、中止和非零退出都不会成功。
 - POSIX detached 进程组 TERM 后 1.5 秒 KILL；即使 leader 先退出也保留组清理。停止不以杀进程假装模型已完成。Claude/Gemini 初始化超时为 30 秒，Cursor 为 60 秒；目录确认等待及整回合各有 15 分钟上限；不无限等待原生交互。Windows 没有 POSIX 进程组能力，仅直接终止子进程，进程树停止能力**未验证**。
