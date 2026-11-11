@@ -25,6 +25,7 @@ import { conversationAgent, conversationModelSelection, supportsBrowser } from '
 import { NeoBrowserRuntime } from './neo-browser';
 import { copyText } from './clipboard';
 import { FeishuConnector } from './feishu';
+import { FeishuDocuments, documentContext, feishuLinks, feishuReadTool } from './feishu-documents';
 import { TurnNotifications } from './notifications';
 import { Store } from './store';
 import {
@@ -115,6 +116,7 @@ let browser: BrowserRuntime;
 let sharing: SharingRuntime | undefined;
 let neo: NeoBrowserRuntime;
 let feishu: FeishuConnector;
+let documents: FeishuDocuments;
 let agents: AgentInfo[] = [];
 const checkCodexUpdate = createCodexUpdateChecker((url, options) => net.fetch(url, options));
 let active:
@@ -126,6 +128,7 @@ let active:
       notifications: TurnNotifications;
       requests: PendingAgentRequest[];
       cancelled: boolean;
+      controller: AbortController;
       /** False until the CLI accepts the turn; drives the preparing phase. */
       connected: boolean;
       /** What the user decided for a request, recorded before the session resolves it. */
@@ -137,7 +140,13 @@ let active:
 const inlineFailures = new WeakSet<object>();
 let startingTurn = false;
 let preparingTurn:
-  | { cancelled: boolean; conversationId: string; done: Promise<void>; resolve: () => void }
+  | {
+      cancelled: boolean;
+      conversationId: string;
+      done: Promise<void>;
+      resolve: () => void;
+      controller: AbortController;
+    }
   | undefined;
 let externalTurnQueue = Promise.resolve();
 
@@ -208,7 +217,7 @@ function nativeSessionOptions() {
   };
 }
 function toolsFor(conversation: Conversation) {
-  return supportsBrowser(conversationAgent(conversation)) ? neo.getTools() : [];
+  return supportsBrowser(conversationAgent(conversation)) ? [...neo.getTools(), feishuReadTool] : [];
 }
 function assertTaskEnvironment() {
   if (onboarding?.getState().requiresSetup && onboarding.getState().workspace.status !== 'ready')
@@ -660,6 +669,28 @@ function getSession(
           return { text: '当前 CLI 未接通网页工具，不能执行此操作。', isError: true };
         if (!active || active.conversationId !== conversation.id)
           return { text: '任务已经停止，不能再执行浏览器操作。', isError: true };
+        const turn = active;
+        if (turn.cancelled) return { text: '任务已停止', isError: true };
+        if (name === feishuReadTool.name) {
+          try {
+            const document = await documents.read(
+              string(record(args).url, 2000),
+              turn.controller.signal,
+            );
+            if (active !== turn || turn.cancelled) throw new Error('任务已停止');
+            const text = documentContext([document]);
+            const assistant = conversation.messages.find(
+              (message) => message.id === turn.messageId,
+            )!;
+            const { content, untrusted, ...source } = document;
+            assistant.sources = [...(assistant.sources ?? []), source];
+            await store.save();
+            emit({ type: 'conversation:updated', conversation });
+            return { text };
+          } catch (error) {
+            return { text: error instanceof Error ? error.message : '飞书正文读取失败', isError: true };
+          }
+        }
         if (
           active.readonly &&
           !readOnlyBrowserTools.has(name) &&
@@ -784,6 +815,7 @@ async function runTurn(
     conversationId: conversation.id,
     done: preparationDone,
     resolve: resolvePreparation,
+    controller: new AbortController(),
   };
   preparingTurn = preparing;
   await store.save().catch((error) => {
@@ -795,6 +827,29 @@ async function runTurn(
   emit({ type: 'conversation:updated', conversation });
   usage.start(assistant.id, info.id, modelSelection?.model);
   saveUsage();
+  let references = '';
+  try {
+    const loaded = [];
+    for (const link of feishuLinks(text))
+      loaded.push(await documents.read(link, preparing.controller.signal));
+    if (loaded.length) {
+      references = documentContext(loaded);
+      assistant.sources = loaded.map(({ content, untrusted, ...source }) => source);
+    }
+  } catch (error) {
+    startingTurn = false;
+    preparing.resolve();
+    preparingTurn = undefined;
+    assistant.status = 'error';
+    assistant.failure = error instanceof Error ? error.message : '飞书正文读取失败';
+    assistant.text = assistant.failure;
+    endPhase(assistant, preparing.cancelled);
+    usage.finish(assistant.id, preparing.cancelled ? 'cancelled' : 'failed');
+    saveUsage();
+    await store.save();
+    emit({ type: 'conversation:updated', conversation });
+    return assistant.text;
+  }
   try {
     if (supportsBrowser(info.id) && onboarding?.allowsBrowserStartup !== false) await neo.start();
   } catch {
@@ -844,6 +899,7 @@ async function runTurn(
     notifications,
     requests: [],
     cancelled: false,
+    controller: preparing.controller,
     connected: false,
     resolutions: new Map(),
     nativeApprovals: new Map(),
@@ -872,7 +928,7 @@ async function runTurn(
     }
     await session.send(
       text,
-      [context, skillContext, nativeContext].filter(Boolean).join('\n\n') || undefined,
+      [context, skillContext, nativeContext, references].filter(Boolean).join('\n\n') || undefined,
       selectedElement,
       modelSelection,
       selectedProviderSkills,
@@ -897,6 +953,7 @@ async function runTurn(
     if (failure && typeof failure === 'object') inlineFailures.add(failure);
     throw failure;
   } finally {
+    active?.controller.abort();
     usage.finish(
       assistant.id,
       active?.cancelled ? 'cancelled' : assistant.status === 'done' ? 'completed' : 'failed',
@@ -933,10 +990,12 @@ async function stopTurn() {
   const preparing = preparingTurn;
   if (preparing) {
     preparing.cancelled = true;
+    preparing.controller.abort();
     await preparing.done;
   }
   if (!active) return;
   active.cancelled = true;
+  active.controller.abort();
   const turn = active;
   const assistant = getConversation(turn.conversationId).messages.find(
     (message) => message.id === turn.messageId,
@@ -1773,6 +1832,7 @@ async function launch() {
   demoUrl = `http://127.0.0.1:${address.port}`;
   store = new Store(app.getPath('userData'));
   await store.load();
+  documents = new FeishuDocuments(path.join(app.getPath('userData'), 'document-reads'));
   const cliRuntime = path.join(app.getPath('userData'), 'runtime', 'athena-cli');
   await mkdir(cliRuntime, { recursive: true, mode: 0o700 });
   piPermissionsPath = path.join(cliRuntime, 'pi-permissions.mjs');
@@ -2021,8 +2081,14 @@ app.on('before-quit', (event) => {
   event.preventDefault();
   quitting = true;
   clearModelCatalog();
-  if (preparingTurn) preparingTurn.cancelled = true;
-  if (active) active.cancelled = true;
+  if (preparingTurn) {
+    preparingTurn.cancelled = true;
+    preparingTurn.controller.abort();
+  }
+  if (active) {
+    active.cancelled = true;
+    active.controller.abort();
+  }
   browser?.revokeAgentControl();
   demoServer?.close();
   void Promise.allSettled([
