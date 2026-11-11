@@ -34,7 +34,7 @@ if (process.argv.includes('status')) {
   fs.writeFileSync(log+'.login','checked');
   console.error('Not logged in'); process.exit(0);
 }
-if (process.argv.includes('app-server')) fs.writeFileSync(log+'.env', JSON.stringify({apiKey:process.env.OPENAI_API_KEY,codexKey:process.env.CODEX_API_KEY}));
+if (process.argv.includes('app-server')) fs.writeFileSync(log+'.env', JSON.stringify({apiKey:process.env.OPENAI_API_KEY,codexKey:process.env.CODEX_API_KEY,accessToken:process.env.CODEX_ACCESS_TOKEN,providerToken:process.env.ATHENA_TEST_PROVIDER_TOKEN}));
 const send = value => process.stdout.write(JSON.stringify(value) + '\\n');
 const event = (method, params) => send({method, params});
 let turn = 0, current, mode, pendingTool = false;
@@ -1481,24 +1481,31 @@ test('A late release response cannot restore an alert for a replaced executable'
   assert.equal((await newResult).status, 'current');
 });
 
-test('the runtime starts with the provider keys of its environment', async (t) => {
+test('Codex 执行保留 API Key、访问 Token 与自定义 Provider 变量', async (t) => {
   const f = await fixture();
-  const old = { api: process.env.OPENAI_API_KEY, codex: process.env.CODEX_API_KEY };
-  process.env.OPENAI_API_KEY = 'fake-test-only';
-  process.env.CODEX_API_KEY = 'fake-test-only-codex';
+  const values = {
+    OPENAI_API_KEY: 'fixture-openai-only',
+    CODEX_API_KEY: 'fixture-codex-only',
+    CODEX_ACCESS_TOKEN: 'fixture-access-only',
+    ATHENA_TEST_PROVIDER_TOKEN: 'fixture-provider-only',
+  };
+  const previous = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
+  Object.assign(process.env, values);
   const agent = session(f, []);
   t.after(async () => {
-    if (old.api === undefined) delete process.env.OPENAI_API_KEY;
-    else process.env.OPENAI_API_KEY = old.api;
-    if (old.codex === undefined) delete process.env.CODEX_API_KEY;
-    else process.env.CODEX_API_KEY = old.codex;
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
     agent.close();
     await f.cleanup();
   });
   await agent.prepare();
   assert.deepEqual(JSON.parse(await readFile(`${f.log}.env`, 'utf8')), {
-    apiKey: 'fake-test-only',
-    codexKey: 'fake-test-only-codex',
+    apiKey: values.OPENAI_API_KEY,
+    codexKey: values.CODEX_API_KEY,
+    accessToken: values.CODEX_ACCESS_TOKEN,
+    providerToken: values.ATHENA_TEST_PROVIDER_TOKEN,
   });
 });
 

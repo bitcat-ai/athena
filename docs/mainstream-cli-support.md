@@ -75,3 +75,5 @@ WORKBENCH_LIVE_CLI=cursor WORKBENCH_CLI_UI_CHECK=permissions npx tsx tests/cli-l
 Pi 真实测试只自动批准隔离目录 evidence.txt 的指定 read/write，不批准任意命令；Claude/Cursor 真实脚本仅请求文本，不请求文件、shell 或外部消息。临时项目删除后，CLI 自身正常保存的原生会话仍遵循各自的本机存储规则，不提交到 Git。
 
 旧测试夹具把 Node 路径直接放进 shebang，在带空格的 fnm 路径下会 ENOENT；现通过 `tests/node-script.ts` 的可执行 JS 头修复夹具，并覆盖带空格、单引号的 Node 路径及参数透传，不改变生产执行器或放宽断言。
+
+API Key、Token 与自定义 Provider 的配置见 [CLI 认证配置](cli-provider-auth.md)。
