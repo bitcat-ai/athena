@@ -1181,3 +1181,28 @@ test('a task interrupted after dispatch is not automatically replayed on restart
     await h.cleanup();
   }
 });
+
+test('富文本链接的真实地址完整进入任务，显示名不能替代 href', async () => {
+  const received: FeishuMessage[] = [];
+  const h = await harness(async (message) => {
+    received.push(message);
+  });
+  try {
+    await h.connectAndPair();
+    const url = 'https://yeepay.feishu.cn/wiki/ExampleToken?from=chat&x=1#section';
+    await h.callbacks.onMessage(
+      postEvent('linked-document', {
+        content: [
+          [
+            { tag: 'text', text: '总结 ' },
+            { tag: 'a', text: '操作手册', href: url },
+          ],
+        ],
+      }),
+    );
+    await until(() => received.length === 1);
+    assert.equal(received[0].text, `总结 操作手册（${url}）`);
+  } finally {
+    await h.cleanup();
+  }
+});

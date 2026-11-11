@@ -114,7 +114,19 @@ function messageText(type: unknown, content: unknown): string | undefined {
     let line = '';
     for (const element of paragraph) {
       if (!isRecord(element)) return;
-      // Do not fetch media, expose resource keys or execute link targets/embedded content.
+      // 链接保留真实地址；只提取文字，不执行链接或下载嵌入资源。
+      if (element.tag === 'a' && typeof element.href === 'string') {
+        try {
+          const url = new URL(element.href);
+          if (['https:', 'http:'].includes(url.protocol) && !url.username && !url.password) {
+            const label = typeof element.text === 'string' ? element.text : '';
+            line += label && label !== element.href ? `${label}（${element.href}）` : element.href;
+            continue;
+          }
+        } catch {
+          // 非法地址仅保留可见文字。
+        }
+      }
       if (
         typeof element.tag === 'string' &&
         ['text', 'a', 'md', 'code_block'].includes(element.tag) &&

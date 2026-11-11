@@ -434,6 +434,8 @@ export interface ElementMention {
   edit?: ElementEdit;
 }
 export interface ChatMessage {
+  /** 实际读取的文档来源与摘要；不单独持久化完整正文。 */
+  sources?: Array<{ url: string; title: string; type: string; revision?: number; sha256: string }>;
   id: string;
   role: 'user' | 'assistant';
   text: string;
