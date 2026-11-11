@@ -22,7 +22,7 @@ import {
 } from '@heroui-pro/react';
 import athenaLogo from './assets/brand/athena-profile.png';
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
-import { flushSync } from 'react-dom';
+import { createPortal, flushSync } from 'react-dom';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
@@ -31,7 +31,6 @@ import {
   ArrowLeft01Icon,
   ArrowUpRight01Icon,
   ChartNoAxesCombinedIcon,
-  CircleIcon,
   CommandIcon,
   CopyIcon,
   Cursor01Icon,
@@ -59,10 +58,13 @@ import { ElementInspector } from './ElementInspector';
 import { AssistantTurn } from './AssistantTurn';
 import { PhaseGlyph } from './PhaseGlyph';
 import { ModelPicker } from './ModelPicker';
+import { ChoiceSelect } from './ChoiceSelect';
+import { effortName } from './ReasoningSlider';
 import { SkillPicker } from './SkillPicker';
 import { UsagePanel } from './UsagePanel';
 import { AgentIcon } from './AgentIcon';
 import { WorkbenchNotices, useCodexUpdate } from './WorkbenchNotices';
+import { AppToast, type AppToastMessage } from './AppToast';
 import { ConversationSearch } from './ConversationSearch';
 import { ConversationMenu, DeleteConversationDialog } from './ConversationMenu';
 import { UserMenu, WebContextMenu, useAppearance } from './HomeMenus';
@@ -83,7 +85,17 @@ import {
   conversationAgent,
   conversationModelSelection,
   supportsBrowser,
+  supportsImages,
 } from '../shared/agents';
+import {
+  IMAGE_TYPES,
+  MAX_IMAGES,
+  MAX_IMAGE_BYTES,
+  MAX_IMAGE_TOTAL_BYTES,
+  parseImages,
+  type ImageAttachment,
+} from '../shared/images';
+import { ImageAttachments } from './ImageAttachments';
 import type { ProviderSkill } from '../shared/skills';
 import {
   MAX_SKILLS,
@@ -162,9 +174,61 @@ function sessionLabel(info?: AgentInfo, connection?: CodexConnectionState) {
   return '已检测';
 }
 
+interface DraftImage extends ImageAttachment {
+  size: number;
+  error?: string;
+}
+
+async function readPastedImage(file: File, image: DraftImage): Promise<DraftImage> {
+  const bitmap = await createImageBitmap(file).catch(() => {
+    throw new Error('图片无法读取，请重新复制图片');
+  });
+  const pixels = bitmap.width * bitmap.height;
+  let normalized: string | undefined;
+  try {
+    if (pixels > 40_000_000) throw new Error('图片像素过多，请缩小图片后重试');
+    if (file.type === 'image/webp') {
+      // Electron nativeImage cannot decode WebP; normalize it before host validation.
+      const canvas = document.createElement('canvas');
+      canvas.width = bitmap.width;
+      canvas.height = bitmap.height;
+      const context = canvas.getContext('2d');
+      if (!context) throw new Error('图片无法读取，请重新复制图片');
+      context.drawImage(bitmap, 0, 0);
+      normalized = canvas.toDataURL('image/png');
+    }
+  } finally {
+    bitmap.close();
+  }
+  const url =
+    normalized ??
+    (await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(new Error('图片读取失败，请重新粘贴'));
+      reader.onabort = () => reject(new Error('图片读取已取消，请重新粘贴'));
+      reader.readAsDataURL(file);
+    }));
+  const data = url.slice(url.indexOf(',') + 1);
+  const result: DraftImage = {
+    ...image,
+    data,
+    ...(normalized
+      ? {
+          mimeType: 'image/png',
+          name: image.name.replace(/\.webp$/i, '.png'),
+          size: atob(data).length,
+        }
+      : {}),
+  };
+  parseImages([result]);
+  return result;
+}
+
 interface DraftEntry {
   text: string;
   field?: TokenFieldValue<ComposerToken>;
+  images?: DraftImage[];
 }
 const EMPTY_FIELD = new TokenFieldValue<ComposerToken>([]);
 const TOKEN_PATTERN = /^\[ele(\d+)\]$/;
@@ -223,8 +287,11 @@ export default function App() {
   const [settings, setSettings] = useState<Settings>({ workspace: '', agent: 'codex' });
   const [skills, setSkills] = useState<AppSnapshot['skills']>([]);
   const [providerSkills, setProviderSkills] = useState<ProviderSkill[]>([]);
-  const [providerSkillDiscovery, setProviderSkillDiscovery] = useState<AppSnapshot['providerSkillDiscovery']>();
-  const [pendingExternalConnections, setPendingExternalConnections] = useState<NonNullable<AppSnapshot['pendingExternalConnections']>>([]);
+  const [providerSkillDiscovery, setProviderSkillDiscovery] =
+    useState<AppSnapshot['providerSkillDiscovery']>();
+  const [pendingExternalConnections, setPendingExternalConnections] = useState<
+    NonNullable<AppSnapshot['pendingExternalConnections']>
+  >([]);
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
   const workspaceLabel =
     settings.workspaceMode === 'personal' ? '不绑定文件夹' : basename(settings.workspace);
@@ -252,8 +319,10 @@ export default function App() {
   const [settingsTab, setSettingsTab] = useState<SettingsTab | null>(null);
   const [agentMenu, setAgentMenu] = useState(false);
   const [pendingRequests, setPendingRequests] = useState<PendingAgentRequest[]>([]);
-  const [toast, setToast] = useState<{ text: string; error: boolean; copiedMessageId?: string }>();
+  const [toast, setToast] = useState<AppToastMessage>();
   const [refreshing, setRefreshing] = useState(false);
+  const [savingDefaultAgent, setSavingDefaultAgent] = useState(false);
+  const [switchingAgent, setSwitchingAgent] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [manualAppId, setManualAppId] = useState('');
   const [manualSecret, setManualSecret] = useState('');
@@ -265,7 +334,6 @@ export default function App() {
   const stickToBottom = useRef(true);
   const lastFrame = useRef<BrowserFrame | undefined>(undefined);
   const activeBrowserTab = useRef<string | undefined>(undefined);
-  const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const workspaceConversations = conversations.filter(
     (item) => !item.workspace || item.workspace === settings.workspace,
   );
@@ -282,15 +350,20 @@ export default function App() {
   const draftKey = JSON.stringify([settings.workspace, conversationId]);
   const draftEntry = drafts[draftKey];
   const draft = draftEntry?.text ?? '';
+  const images = draftEntry?.images ?? [];
   // Before the first send there is no host ID. Keep that draft reachable after navigation.
   const sidebarConversations = showArchived
     ? archivedConversations
-    : drafts[JSON.stringify([settings.workspace, null])]?.text
+    : drafts[JSON.stringify([settings.workspace, null])]?.text ||
+        drafts[JSON.stringify([settings.workspace, null])]?.images?.length
       ? [{ id: undefined, title: '未发送草稿', messages: [] }, ...openConversations]
       : openConversations;
   const field = draftEntry?.field ?? EMPTY_FIELD;
   const storeField = (next: TokenFieldValue<ComposerToken>) =>
-    setDrafts((previous) => ({ ...previous, [draftKey]: { text: next.toString(), field: next } }));
+    setDrafts((previous) => ({
+      ...previous,
+      [draftKey]: { ...previous[draftKey], text: next.toString(), field: next },
+    }));
   // Page elements live in the draft as inline [eleN] tokens and need no trigger character.
   // A slash at the start of a word opens the Skills of the current CLI.
   const tokens = usePromptInputTokens<ComposerToken>({
@@ -304,10 +377,96 @@ export default function App() {
   const skillMenuVisible = skillMenuOpen && skillOptions.length > 0;
   const skillUnavailable = (name: string) =>
     chosenSkills.has(name) || chosenSkills.size >= MAX_SKILLS;
-  const insertSkill = (name: string) =>
-    tokens.insertToken(`/${name}`, { value: { skill: name } });
+  const insertSkill = (name: string) => tokens.insertToken(`/${name}`, { value: { skill: name } });
   const focusComposer = () => tokens.inputRef.current?.focus();
   const setDraft = (text: string) => storeField(fieldFromText(text));
+  const clearDraft = () =>
+    setDrafts((previous) => {
+      const next = { ...previous };
+      delete next[draftKey];
+      return next;
+    });
+  const removeImage = (id: string) => {
+    setDrafts((previous) => ({
+      ...previous,
+      [draftKey]: {
+        ...previous[draftKey],
+        text: previous[draftKey]?.text ?? '',
+        images: previous[draftKey]?.images?.filter((image) => image.id !== id),
+      },
+    }));
+    focusComposer();
+  };
+  const pasteImages = (event: React.ClipboardEvent) => {
+    const files = Array.from(event.clipboardData.files).filter((file) =>
+      file.type.startsWith('image/'),
+    );
+    if (!files.length || archived) return;
+    if (!event.clipboardData.getData('text/plain')) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    if (files.some((file) => !IMAGE_TYPES.includes(file.type as DraftImage['mimeType']))) {
+      showToast('请粘贴 PNG、JPEG 或 WebP 图片', true);
+      return;
+    }
+    if (files.some((file) => file.size > MAX_IMAGE_BYTES)) {
+      showToast('单张图片不能超过 5 MB', true);
+      return;
+    }
+    const added: DraftImage[] = files.map((file) => ({
+      id: crypto.randomUUID(),
+      name: (file.name || '粘贴的图片').slice(0, 128),
+      mimeType: file.type as DraftImage['mimeType'],
+      size: file.size,
+      data: '',
+    }));
+    const current = drafts[draftKey]?.images ?? [];
+    if (
+      current.length + added.length > MAX_IMAGES ||
+      [...current, ...added].reduce((sum, image) => sum + image.size, 0) > MAX_IMAGE_TOTAL_BYTES
+    ) {
+      showToast('每条消息最多 4 张图片，总大小不能超过 10 MB', true);
+      return;
+    }
+    // Reserve each slot before reading; removal or clearing the draft cancels its late result.
+    flushSync(() =>
+      setDrafts((previous) => ({
+        ...previous,
+        [draftKey]: {
+          ...previous[draftKey],
+          text: previous[draftKey]?.text ?? '',
+          images: [...(previous[draftKey]?.images ?? []), ...added],
+        },
+      })),
+    );
+    added.forEach((image, index) => {
+      void readPastedImage(files[index], image)
+        .catch((error) => ({ ...image, error: errorText(error) }))
+        .then((result) => {
+          setDrafts((previous) => {
+            const entry = previous[draftKey];
+            if (!entry?.images?.some((item) => item.id === image.id)) return previous;
+            const nextImages = entry.images.map((item) => (item.id === image.id ? result : item));
+            const resolved =
+              nextImages.reduce((sum, item) => sum + item.size, 0) > MAX_IMAGE_TOTAL_BYTES
+                ? {
+                    ...result,
+                    data: '',
+                    error: '图片读取后总大小超过 10 MB，请移除部分图片或缩小后重试',
+                  }
+                : result;
+            return {
+              ...previous,
+              [draftKey]: {
+                ...entry,
+                images: entry.images.map((item) => (item.id === image.id ? resolved : item)),
+              },
+            };
+          });
+        });
+    });
+  };
   /** Elements referenced by tokens in the current draft, in order of appearance. */
   const mentions = field.segments.flatMap((segment) =>
     segment.type === 'token' && segment.value && !isSkillToken(segment.value)
@@ -374,7 +533,7 @@ export default function App() {
     id: conversationId,
     workspace: settings.workspace,
     draftKey,
-    hasDraft: !!draft,
+    hasDraft: !!draft || !!images.length,
   };
   const viewedConversation = useRef(currentView);
   viewedConversation.current = currentView;
@@ -437,15 +596,16 @@ export default function App() {
     modelSelections: { ...settings.modelSelections, [currentAgentId]: currentSelection },
   };
   const codexInfo = agents.find((item) => item.id === 'codex');
-  const {
-    update: codexUpdate,
-    installedVersion,
-    refresh: refreshCodexUpdate,
-  } = useCodexUpdate(codexInfo, workbenchMounted && !onboardingVisible);
+  const { update: codexUpdate, refresh: refreshCodexUpdate } = useCodexUpdate(
+    codexInfo,
+    workbenchMounted && !onboardingVisible,
+  );
   const currentConnection =
     codexConnection.conversationId === conversationId ? codexConnection : undefined;
-  const defaultConnection = currentAgentId === settings.agent ? currentConnection : undefined;
   const agentStatus = sessionLabel(currentAgent, currentConnection);
+  const latestAssistant = messages.findLast((message) => message.role === 'assistant');
+  const executionModel =
+    latestAssistant?.model?.source !== 'unconfirmed' ? latestAssistant?.model : undefined;
   const connected = feishu.status === 'connected' && feishu.paired;
   const minDrawerWidth = 390;
   const maxDrawerWidth = Math.max(minDrawerWidth, panelWidth - 420);
@@ -454,9 +614,16 @@ export default function App() {
   const drawerWidth = clampDrawerWidth(browserWidth ?? Math.min(620, panelWidth / 2));
 
   const showToast = useCallback((text: string, error = false, copiedMessageId?: string) => {
-    setToast({ text, error, copiedMessageId });
-    clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToast(undefined), error ? 6500 : 3200);
+    setToast((current) =>
+      current?.text === text &&
+      current.error === error &&
+      current.copiedMessageId === copiedMessageId
+        ? current
+        : { text, error, copiedMessageId },
+    );
+  }, []);
+  const dismissToast = useCallback((message: AppToastMessage) => {
+    setToast((current) => (current === message ? undefined : current));
   }, []);
   const acceptOnboardingState = useCallback((next: OnboardingState) => {
     const previous = onboardingStateRef.current;
@@ -772,7 +939,8 @@ export default function App() {
     // Match the existing effect cancellation pattern: old conversation responses
     // must never populate the new conversation's menu.
     let disposed = false;
-    void window.workbench.invoke<AppSnapshot['providerSkillDiscovery']>('skills:list', { conversationId })
+    void window.workbench
+      .invoke<AppSnapshot['providerSkillDiscovery']>('skills:list', { conversationId })
       .then((discovery) => {
         if (disposed) return;
         setProviderSkills(discovery?.skills ?? []);
@@ -782,14 +950,31 @@ export default function App() {
         if (!disposed) {
           setProviderSkills([]);
           setProviderSkillDiscovery({
-            status: 'unavailable', source: 'provider',
-            provider: { id: currentAgentId, name: currentAgent?.name ?? currentAgentId }, skills: [],
-            diagnostics: [{ code: 'capability-degraded', message: 'Provider Skills 当前不可用；可不登录继续使用其他功能' }],
+            status: 'unavailable',
+            source: 'provider',
+            provider: { id: currentAgentId, name: currentAgent?.name ?? currentAgentId },
+            skills: [],
+            diagnostics: [
+              {
+                code: 'capability-degraded',
+                message: 'Provider Skills 当前不可用；可不登录继续使用其他功能',
+              },
+            ],
           });
         }
       });
-    return () => { disposed = true; };
-  }, [loaded, workbenchMounted, onboardingVisible, conversationId, currentAgentId, settings.workspace, skillMenuOpen]);
+    return () => {
+      disposed = true;
+    };
+  }, [
+    loaded,
+    workbenchMounted,
+    onboardingVisible,
+    conversationId,
+    currentAgentId,
+    settings.workspace,
+    skillMenuOpen,
+  ]);
   useEffect(() => {
     if (!onboardingVisible && !settingsTab && !showUsage && stickToBottom.current)
       scroll.current?.scrollTo({ top: scroll.current.scrollHeight, behavior: 'instant' });
@@ -903,7 +1088,8 @@ export default function App() {
   ]);
   const send = async () => {
     if (
-      !draft.trim() ||
+      (!draft.trim() && !images.length) ||
+      images.some((image) => !image.data) ||
       busy ||
       !loaded ||
       setupRequired ||
@@ -911,6 +1097,10 @@ export default function App() {
       !currentAgent.supported
     )
       return;
+    if (images.length && !supportsImages(currentAgentId)) {
+      showToast('当前 Agent 不支持图片，请选择 Codex、Claude、Pi 或 OpenCode', true);
+      return;
+    }
     setInspectorOpen(false);
     // Skills picked in the toolbar belong to the workspace and inline references to the CLI.
     const submission = buildSkillSubmission({
@@ -928,6 +1118,7 @@ export default function App() {
     const result = await action<{ conversationId: string }>('conversation:send', {
       id: conversationId,
       ...submission,
+      images: images.length ? parseImages(images) : undefined,
       context: mentions.length ? `当前页面：${pageSource(browser.url)}` : undefined,
       mentions: mentions.length
         ? mentions.map(({ token, ref, edit }) => ({ token, ref, ...(edit ? { edit } : {}) }))
@@ -972,7 +1163,7 @@ export default function App() {
     const result = await action<Settings>('settings:workspace');
     if (result) {
       if (result.workspace !== settings.workspace) {
-        setDraft('');
+        clearDraft();
         setSelectedSkills([]);
         const snapshot = await action<AppSnapshot>('app:snapshot');
         if (snapshot) setSkills(snapshot.skills ?? []);
@@ -992,10 +1183,12 @@ export default function App() {
     if (result) setSettings(result);
   };
   const selectAgent = async (id: string) => {
+    if (busy || switchingAgent) return;
     if (id === currentAgentId) {
       setAgentMenu(false);
       return;
     }
+    setSwitchingAgent(true);
     const result =
       conversation && !conversation.messages.length && !conversation.agentSessionId
         ? await action<Conversation>('conversation:agent', {
@@ -1011,10 +1204,14 @@ export default function App() {
       setInspectorOpen(false);
     }
     setAgentMenu(false);
+    setSwitchingAgent(false);
   };
   const selectDefaultAgent = async (id: string) => {
+    if (busy || savingDefaultAgent || id === settings.agent) return;
+    setSavingDefaultAgent(true);
     const result = await action<Settings>('settings:agent', { id });
     if (result) setSettings(result);
+    setSavingDefaultAgent(false);
   };
   const openOnboarding = async () => {
     if (openingOnboarding) return;
@@ -1056,7 +1253,7 @@ export default function App() {
           (item) => !isArchived(item) && (!item.workspace || item.workspace === workspacePath),
         )?.id,
       );
-      setDraft('');
+      clearDraft();
       setInspectorOpen(false);
     }
     setWorkbenchMounted(true);
@@ -1161,6 +1358,22 @@ export default function App() {
     void action('recording:start');
   };
   const openLink = (url: string) => void action('shell:openExternal', { url });
+  const openConversationLink = async (url: string) => {
+    try {
+      const target = new URL(url);
+      if (!['http:', 'https:'].includes(target.protocol) || target.username || target.password)
+        throw new Error('请使用不含凭据的 HTTP 或 HTTPS 链接');
+    } catch {
+      showToast('这不是可打开的网页链接', true);
+      return;
+    }
+    setBrowserVisible(true);
+    if (browser.status !== 'ready') {
+      const started = await action<BrowserState>('browser:start');
+      if (started?.status !== 'ready') return;
+    }
+    await action('browser:new-tab', { url });
+  };
 
   const settingsWorkspace = settingsTab ? (
     <section className="settings-workspace" aria-label="设置与连接">
@@ -1191,122 +1404,206 @@ export default function App() {
             <Tabs.Panel id="agent">
               <div className="settings-section-heading">
                 <div>
-                  <h3>使用你已有的 Agent</h3>
-                  <p>Athena 使用本机 CLI 的登录与配置。</p>
+                  <h3>运行时配置</h3>
+                  <p>沿用本机 CLI 的登录与模型服务配置。</p>
                 </div>
                 <ActionButton
                   className="icon-button"
                   aria-label="刷新 Agent 列表"
                   title="刷新"
-                  isDisabled={refreshing}
+                  isDisabled={refreshing || savingDefaultAgent}
                   onPress={() => void refreshAgents()}
                 >
                   <Icon icon={RefreshCwIcon} size={16} className={refreshing ? 'spin' : ''} />
                 </ActionButton>
               </div>
-              <Card className="agent-connection-card">
+              <Card className="agent-connection-card" aria-label="当前运行时">
                 <Card.Content>
+                  <p className="runtime-scope">{conversation ? '当前对话' : '新对话将使用'}</p>
                   <div className="agent-connection-heading">
-                    <AgentIcon agent={settings.agent} size={24} />
-                    <h4>{defaultAgent?.name || settings.agent}</h4>
-                    <span className="small-badge">
-                      {sessionLabel(defaultAgent, defaultConnection)}
-                    </span>
+                    <AgentIcon agent={currentAgentId} size={28} />
+                    <h4>{currentAgent?.name || currentAgentId}</h4>
+                    <span className="small-badge">{agentStatus}</span>
+                    <Dropdown>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        aria-label="切换当前运行时"
+                        isDisabled={busy || refreshing || switchingAgent}
+                        isPending={switchingAgent}
+                      >
+                        切换
+                        <Icon icon={ArrowDown01Icon} className="picker-chevron" size={12} />
+                      </Button>
+                      <Dropdown.Popover placement="bottom end" className="agent-menu">
+                        <Dropdown.Menu
+                          aria-label="切换当前运行时"
+                          onAction={(key) => void selectAgent(String(key))}
+                        >
+                          {agents.map((agent) => (
+                            <Dropdown.Item
+                              key={agent.id}
+                              id={agent.id}
+                              textValue={agent.name}
+                              isDisabled={
+                                busy ||
+                                switchingAgent ||
+                                !agent.available ||
+                                !agent.supported ||
+                                agent.id === currentAgentId
+                              }
+                            >
+                              <AgentIcon agent={agent.id} size={22} />
+                              <Label>{agent.name}</Label>
+                              {agent.id === currentAgentId && <Icon icon={Tick02Icon} size={14} />}
+                            </Dropdown.Item>
+                          ))}
+                        </Dropdown.Menu>
+                      </Dropdown.Popover>
+                    </Dropdown>
+                  </div>
+                  {conversation && <p className="runtime-conversation">{conversation.title}</p>}
+                  {(conversation?.messages.length || conversation?.agentSessionId) && (
+                    <p className="runtime-switch-hint">切换后新建对话，当前记录保留。</p>
+                  )}
+                  {conversation && (
+                    <div className="settings-value-row">
+                      <span>下次任务模型</span>
+                      {currentAgent?.available && currentAgent.supported ? (
+                        <ModelPicker
+                          key={JSON.stringify([currentAgentId, conversationId])}
+                          settings={conversationSettings}
+                          conversationId={conversationId}
+                          busy={busy}
+                          connectionReady={currentConnection?.status === 'ready'}
+                          onChange={setSettings}
+                        />
+                      ) : (
+                        <span>{currentSelection?.model || '沿用 CLI 默认配置'}</span>
+                      )}
+                    </div>
+                  )}
+                  {latestAssistant && (
+                    <div className="settings-value-row runtime-execution-model">
+                      <span>
+                        {latestAssistant.status === 'streaming' ? '本轮执行模型' : '最近执行模型'}
+                      </span>
+                      <span>
+                        {executionModel?.model || 'CLI 未报告'}
+                        {executionModel?.model && executionModel.effort && (
+                          <span className="runtime-effort">
+                            {effortName(executionModel.effort)}
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                  )}
+                  <div className="settings-value-row">
+                    <span>CLI 版本</span>
+                    <div className="cli-version-value">
+                      <span>{currentAgent?.version || '未检测到版本'}</span>
+                      {currentAgentId === 'codex' && codexUpdate && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onPress={() => openLink(codexUpdate.releaseUrl)}
+                        >
+                          <span>查看更新说明</span>
+                          <Icon icon={ArrowUpRight01Icon} size={13} />
+                        </Button>
+                      )}
+                    </div>
                   </div>
                   <div className="settings-value-row">
-                    <span>登录方式</span>
-                    <strong>复用本机已有登录</strong>
+                    <span>登录与服务</span>
+                    <span>由 {currentAgent?.name || currentAgentId} 管理</span>
                   </div>
-                  <div className="settings-value-row">
-                    <span>任务模型与推理强度</span>
+                  <div className="runtime-path">
+                    <span>CLI 位置</span>
+                    <code>{currentAgent?.path || '未检测到可执行文件'}</code>
+                  </div>
+                  {currentAgent?.detail && (
+                    <p className="settings-agent-detail">{currentAgent.detail}</p>
+                  )}
+                  {currentConnection?.status === 'error' && currentConnection.message && (
+                    <div className="inline-error" role="alert">
+                      {currentConnection.message}
+                    </div>
+                  )}
+                </Card.Content>
+              </Card>
+              <section className="runtime-defaults" aria-label="新对话默认配置">
+                <h4 className="settings-subheading">新对话默认配置</h4>
+                <p className="settings-card-caption">
+                  默认运行时用于新对话；未单独选模型的对话沿用默认模型。
+                </p>
+                <div className="settings-value-row">
+                  <span>默认运行时</span>
+                  <ChoiceSelect
+                    label="新对话默认运行时"
+                    value={settings.agent}
+                    options={agents.map((agent) => ({
+                      value: agent.id,
+                      label: `${agent.name}${!agent.available ? ' · 未安装或启动异常' : !agent.supported ? ' · 暂不可用' : ''}`,
+                      disabled: !agent.available || !agent.supported,
+                    }))}
+                    isDisabled={busy || refreshing || savingDefaultAgent}
+                    placeholder={defaultAgent?.name || settings.agent}
+                    onChange={(id) => void selectDefaultAgent(id)}
+                  />
+                </div>
+                <div className="settings-value-row">
+                  <span>默认模型与推理强度</span>
+                  {defaultAgent?.available && defaultAgent.supported ? (
                     <ModelPicker
+                      key={settings.agent}
                       settings={settings}
-                      busy={busy}
-                      connectionReady={defaultConnection?.status === 'ready'}
+                      busy={busy || savingDefaultAgent}
                       onChange={setSettings}
                     />
-                  </div>
-                  {defaultAgent?.version && (
-                    <div className="settings-value-row">
-                      <span>版本</span>
-                      <div className="cli-version-value">
-                        <span>
-                          {settings.agent === 'codex' && installedVersion
-                            ? `codex-cli ${installedVersion}`
-                            : defaultAgent.version}
-                        </span>
-                        {settings.agent === 'codex' && codexUpdate && (
+                  ) : (
+                    <span>运行时可用后可配置</span>
+                  )}
+                </div>
+              </section>
+              <details className="runtime-installations">
+                <summary>本机 CLI 检测详情</summary>
+                <div className="agent-settings-list">
+                  {agents.map((agent) => (
+                    <div className="agent-setting-row" key={agent.id}>
+                      <div className="integration-icon agent-brand-tile">
+                        <AgentIcon agent={agent.id} size={25} />
+                      </div>
+                      <div>
+                        <strong>{agent.name}</strong>
+                        <p>{agent.path ? agent.version || '已找到可执行文件' : '未检测到安装'}</p>
+                        {agent.path && <small title={agent.path}>{agent.path}</small>}
+                        {agent.detail && <p className="agent-detail">{agent.detail}</p>}
+                        {agent.id === 'codex' && currentAgentId !== 'codex' && codexUpdate && (
                           <Button
                             size="sm"
                             variant="ghost"
                             onPress={() => openLink(codexUpdate.releaseUrl)}
                           >
-                            <span>查看更新说明</span>
+                            查看更新说明
                             <Icon icon={ArrowUpRight01Icon} size={13} />
                           </Button>
                         )}
                       </div>
+                      <span className="small-badge">
+                        {agent.available
+                          ? agent.supported
+                            ? '已检测'
+                            : '暂不可用'
+                          : agent.path
+                            ? '启动异常'
+                            : '未安装'}
+                      </span>
                     </div>
-                  )}
-                  {defaultAgent?.path && (
-                    <p className="settings-agent-path" title={defaultAgent.path}>
-                      {defaultAgent.path}
-                    </p>
-                  )}
-                  {defaultAgent?.detail && (
-                    <p className="settings-agent-detail">{defaultAgent.detail}</p>
-                  )}
-                  {defaultConnection?.status === 'error' && defaultConnection.message && (
-                    <div className="inline-error" role="alert">
-                      {defaultConnection.message}
-                    </div>
-                  )}
-                  <p className="settings-card-caption">
-                    默认 CLI 用于新对话，已有对话保持原 CLI。登录与服务配置由本机 CLI 管理。
-                  </p>
-                </Card.Content>
-              </Card>
-              <h4 className="settings-subheading">选择新对话默认 CLI</h4>
-              <div className="agent-settings-list">
-                {agents.map((agent) => (
-                  <div className="agent-setting-row" key={agent.id}>
-                    <div className="integration-icon agent-brand-tile">
-                      <AgentIcon agent={agent.id} size={25} />
-                    </div>
-                    <div>
-                      <strong>{agent.name}</strong>
-                      <p>{agent.path ? agent.version || '已找到可执行文件' : '未检测到安装'}</p>
-                      {agent.path && <small title={agent.path}>{agent.path}</small>}
-                      {agent.detail && <p className="agent-detail">{agent.detail}</p>}
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      isDisabled={
-                        busy || !agent.available || !agent.supported || agent.id === settings.agent
-                      }
-                      onPress={() => void selectDefaultAgent(agent.id)}
-                    >
-                      {agent.id === settings.agent ? '默认 CLI' : '设为默认'}
-                    </Button>
-                    <span
-                      className={`small-badge ${agent.available && agent.supported ? 'success' : ''}`}
-                    >
-                      {agent.available
-                        ? agent.supported
-                          ? '可使用'
-                          : '已检测'
-                        : agent.path
-                          ? '启动异常'
-                          : '未安装'}
-                    </span>
-                  </div>
-                ))}
-              </div>
-              <div className="settings-note">
-                使用本机 CLI
-                已有的登录与模型服务配置。未安装时，请在终端安装后刷新；不会自动改用其他 CLI。
-              </div>
+                  ))}
+                </div>
+                <p className="settings-note">安装或更新 CLI 后点击刷新，重新检测本机运行时。</p>
+              </details>
               <Card className="settings-workspace-card">
                 <Card.Content>
                   <Icon icon={Folder01Icon} size={20} />
@@ -1330,14 +1627,45 @@ export default function App() {
                       <span>外部 Agent 连接</span>
                       {pendingExternalConnections.map((connection) => (
                         <div key={connection.id}>
-                          <strong>{connection.agent.name} · {connection.requestedMode}</strong>
+                          <strong>
+                            {connection.agent.name} · {connection.requestedMode}
+                          </strong>
                           {connection.status === 'pending' ? (
                             <>
-                              <ActionButton onPress={() => void action('mcp:connection', { id: connection.id, operation: 'approve' })}>批准</ActionButton>
-                              <ActionButton variant="secondary" onPress={() => void action('mcp:connection', { id: connection.id, operation: 'reject' })}>拒绝</ActionButton>
+                              <ActionButton
+                                onPress={() =>
+                                  void action('mcp:connection', {
+                                    id: connection.id,
+                                    operation: 'approve',
+                                  })
+                                }
+                              >
+                                批准
+                              </ActionButton>
+                              <ActionButton
+                                variant="secondary"
+                                onPress={() =>
+                                  void action('mcp:connection', {
+                                    id: connection.id,
+                                    operation: 'reject',
+                                  })
+                                }
+                              >
+                                拒绝
+                              </ActionButton>
                             </>
                           ) : connection.status === 'approved' ? (
-                            <ActionButton variant="secondary" onPress={() => void action('mcp:connection', { id: connection.id, operation: 'revoke' })}>撤销</ActionButton>
+                            <ActionButton
+                              variant="secondary"
+                              onPress={() =>
+                                void action('mcp:connection', {
+                                  id: connection.id,
+                                  operation: 'revoke',
+                                })
+                              }
+                            >
+                              撤销
+                            </ActionButton>
                           ) : null}
                         </div>
                       ))}
@@ -1848,7 +2176,6 @@ export default function App() {
                     )}
                   </div>
                 </header>
-                <WorkbenchNotices update={codexUpdate} onShowRelease={openLink} />
                 {settingsWorkspace}
                 {showUsage && !settingsTab && <UsagePanel />}
                 <div className="conversation-column" hidden={showUsage || Boolean(settingsTab)}>
@@ -1909,9 +2236,17 @@ export default function App() {
                               >
                                 {message.role === 'user' ? (
                                   <ProChatMessage.User>
-                                    <ProChatMessage.Bubble className="user-message-text">
-                                      <MentionText text={message.displayText ?? message.text} mentions={message.mentions} />
-                                    </ProChatMessage.Bubble>
+                                    {message.images?.length ? (
+                                      <ImageAttachments images={message.images} />
+                                    ) : null}
+                                    {(message.displayText ?? message.text) && (
+                                      <ProChatMessage.Bubble className="user-message-text">
+                                        <MentionText
+                                          text={message.displayText ?? message.text}
+                                          mentions={message.mentions}
+                                        />
+                                      </ProChatMessage.Bubble>
+                                    )}
                                     {message.source === 'feishu' && (
                                       <div className="message-source">
                                         <Icon icon={Link02Icon} size={11} />
@@ -1961,7 +2296,10 @@ export default function App() {
                                           (copyableText(message, message === messages.at(-1)) ||
                                             message.neoSessionId) && (
                                             <ChatMessageActions>
-                                              {copyableText(message, message === messages.at(-1)) && (
+                                              {copyableText(
+                                                message,
+                                                message === messages.at(-1),
+                                              ) && (
                                                 <Tooltip delay={500}>
                                                   <ChatMessageActions.Copy
                                                     aria-label="复制回答"
@@ -1997,7 +2335,7 @@ export default function App() {
                                                     href={href}
                                                     onClick={(event) => {
                                                       event.preventDefault();
-                                                      if (href) openLink(href);
+                                                      if (href) void openConversationLink(href);
                                                     }}
                                                   >
                                                     {children}
@@ -2069,14 +2407,39 @@ export default function App() {
                           else void send();
                         }}
                         onStop={() => void action('conversation:stop')}
+                        onPasteCapture={pasteImages}
                       >
                         <PromptInput.Shell>
                           {/* Only the field and its Skill menu sit in Tokens: a toolbar menu
                               inside it would join the suggestions. */}
                           <PromptInput.Tokens>
                             <PromptInput.Content>
+                              {images.length > 0 && (
+                                <PromptInput.Attachments>
+                                  <ImageAttachments images={images} onRemove={removeImage} />
+                                </PromptInput.Attachments>
+                              )}
+                              {images.length > 0 &&
+                                (images.some((image) => image.error) ||
+                                  !supportsImages(currentAgentId)) && (
+                                  <p
+                                    id="composer-image-error"
+                                    className="composer-image-error"
+                                    role="alert"
+                                  >
+                                    {images.find((image) => image.error)?.error ||
+                                      '当前 Agent 不支持图片，请选择 Codex、Claude、Pi 或 OpenCode。'}
+                                  </p>
+                                )}
+
                               <PromptInput.TokenInput
                                 tokens={tokens}
+                                aria-describedby={
+                                  images.some((image) => image.error) ||
+                                  (images.length && !supportsImages(currentAgentId))
+                                    ? 'composer-image-error'
+                                    : undefined
+                                }
                                 aria-label="发送给 Agent 的任务"
                                 placeholder={
                                   mentions.length
@@ -2183,7 +2546,12 @@ export default function App() {
                                           key={agent.id}
                                           id={agent.id}
                                           textValue={agent.name}
-                                          isDisabled={!agent.available || !agent.supported || busy}
+                                          isDisabled={
+                                            !agent.available ||
+                                            !agent.supported ||
+                                            busy ||
+                                            switchingAgent
+                                          }
                                         >
                                           <AgentIcon agent={agent.id} size={22} />
                                           <div className="agent-option-copy">
@@ -2245,7 +2613,9 @@ export default function App() {
                                   !busy &&
                                   (!loaded ||
                                     setupRequired ||
-                                    !draft.trim() ||
+                                    (!draft.trim() && !images.length) ||
+                                    images.some((image) => !image.data) ||
+                                    (images.length > 0 && !supportsImages(currentAgentId)) ||
                                     !currentAgent?.available ||
                                     !currentAgent.supported)
                                 }
@@ -2449,22 +2819,6 @@ export default function App() {
                 onConfirm={() => void confirmDelete()}
               />
             )}
-            {toast && (
-              <div
-                className={`app-toast ${toast.error ? 'error' : ''}`}
-                role={toast.error ? 'alert' : 'status'}
-              >
-                {toast.error ? (
-                  <Icon icon={CircleIcon} size={14} />
-                ) : (
-                  <Icon icon={Tick02Icon} size={14} />
-                )}
-                <span>{toast.text}</span>
-                <ActionButton aria-label="关闭提示" onPress={() => setToast(undefined)}>
-                  <Icon icon={XIcon} size={13} />
-                </ActionButton>
-              </div>
-            )}
           </Sidebar.Provider>
         </div>
       )}
@@ -2472,10 +2826,19 @@ export default function App() {
         <Onboarding
           state={onboardingState}
           initial={initialOnboarding}
-          hasDraft={Boolean(draft.trim())}
+          hasDraft={Boolean(draft.trim() || images.length)}
           onState={acceptOnboardingState}
           onExit={exitOnboarding}
         />
+      )}
+      {createPortal(
+        <div className="app-notifications" role="region" aria-label="应用提醒">
+          {toast && <AppToast message={toast} onDismiss={dismissToast} />}
+          {workbenchMounted && !onboardingVisible && (
+            <WorkbenchNotices update={codexUpdate} onShowRelease={openLink} />
+          )}
+        </div>,
+        document.body,
       )}
     </>
   );

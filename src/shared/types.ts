@@ -172,6 +172,85 @@ export interface ElementEdit {
   text?: string;
   styles?: Record<string, string>;
   animation?: ElementAnimation | null;
+  insert?: ElementInsertion;
+}
+export const ELEMENT_INSERT_TAGS = [
+  'div',
+  'span',
+  'p',
+  'section',
+  'article',
+  'header',
+  'footer',
+  'nav',
+  'main',
+  'aside',
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+  'h5',
+  'h6',
+  'ul',
+  'ol',
+  'li',
+  'a',
+  'button',
+  'img',
+  'strong',
+  'em',
+  'small',
+  'label',
+  'input',
+  'textarea',
+  'select',
+  'option',
+  'details',
+  'summary',
+  'figure',
+  'figcaption',
+  'table',
+  'thead',
+  'tbody',
+  'tr',
+  'th',
+  'td',
+  'br',
+  'hr',
+] as const;
+export const ELEMENT_INSERT_ATTRIBUTES = [
+  'id',
+  'class',
+  'role',
+  'aria-label',
+  'aria-describedby',
+  'aria-hidden',
+  'title',
+  'alt',
+  'href',
+  'src',
+  'type',
+  'placeholder',
+  'value',
+  'disabled',
+  'readonly',
+  'checked',
+  'selected',
+  'open',
+  'for',
+  'colspan',
+  'rowspan',
+] as const;
+export interface ElementNode {
+  tag: (typeof ELEMENT_INSERT_TAGS)[number];
+  text?: string;
+  attributes?: Record<string, string>;
+  styles?: Record<string, string>;
+  children?: ElementNode[];
+}
+export interface ElementInsertion {
+  position?: 'append' | 'prepend' | 'before' | 'after';
+  node: ElementNode;
 }
 export interface ElementEditResult {
   editId: string;
@@ -444,6 +523,8 @@ export interface ChatMessage {
   tools?: ToolCall[];
   context?: string;
   mentions?: ElementMention[];
+  // shortcut: images live in workspace.json; use separate blobs when large image histories are needed.
+  images?: import('./images').ImageAttachment[];
   neoSessionId?: string;
   plan?: AgentPlanStep[];
   execution?: WebExecutionEvent[];

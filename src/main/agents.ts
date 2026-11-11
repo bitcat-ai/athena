@@ -17,7 +17,7 @@ import type {
   UserInputRequest,
 } from '../shared/types.ts';
 
-import type { AgentSession } from './agent-session';
+import { selectedElementContext, type AgentSession } from './agent-session';
 import { normalizeProviderSkillDiscovery } from '../shared/provider-skills';
 import type { ProviderSkillDiscovery, ProviderSkill } from '../shared/skills';
 import { parseTokenCounts, readUsageBaseline, readExecutionModel } from './usage';
@@ -30,6 +30,7 @@ import {
 
 const execFileAsync = promisify(execFile);
 import { cliEnvironment } from './agent-process';
+import { imageSource, parseImages, type ImageAttachment } from '../shared/images';
 export { cliEnvironment } from './agent-process';
 export { detectAgents } from './agent-discovery';
 
@@ -276,7 +277,7 @@ function turnFailure(error: unknown): string {
     : detail;
 }
 
-function toolEventInput(name: string, input: unknown): unknown {
+export function toolEventInput(name: string, input: unknown): unknown {
   if (
     !name.startsWith('neo_') ||
     !input ||
@@ -291,7 +292,7 @@ function toolEventInput(name: string, input: unknown): unknown {
   return result;
 }
 
-function imageUrl(image: string): string | undefined {
+export function imageUrl(image: string): string | undefined {
   if (/^data:image\/(png|jpeg|webp);base64,/.test(image)) return image;
   // BrowserRuntime returns CDP's raw PNG base64, while other tools can return a data URL.
   if (
@@ -386,14 +387,22 @@ export class CodexSession implements AgentSession {
     selectedElement?: ElementRef,
     selection?: ModelSelection,
     skills: ProviderSkill[] = [],
+    images?: ImageAttachment[],
   ): Promise<void> {
-    if (skills.length > 3 || skills.some(skill => skill.provider.id !== 'codex' || !skill.userInvocable || !codexSkillName.test(skill.name)))
+    if (
+      skills.length > 3 ||
+      skills.some(
+        (skill) =>
+          skill.provider.id !== 'codex' || !skill.userInvocable || !codexSkillName.test(skill.name),
+      )
+    )
       throw new Error('Codex Skill 选择无效');
-    const skillMentions = skills.map(skill => `$${skill.name}`).join(' ');
+    const skillMentions = skills.map((skill) => `$${skill.name}`).join(' ');
     if (this.closed) throw new Error('Codex 会话已关闭');
     if (this.active) throw new Error('请等待当前任务完成，或先停止任务');
-    if (typeof text !== 'string' || !text.trim() || text.length > 20_000)
-      throw new Error('消息需要 1 至 20000 字符');
+    const attachments = parseImages(images);
+    if (typeof text !== 'string' || (!text.trim() && !attachments.length) || text.length > 20_000)
+      throw new Error('请填写消息或附加图片，文字不能超过 20000 字符');
     if (context !== undefined && (typeof context !== 'string' || context.length > 60_000))
       throw new Error('页面上下文过长或格式无效');
     if (
@@ -427,7 +436,7 @@ export class CodexSession implements AgentSession {
         });
         const [, selectedSnapshot] = await Promise.all([
           this.start(),
-          elementSelection ? this.inspectSelection(elementSelection) : undefined,
+          selectedElementContext(elementSelection, this.options.inspectSelectedElement),
         ]);
         if (run !== this.active) return;
         if (run.canceled) throw new Error('任务已停止');
@@ -460,7 +469,10 @@ export class CodexSession implements AgentSession {
           ...(this.selection
             ? { model: this.selection.model, effort: this.selection.effort ?? null }
             : {}),
-          input: [{ type: 'text', text: prompt }],
+          input: [
+            ...(prompt ? [{ type: 'text', text: prompt }] : []),
+            ...attachments.map((image) => ({ type: 'image', url: imageSource(image) })),
+          ],
           environments: [
             {
               environmentId: 'local',
@@ -500,20 +512,6 @@ export class CodexSession implements AgentSession {
       }
     })();
     return done;
-  }
-
-  private async inspectSelection(selected: ElementRef): Promise<string> {
-    if (!isText(selected.ref, 2048) || !this.options.inspectSelectedElement)
-      throw new Error('无法读取所选元素，请重新选择后重试');
-    const current = await this.options.inspectSelectedElement(selected.ref);
-    for (const key of ['ref', 'tabId', 'frameId', 'documentId', 'nodeId'] as const) {
-      if (selected[key] !== undefined && current[key] !== selected[key])
-        throw new Error('所选元素已改变，请重新选择后重试');
-    }
-    // Escape delimiters so page text cannot create additional prompt sections.
-    const snapshot = JSON.stringify(current).replace(/</g, '\\u003c');
-    if (snapshot.length > 60_000) throw new Error('所选元素的上下文过长，请选择更具体的元素');
-    return snapshot;
   }
 
   async interrupt(): Promise<void> {
@@ -826,32 +824,48 @@ export class CodexSession implements AgentSession {
       await this.connect();
       const response = await this.request('skills/list', { cwds: [this.options.workspace] });
       const entry = Array.isArray(response.data)
-        ? response.data.find((item: unknown) => isObject(item) && item.cwd === this.options.workspace)
+        ? response.data.find(
+            (item: unknown) => isObject(item) && item.cwd === this.options.workspace,
+          )
         : undefined;
-      return normalizeProviderSkillDiscovery({
-        provider,
-        capability: 'supported',
-        // A name that cannot be sent as a `$name` mention is not offered.
-        skills: Array.isArray(entry?.skills) ? entry.skills.filter((skill: any) => typeof skill?.name !== 'string' || codexSkillName.test(skill.name.trim())).map((skill: any) => ({
-          name: skill?.name,
-          path: skill?.path,
-          description: skill?.description,
-          shortDescription: skill?.shortDescription ?? skill?.interface?.shortDescription,
-          userInvocable: skill?.enabled === true,
-        })) : undefined,
-      }, { approvedRoot: this.options.workspace, providerManagedPaths: true });
+      return normalizeProviderSkillDiscovery(
+        {
+          provider,
+          capability: 'supported',
+          // A name that cannot be sent as a `$name` mention is not offered.
+          skills: Array.isArray(entry?.skills)
+            ? entry.skills
+                .filter(
+                  (skill: any) =>
+                    typeof skill?.name !== 'string' || codexSkillName.test(skill.name.trim()),
+                )
+                .map((skill: any) => ({
+                  name: skill?.name,
+                  path: skill?.path,
+                  description: skill?.description,
+                  shortDescription: skill?.shortDescription ?? skill?.interface?.shortDescription,
+                  userInvocable: skill?.enabled === true,
+                }))
+            : undefined,
+        },
+        { approvedRoot: this.options.workspace, providerManagedPaths: true },
+      );
     } catch (error) {
       const errorMessage = messageOf(error);
       const authRequired = /auth|login|unauthorized|not authenticated/i.test(errorMessage);
       return {
         status: isObject(error) && error.code === -32601 ? 'unsupported' : 'unavailable',
-        source: 'provider', provider, skills: [],
-        diagnostics: [{
-          code: 'capability-degraded',
-          message: authRequired
-            ? 'Provider Skills 当前不可用；可不登录继续使用其他功能'
-            : 'Codex Skill discovery is unavailable.',
-        }],
+        source: 'provider',
+        provider,
+        skills: [],
+        diagnostics: [
+          {
+            code: 'capability-degraded',
+            message: authRequired
+              ? 'Provider Skills 当前不可用；可不登录继续使用其他功能'
+              : 'Codex Skill discovery is unavailable.',
+          },
+        ],
       };
     }
   }

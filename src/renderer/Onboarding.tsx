@@ -440,7 +440,7 @@ function content(
         lines: [
           '这样，你就能一边聊，一边操作右侧的页面。',
           ...(!supportsBrowser(state.selectedAgent || 'codex')
-            ? ['想让我帮你操作网页时，进入工作台后新建一个 Codex 对话就好。']
+            ? ['想让我帮你操作网页时，可以选择 Codex、Claude、Pi 或 OpenCode。']
             : []),
         ],
         cards: [

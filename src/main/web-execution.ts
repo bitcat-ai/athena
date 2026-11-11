@@ -93,7 +93,10 @@ export class WebExecution {
         '上次动作结果尚未核对：先用 snapshot/read/grep 重新观察，再用 neo_checkpoint 引用证据。不能重放提交；仍未知时请求人工处理。',
       );
     if (this.completedActions.has(signature))
-      throw new Error('该失败动作已核对为生效，不能重复执行。请检查结果并继续后续步骤。');
+      throw new Error('该操作已确认生效，不能重复执行。请检查结果并继续后续步骤。');
+  }
+  confirmMutation(signature: string) {
+    this.completedActions.add(signature);
   }
   mutate() {
     this.revision++;
@@ -159,7 +162,7 @@ export class WebExecution {
     }
     if (this.recovery) {
       if (outcome === 'verified' && this.recovery.signature)
-        this.completedActions.add(this.recovery.signature);
+        this.confirmMutation(this.recovery.signature);
       this.recovery = undefined;
       this.emit({
         kind: 'recovery',

@@ -4,6 +4,8 @@ import { mkdtemp, writeFile, chmod, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { nodeShebang } from './node-script';
+import { testImage } from './image-fixture';
+import { imageSource } from '../src/shared/images';
 import {
   CodexSession,
   browserToolsFingerprint,
@@ -16,6 +18,7 @@ async function fixture(
   options: {
     initializeDelayMs?: number;
     holdInitialize?: boolean;
+    holdThreadStart?: boolean;
     threadStartDelayMs?: number;
     toolAggregatedOutput?: string;
     modelProtocol?: boolean;
@@ -53,6 +56,10 @@ readline.createInterface({input:process.stdin}).on('line', line => {
     {id:'hidden',model:'hidden',hidden:true},
     ...(p.cursor ? [{id:'catalog-b',model:'model-b',displayName:'Model B',supportedReasoningEfforts:[],defaultReasoningEffort:'low'}] : [])
   ],nextCursor:p.cursor ? null : 'page-2'}});
+  if (request.method === 'thread/start' && options.holdThreadStart) {
+    const release=()=>{if(!fs.existsSync(log+'.release-thread'))return;watcher.close();send({id:request.id,result:{thread:{id:'thread-1'},model:p.model,reasoningEffort:p.config?.model_reasoning_effort}});};
+    const watcher=fs.watch(${JSON.stringify(directory)},release);release();return;
+  }
   if (request.method === 'thread/start' && options.modelProtocol) return send({id:request.id,result:{thread:{id:'thread-1'},model:p.model,reasoningEffort:p.config?.model_reasoning_effort}});
   if (request.method === 'thread/start') return setTimeout(()=>send({id:request.id,result:{thread:{id:'thread-1'}}}),options.threadStartDelayMs||0);
   if (p.threadId?.startsWith('no-rollout-')) {
@@ -63,7 +70,7 @@ readline.createInterface({input:process.stdin}).on('line', line => {
   if (request.method === 'thread/read') return send({id:request.id,result:{thread:{id:p.threadId,turns:p.threadId==='unused-warmed-thread'?[]:[{id:'existing-turn'}]}}});
   if (request.method === 'thread/resume') return p.threadId==='thread-1' ? send({id:request.id,result:{thread:{id:'thread-1'}}}) : send({id:request.id,error:{code:-32602,message:'Thread not found'}});
   if (request.method === 'turn/start') {
-    current='turn-'+(++turn); mode=p.input[0].text.split('\\n')[0];
+    current='turn-'+(++turn); mode=(p.input.find(item=>item.type==='text')?.text || '').split('\\n')[0];
     if(mode==='pre-ack') {
       event('turn/started',{threadId:'thread-1',turn:{id:current,status:'inProgress'}});
       send({id:110,method:'item/tool/requestUserInput',params:{threadId:'thread-1',turnId:current,itemId:'pre-ack-input',isBlocking:true,questions:[{id:'choice',header:'选择',question:'Choose one',options:[{label:'A',description:''},{label:'B',description:''}]}]}});
@@ -217,27 +224,63 @@ function session(
 }
 
 test('Codex discovers enabled skills for the effective cwd without starting a model turn', async (t) => {
-  const f = await fixture({ skills: [
-    { name: 'review', path: '/opt/codex/global/review/SKILL.md', enabled: true, description: 'Review code', interface: { shortDescription: 'Review' } },
-    { name: 'disabled', path: '/opt/codex/disabled/SKILL.md', enabled: false },
-  ] });
+  const f = await fixture({
+    skills: [
+      {
+        name: 'review',
+        path: '/opt/codex/global/review/SKILL.md',
+        enabled: true,
+        description: 'Review code',
+        interface: { shortDescription: 'Review' },
+      },
+      { name: 'disabled', path: '/opt/codex/disabled/SKILL.md', enabled: false },
+    ],
+  });
   const agent = session(f, []);
-  t.after(() => { agent.close(); return f.cleanup(); });
+  t.after(() => {
+    agent.close();
+    return f.cleanup();
+  });
   const discovery = await agent.discoverProviderSkills();
   assert.equal(discovery.status, 'ready');
-  assert.deepEqual(discovery.skills, [{ name: 'review', description: 'Review code', shortDescription: 'Review', providerPath: '/opt/codex/global/review/SKILL.md', contentHash: undefined, userInvocable: true, source: 'provider', provider: { id: 'codex', name: 'Codex' } }]);
+  assert.deepEqual(discovery.skills, [
+    {
+      name: 'review',
+      description: 'Review code',
+      shortDescription: 'Review',
+      providerPath: '/opt/codex/global/review/SKILL.md',
+      contentHash: undefined,
+      userInvocable: true,
+      source: 'provider',
+      provider: { id: 'codex', name: 'Codex' },
+    },
+  ]);
   const requests = await f.requests();
-  assert.deepEqual(requests.find(r => r.method === 'skills/list').params, { cwds: [f.directory] });
-  assert.ok(requests.findIndex(r => r.method === 'initialized') < requests.findIndex(r => r.method === 'skills/list'));
-  assert.equal(requests.some(r => r.method === 'thread/start' || r.method === 'turn/start'), false);
+  assert.deepEqual(requests.find((r) => r.method === 'skills/list').params, {
+    cwds: [f.directory],
+  });
+  assert.ok(
+    requests.findIndex((r) => r.method === 'initialized') <
+      requests.findIndex((r) => r.method === 'skills/list'),
+  );
+  assert.equal(
+    requests.some((r) => r.method === 'thread/start' || r.method === 'turn/start'),
+    false,
+  );
 });
 
 test('Codex discovery preserves failure states and never borrows a different cwd', async (t) => {
   for (const [options, expected] of [
-    [{ skillsResponse: { data: [{ cwd: '/other', skills: [{ name: 'wrong', enabled: true }] }] } }, 'malformed'],
+    [
+      { skillsResponse: { data: [{ cwd: '/other', skills: [{ name: 'wrong', enabled: true }] }] } },
+      'malformed',
+    ],
     [{ skillsResponse: { data: [{ cwd: '/other', skills: [] }] } }, 'malformed'],
     [{ skillsError: { code: -32601, message: 'Method not found' } }, 'unsupported'],
-    [{ skillsError: { code: -32000, message: 'Unauthorized: please run codex login' } }, 'unavailable'],
+    [
+      { skillsError: { code: -32000, message: 'Unauthorized: please run codex login' } },
+      'unavailable',
+    ],
     [{ skillsError: { code: -32000, message: 'Unavailable' } }, 'unavailable'],
     [{ skills: [] }, 'empty'],
   ] as Array<[Parameters<typeof fixture>[0], string]>) {
@@ -248,23 +291,43 @@ test('Codex discovery preserves failure states and never borrows a different cwd
       assert.equal(result.status, expected);
       assert.deepEqual(result.skills, []);
       if (options?.skillsError?.message.includes('Unauthorized'))
-        assert.match(result.diagnostics[0]?.message ?? '', /Provider Skills 当前不可用；可不登录继续使用其他功能/);
-    } finally { agent.close(); await f.cleanup(); }
+        assert.match(
+          result.diagnostics[0]?.message ?? '',
+          /Provider Skills 当前不可用；可不登录继续使用其他功能/,
+        );
+    } finally {
+      agent.close();
+      await f.cleanup();
+    }
   }
 });
 
 test('Codex sends selected skills as native mentions, not page context', async (t) => {
   const f = await fixture();
   const agent = session(f, []);
-  t.after(() => { agent.close(); return f.cleanup(); });
-  await agent.send('Check the changes', 'Current page', undefined, undefined, [{
-    name: 'review', provider: { id: 'codex', name: 'Codex' }, source: 'provider',
-    providerPath: '/opt/codex/review/SKILL.md', description: 'Review', userInvocable: true,
-  }]);
-  const turn = (await f.requests()).find(r => r.method === 'turn/start');
-  assert.deepEqual(turn.params.input, [{ type: 'text', text: '$review\n\nCheck the changes\n\n<page_context>\nCurrent page\n</page_context>' }]);
+  t.after(() => {
+    agent.close();
+    return f.cleanup();
+  });
+  await agent.send('Check the changes', 'Current page', undefined, undefined, [
+    {
+      name: 'review',
+      provider: { id: 'codex', name: 'Codex' },
+      source: 'provider',
+      providerPath: '/opt/codex/review/SKILL.md',
+      description: 'Review',
+      userInvocable: true,
+    },
+  ]);
+  const turn = (await f.requests()).find((r) => r.method === 'turn/start');
+  assert.deepEqual(turn.params.input, [
+    {
+      type: 'text',
+      text: '$review\n\nCheck the changes\n\n<page_context>\nCurrent page\n</page_context>',
+    },
+  ]);
   await agent.send('No skill');
-  const turns = (await f.requests()).filter(r => r.method === 'turn/start');
+  const turns = (await f.requests()).filter((r) => r.method === 'turn/start');
   assert.deepEqual(turns[1].params.input, [{ type: 'text', text: 'No skill' }]);
 });
 
@@ -309,15 +372,20 @@ test('closing a prewarm rejects its handshake and cannot create a late thread', 
 });
 
 test('a model change during prewarm uses the new turn selection without reconnecting', async (t) => {
-  const f = await fixture({ threadStartDelayMs: 80, modelProtocol: true });
+  const f = await fixture({ holdThreadStart: true, modelProtocol: true });
   const agent = session(f, []);
   t.after(() => {
     agent.close();
     return f.cleanup();
   });
   const ready = agent.prepare({ model: 'model-a', effort: 'low' });
-  await waitFor(async () => (await f.requests()).some((r) => r.method === 'thread/start'));
+  await waitFor(async () => (await f.requests()).some((r) => r.method === 'thread/start'), 10000);
   const turn = agent.send('hello', undefined, undefined, { model: 'model-b' });
+  assert.equal(
+    (await f.requests()).some((r) => r.method === 'turn/start'),
+    false,
+  );
+  await writeFile(f.log + '.release-thread', 'ready');
   await Promise.all([ready, turn]);
   const requests = await f.requests();
   assert.equal(requests.filter((r) => r.method === 'initialize').length, 1);
@@ -492,10 +560,10 @@ test('canceling while the selected-element inspection is pending cannot start a 
     agent.close();
     return f.cleanup();
   });
+  // This case cancels an in-flight inspection; CLI cold-start cancellation has separate coverage.
+  await agent.prepare();
   const stopped = assert.rejects(agent.send('hello', undefined, selectedFixture), /任务已停止/);
-  await waitFor(async () =>
-    (await f.requests()).some((request) => request.method === 'thread/start'),
-  );
+  await waitFor(() => Boolean(resolveInspection));
   await agent.interrupt();
   resolveInspection(selectedFixture);
   await stopped;
@@ -1406,7 +1474,7 @@ test('discovery reports a runtime by its version alone and never asks for its lo
     'opencode',
     'pi',
   ]);
-  assert.equal(agents.find((agent) => agent.id === 'opencode')?.supported, false);
+  assert.ok(agents.some((agent) => agent.id === 'opencode'));
 });
 
 test('Codex update checks compare the installed CLI against the official stable release', async () => {
@@ -1695,4 +1763,21 @@ test('terminal turns refuse late tools while execution-model confirmation is pen
   assert.equal(hostCalls, 0);
   assert.equal((await f.requests()).find((r) => r.id === 101 && r.result).result.success, false);
   assert.equal(events.filter((event) => event.type === 'complete').length, 1);
+});
+
+test('Codex sends image-only and mixed turns as native image inputs, never base64 prompt text', async (t) => {
+  const f = await fixture();
+  const agent = session(f, []);
+  t.after(async () => {
+    agent.close();
+    await f.cleanup();
+  });
+  await agent.send('', undefined, undefined, undefined, undefined, [testImage]);
+  await agent.send('describe', undefined, undefined, undefined, undefined, [testImage]);
+  const turns = (await f.requests()).filter((r) => r.method === 'turn/start');
+  assert.deepEqual(turns[0].params.input, [{ type: 'image', url: imageSource(testImage) }]);
+  assert.deepEqual(turns[1].params.input, [
+    { type: 'text', text: 'describe' },
+    { type: 'image', url: imageSource(testImage) },
+  ]);
 });

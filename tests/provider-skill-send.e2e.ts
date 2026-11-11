@@ -6,6 +6,7 @@ import path from 'node:path';
 import { _electron as electron, expect, type ElectronApplication } from '@playwright/test';
 import { Store } from '../src/main/store';
 import type { AppSnapshot } from '../src/shared/types';
+import { testImage } from './image-fixture';
 
 const root = process.cwd();
 const profile = await realpath(await mkdtemp(path.join(tmpdir(), 'athena-provider-send-')));
@@ -13,7 +14,13 @@ const workspace = path.join(profile, 'workspace');
 const bin = path.join(profile, 'bin');
 const log = path.join(profile, 'calls');
 const skillPath = path.join(workspace, '.pi', 'skills', 'review', 'SKILL.md');
-const localSkillPath = path.join(workspace, '.agents', 'skills', 'athena-fixture-notes', 'SKILL.md');
+const localSkillPath = path.join(
+  workspace,
+  '.agents',
+  'skills',
+  'athena-fixture-notes',
+  'SKILL.md',
+);
 const body = '---\nname: review\ndescription: Provider review\n---\nPrivate provider instructions';
 let application: ElectronApplication | undefined;
 try {
@@ -53,7 +60,7 @@ require('node:readline').createInterface({input:process.stdin}).on('line', line 
   return reply({sessionId:sid,isStreaming:false,pendingMessageCount:0,model:{id:'model',provider:'fixture'}});
  }
  if(r.type==='get_available_models')return reply({models:[{id:'model',provider:'fixture'}]});
- if(r.type==='get_commands')return reply({commands:[{name:'skill:review',description:'Review',source:'skill',sourceInfo:{path:process.cwd()+'/.pi/skills/review/SKILL.md'}}]});
+ if(r.type==='get_commands')return reply({commands:[{name:'skill:review',description:'Review',source:'skill',sourceInfo:{path:process.cwd()+'/.pi/skills/review/SKILL.md'+(fs.existsSync(profile+'/stale')?'.moved':'')}}]});
  if(r.type==='prompt') {
   reply({disposition:'started'});
   out({type:'agent_start'});
@@ -89,7 +96,7 @@ require('node:readline').createInterface({input:process.stdin}).on('line', line 
   };
   delete env.WORKBENCH_DEV_SERVER_URL;
   application = await electron.launch({
-    args: ['.'],
+    args: ['tests/electron-background.cjs'],
     cwd: root,
     env: Object.fromEntries(
       Object.entries(env).filter((entry): entry is [string, string] => entry[1] !== undefined),
@@ -126,7 +133,7 @@ require('node:readline').createInterface({input:process.stdin}).on('line', line 
   };
   assert.equal(initial.providerSkills?.[0].providerPath, metadata.providerPath);
   assert.equal(initial.providerSkills?.[0].contentHash, undefined);
-  const calls = async (): Promise<Array<{ type: string; message?: string }>> =>
+  const calls = async (): Promise<Array<{ type: string; message?: string; images?: unknown[] }>> =>
     (await readFile(log, 'utf8'))
       .split('\n')
       .filter(Boolean)
@@ -185,16 +192,16 @@ require('node:readline').createInterface({input:process.stdin}).on('line', line 
     [{ ...metadata, providerPath: metadata.providerPath + '.moved' }, /路径已改变/],
   ] as const) {
     const before = (await notices()).length;
-    // startTurn ACKs immediately; stale checks fail asynchronously via notice, not IPC rejection.
-    const result = await invoke<{ conversationId: string }>('conversation:send', {
-      id: 'pi-task',
-      text: 'Rejected task',
-      selectedSkills: ['review'],
-      selectedSkillMetadata: [stale],
-    });
-    assert.deepEqual(result, { conversationId: 'pi-task' });
-    await expect.poll(async () => (await notices()).length).toBe(before + 1);
-    assert.match((await notices()).at(-1)!, error);
+    await assert.rejects(
+      invoke<{ conversationId: string }>('conversation:send', {
+        id: 'pi-task',
+        text: 'Rejected task',
+        selectedSkills: ['review'],
+        selectedSkillMetadata: [stale],
+      }),
+      error,
+    );
+    assert.equal((await notices()).length, before);
     assert.equal((await prompts()).length, 1);
     assert.deepEqual(
       await conversation(),
@@ -222,8 +229,38 @@ require('node:readline').createInterface({input:process.stdin}).on('line', line 
   assert.match(localPrompt, /Skill: athena-fixture-notes（来源：workspace/);
   assert.match(localPrompt, /Draft the notes/);
   assert.equal((await conversation()).messages.at(-2)?.text, 'Draft the notes');
+  await composer.fill('/rev');
+  await option.click();
+  await page.keyboard.insertText('Check image');
+  await page.evaluate((image) => {
+    const bytes = Uint8Array.from(atob(image.data!), (character) => character.charCodeAt(0));
+    const data = new DataTransfer();
+    data.items.add(new File([bytes], image.name, { type: image.mimeType }));
+    document
+      .querySelector('[contenteditable="true"]')!
+      .dispatchEvent(
+        new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: data }),
+      );
+  }, testImage);
+  await expect(page.getByRole('button', { name: '发送任务', exact: true })).toBeEnabled();
+  await writeFile(path.join(profile, 'stale'), 'yes');
+  await composer.press('Enter');
+  await expect(page.getByRole('region', { name: '应用提醒', exact: true })).toContainText(
+    '路径已改变',
+  );
+  await expect(composer).toContainText('Check image');
+  await expect(composer.locator('.composer-skill-reference')).toHaveText('/review');
+  assert.equal((await prompts()).length, 2);
+  await rm(path.join(profile, 'stale'));
+  await composer.press('Enter');
+  await expect.poll(async () => (await prompts()).length).toBe(3);
+  await expect.poll(async () => (await conversation()).messages.at(-1)?.status).toBe('done');
+  assert.match((await prompts()).at(-1)!.message!, /^\/skill:review\n\nCheck image/);
+  assert.deepEqual((await prompts()).at(-1)!.images, [
+    { type: 'image', data: testImage.data, mimeType: testImage.mimeType },
+  ]);
   console.log(
-    'PASS: actual renderer skill selection/send (CLI reference and workspace pick) -> preload IPC -> production Pi adapter -> scripted CLI; native prompt, degraded usage, stale provider/path notices with no turn mutation, and unrelated draft preservation. No model calls. Pi RPC provides no content hash; no content-change validation claimed. Async stale-send ACK does not prove UI-submit draft retention.',
+    'PASS: actual renderer skill selection/send (CLI reference and workspace pick) -> preload IPC -> production Pi adapter -> scripted CLI; native prompt, degraded usage, stale provider/path rejection before acknowledgement, image and Skill draft preservation, and combined submission. No model calls. Pi RPC provides no content hash; no content-change validation claimed.',
   );
 } finally {
   await application?.close();

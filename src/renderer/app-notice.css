@@ -4,12 +4,12 @@
   align-items: center;
   flex-shrink: 0;
   gap: 8px;
-  width: auto;
-  margin: 0 12px 6px;
-  padding: 8px 8px 8px 12px;
+  width: 100%;
+  margin: 0;
+  padding: 12px;
   border-radius: var(--field-radius);
-  background: var(--surface-secondary);
-  box-shadow: none;
+  background: var(--surface);
+  box-shadow: var(--overlay-shadow);
 }
 .app-notice .alert__indicator {
   padding: 0;

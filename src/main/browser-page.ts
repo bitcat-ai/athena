@@ -4,6 +4,8 @@ import {
   ELEMENT_BACKGROUND_FUNCTIONS,
   ELEMENT_PREVIEW_LIMITS,
   ELEMENT_UNSAFE_CSS_PATTERN,
+  ELEMENT_INSERT_TAGS,
+  ELEMENT_INSERT_ATTRIBUTES,
 } from '../shared/types';
 
 // Keep this as plain JavaScript: the isolated world must not depend on bundler helpers.
@@ -25,6 +27,8 @@ export const browserPageSource = String.raw`(() => {
   const editableStyles = new Set(styleNames);
   const animationStyles = new Set(${JSON.stringify(ELEMENT_ANIMATION_PROPERTIES)});
   const backgroundFunctions = new Set(${JSON.stringify(ELEMENT_BACKGROUND_FUNCTIONS)});
+  const insertTags = new Set(${JSON.stringify(ELEMENT_INSERT_TAGS)});
+  const insertAttributes = new Set(${JSON.stringify(ELEMENT_INSERT_ATTRIBUTES)});
   const attributeNames = new Set(['id','class','role','aria-label','aria-labelledby','aria-describedby','aria-hidden','aria-expanded','aria-checked','aria-selected','title','alt','name','type','placeholder','data-testid','tabindex','disabled','readonly']);
   const blockedTextTags = new Set(['SCRIPT','STYLE','NOSCRIPT','TEMPLATE','HEAD','META','LINK','BASE','INPUT','TEXTAREA','SELECT','OPTION','IMG','IFRAME','OBJECT','EMBED','VIDEO','AUDIO','CANVAS','HTML','BODY','SVG','PATH','RECT','CIRCLE']);
   const blockedEditTags = new Set(['SCRIPT','STYLE','NOSCRIPT','TEMPLATE','HEAD','META','LINK','BASE','OBJECT','EMBED']);
@@ -424,6 +428,69 @@ export const browserPageSource = String.raw`(() => {
     pendingScroll={kind:'scroll',value:JSON.stringify({x:scrollX,y:scrollY}),source,actorId};
     scrollTimer=setTimeout(flushScroll,180);
   },true);
+  const treeNodes = root => { const nodes=[]; const walk=node=>{nodes.push(node);for(const child of node.childNodes) walk(child);};walk(root);return nodes; };
+  const formStates = root => [root,...root.querySelectorAll('input,textarea,select')].filter(node=>['INPUT','TEXTAREA','SELECT'].includes(node.tagName)).map(node=>({node,value:node.value,checked:node.checked,selectedIndex:node.selectedIndex}));
+  function insertElement(ref,insertion) {
+    if (!insertion || typeof insertion!=='object' || Array.isArray(insertion) || Object.keys(insertion).some(key=>!['position','node'].includes(key)) || JSON.stringify(insertion).length>60000) throw new Error('Invalid element structure');
+    const anchor=resolve(ref), position=insertion.position || 'append';
+    if (!['append','prepend','before','after'].includes(position) || sensitive(anchor) || blockedEditTags.has(anchor.tagName) || anchor.namespaceURI!=='http://www.w3.org/1999/xhtml' || anchor.isContentEditable) throw new Error('This element cannot receive a structural preview');
+    const inside=position==='append' || position==='prepend';
+    if (inside && ['INPUT','TEXTAREA','IMG','BR','HR'].includes(anchor.tagName)) throw new Error('This element cannot contain child elements');
+    const container=inside ? anchor : anchor.parentNode;
+    if (!container?.isConnected || container===document.documentElement || container===document.head) throw new Error('Choose a container inside the page body');
+    let count=0, textLength=0;const newIds=new Set();
+    const validate=(node,depth)=> {
+      if (++count>80 || depth>8) throw new Error('Element structure is too large');
+      if (!node || typeof node!=='object' || Array.isArray(node) || !insertTags.has(node.tag) || Object.keys(node).some(key=>!['tag','text','attributes','styles','children'].includes(key))) throw new Error('Only safe HTML element structures are supported');
+      if(node.text!==undefined && (typeof node.text!=='string' || (textLength+=node.text.length)>textLimit || clean(node.text,textLimit+1)!==node.text)) throw new Error('Invalid or sensitive element text');
+      if(node.attributes!==undefined) {
+        if(!node.attributes || typeof node.attributes!=='object' || Array.isArray(node.attributes) || Object.keys(node.attributes).length>20) throw new Error('Invalid element attributes');
+        if(/password|secret|token|api.?key|credit|card.?number|cvv|cvc|ssn|email|phone|mobile|address/i.test([node.attributes.type,node.attributes.id,node.attributes['aria-label']].filter(Boolean).join(' ')) || String(node.attributes.class || '').split(/\s+/).includes('rr-block')) throw new Error('Sensitive controls cannot be created as previews');
+        for(const [key,value] of Object.entries(node.attributes)) {
+          if(!insertAttributes.has(key) || typeof value!=='string' || value.length>4096) throw new Error('Unsupported element attribute');
+          if(key==='href' || key==='src') {
+            if(!(key==='src' && /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+=*$/.test(value))) {
+              const url=new URL(value,'https://athena.invalid');
+              if(!['http:','https:'].includes(url.protocol) || url.username || url.password) throw new Error('Only HTTP(S) links are supported');
+            }
+          }
+          if(key==='type' && (node.tag==='button' ? value!=='button' : node.tag!=='input' || !['text','search','number','checkbox','radio'].includes(value))) throw new Error('Unsupported input type');
+          if(key==='id' && value) {
+            if(newIds.has(value) || anchor.getRootNode().querySelector('#'+CSS.escape(value))) throw new Error('This element ID already exists');
+            newIds.add(value);
+          }
+        }
+      }
+      if(node.styles!==undefined) validateStyles(node.styles);
+      if(node.children!==undefined) {
+        if(!Array.isArray(node.children)) throw new Error('Invalid child elements');
+        node.children.forEach(child=>validate(child,depth+1));
+      }
+      if(['input','img','br','hr'].includes(node.tag) && (node.text!==undefined || node.children?.length)) throw new Error('Void elements cannot contain children');
+    };
+    validate(insertion.node,1);
+    const build=node=> {
+      const el=document.createElement(node.tag);
+      for(const [key,value] of Object.entries(node.attributes || {})) el.setAttribute(key,value);
+      if(node.tag==='button') el.type='button';
+      if(['input','textarea','select'].includes(node.tag)) el.setAttribute('form','athena-preview-'+docId);
+      if(node.text!==undefined) el.appendChild(document.createTextNode(node.text));
+      for(const [key,value] of Object.entries(node.styles || {})) if(value) el.style.setProperty(key,value);
+      for(const child of node.children || []) el.appendChild(build(child));
+      if(sensitive(el)) throw new Error('Sensitive controls cannot be created as previews');
+      return el;
+    };
+    const el=build(insertion.node);
+    const next=position==='prepend' ? anchor.firstChild : position==='before' ? anchor : position==='after' ? anchor.nextSibling : null;
+    container.insertBefore(el,next);
+    const element=describe(el), editId=docId+':edit:'+(++nextEditId);
+    patches.set(editId,{ref:element.ref,el,inserted:true,anchor,anchorRef:ref,container,nodes:treeNodes(el),after:el.cloneNode(true),fields:formStates(el)});
+    editOrder.push(editId);
+    send({kind:'edit',target:element,editId,value:JSON.stringify({insert:insertion})});
+    el.scrollIntoView({block:'nearest',inline:'nearest',behavior:'instant'});
+    feedback(element.ref,'applied');
+    return {editId,element:inspect(element.ref)};
+  }
   globalThis.__workbenchPage = {
     docId,
     setActor(value) { if(actorId!==value) flushScroll(); actorId=value; },
@@ -503,7 +570,11 @@ export const browserPageSource = String.raw`(() => {
       return {editId,element:inspect(patch.ref)};
     },
     edit(request) {
-      if (!request || typeof request!=='object' || Array.isArray(request) || Object.keys(request).some(key=>!['ref','text','styles','animation'].includes(key))) throw new Error('Only text, supported styles and a preview animation can be edited');
+      if (!request || typeof request!=='object' || Array.isArray(request) || Object.keys(request).some(key=>!['ref','text','styles','animation','insert'].includes(key))) throw new Error('Only supported preview changes can be edited');
+      if(request.insert!==undefined) {
+        if(Object.keys(request).some(key=>!['ref','insert'].includes(key))) throw new Error('Insert an element first, then edit its returned reference');
+        return insertElement(request.ref,request.insert);
+      }
       const el=resolve(request.ref);
       if (sensitive(el) || blockedEditTags.has(el.localName.toUpperCase())) throw new Error('Sensitive or executable elements cannot be edited');
       const hasText=Object.hasOwn(request,'text');
@@ -538,6 +609,15 @@ export const browserPageSource = String.raw`(() => {
       if (!patch) throw new Error('No active edit with this ID exists in the current document');
       const el=resolve(patch.ref);
       if (el!==patch.el || sensitive(el)) throw new Error('The edited element is no longer safe to restore');
+      if(patch.inserted) {
+        const anchor=resolve(patch.anchorRef), nodes=treeNodes(el);
+        if(anchor!==patch.anchor || el.parentNode!==patch.container || !el.isEqualNode(patch.after) || nodes.length!==patch.nodes.length || nodes.some((node,index)=>node!==patch.nodes[index]) || patch.fields.some(field=>field.node.value!==field.value || field.node.checked!==field.checked || field.node.selectedIndex!==field.selectedIndex)) throw new Error('Created content changed after this preview; refusing to remove newer changes');
+        if(editOrder.slice(editOrder.indexOf(id)+1).some(key=>{const newer=patches.get(key);return newer && el.contains(newer.el);})) throw new Error('Undo newer changes to the created elements first');
+        el.remove();patches.delete(id);editOrder.splice(editOrder.indexOf(id),1);
+        send({kind:'undo',target:describe(anchor),editId:id,value:JSON.stringify({editId:id})});
+        feedback(patch.anchorRef,'applied');
+        return {editId:id,element:inspect(patch.anchorRef)};
+      }
       if (patch.hasText) {
         const current=[...el.childNodes].filter(node=>node.nodeType===Node.TEXT_NODE);
         if (el.children.length || current.length!==patch.textNodes.length || current.some((node,index)=>node!==patch.textNodes[index] || node.nodeValue!==patch.afterText[index])) throw new Error('Page text changed after this edit; refusing to overwrite newer changes');

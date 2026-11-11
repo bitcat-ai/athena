@@ -100,6 +100,7 @@
 }
 .model-controls {
   width: min(320px, calc(100vw - 24px));
+  max-height: min(480px, var(--available-height, calc(100dvh - 24px)));
   border: 0;
   border-radius: 22px;
   padding: 0;
@@ -109,6 +110,12 @@
 }
 .model-controls [data-slot='popover-dialog'] {
   padding: 10px;
+  display: flex;
+  flex-direction: column;
+  max-height: inherit;
+}
+.model-controls [data-slot='popover-dialog'] > :not(.model-options) {
+  flex-shrink: 0;
 }
 .model-controls-heading {
   display: flex;
@@ -135,10 +142,18 @@
   color: var(--muted);
 }
 .model-options {
+  min-height: 36px;
+  flex-shrink: 1;
   max-height: min(228px, 32vh);
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 3px;
+}
+.model-option-id {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
 }
 .model-options [role='option'] {
   min-height: 34px;

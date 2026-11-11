@@ -6,7 +6,14 @@ import path from 'node:path';
 import { piIsolationArguments } from './agent-discovery';
 import { normalizeProviderSkillDiscovery } from '../shared/provider-skills';
 import { cliEnvironment } from './agent-process';
-import type { AgentSession, AgentSessionOptions } from './agent-session';
+import { parseImages, type ImageAttachment } from '../shared/images';
+import {
+  selectedElementContext,
+  type AgentSession,
+  type AgentSessionOptions,
+} from './agent-session';
+import { AgentMcpServer } from './agent-mcp';
+import { browserToolsFingerprint } from './agents';
 import type { AgentEvent, BrowserTool, ElementRef, ToolCall } from '../shared/types';
 import type { ProviderSkill, ProviderSkillDiscovery } from '../shared/skills';
 import {
@@ -49,6 +56,8 @@ export class PiSession implements AgentSession {
   private active?: Run;
   private sending = false;
   private permissionReady = false;
+  private browserToolsReady = false;
+  private browserTools?: AgentMcpServer;
   private pending = new Map<
     string,
     {
@@ -90,8 +99,12 @@ export class PiSession implements AgentSession {
   get isClosed() {
     return this.closed;
   }
-  matchesConfiguration(workspace: string, executablePath: string, _tools: BrowserTool[]) {
-    return workspace === this.options.workspace && executablePath === this.options.executablePath;
+  matchesConfiguration(workspace: string, executablePath: string, tools: BrowserTool[]) {
+    return (
+      workspace === this.options.workspace &&
+      executablePath === this.options.executablePath &&
+      browserToolsFingerprint(tools) === browserToolsFingerprint(this.options.tools)
+    );
   }
   private emit(event: AgentEvent) {
     this.options.onEvent(event);
@@ -99,7 +112,10 @@ export class PiSession implements AgentSession {
 
   async prepare(selection?: ModelSelection) {
     if (this.closed) throw new Error('Pi 会话已关闭');
-    this.startup ??= this.start();
+    this.startup ??= this.start().catch((error) => {
+      this.shutdown(error instanceof Error ? error.message : 'Pi 初始化失败');
+      throw error;
+    });
     await this.startup;
     if (selection) await this.selectModel(selection);
   }
@@ -125,6 +141,37 @@ export class PiSession implements AgentSession {
     }
     if (this.closed) throw new Error('Pi 会话已关闭');
     const id = this.id ?? randomUUID();
+    if (this.options.tools.length) {
+      const owners = new Map<string, Run>();
+      this.browserTools = new AgentMcpServer(
+        this.options.tools,
+        async (name, args) => {
+          const run = this.active;
+          if (!run?.started || run.cancelled || this.closed) throw new Error('任务未就绪');
+          const result = await this.options.callTool(name, args);
+          if (this.active !== run || run.cancelled || this.closed) throw new Error('任务已停止');
+          return result;
+        },
+        (call) => {
+          if (call.status === 'running' && this.active?.started && !this.active.cancelled)
+            owners.set(call.id, this.active);
+          const owner = owners.get(call.id);
+          if (
+            owner &&
+            owner === this.active &&
+            (call.status !== 'running' || (!owner.cancelled && !this.closed))
+          )
+            this.emit({ type: 'tool', call });
+          if (call.status !== 'running') owners.delete(call.id);
+        },
+      );
+      await this.browserTools.start();
+      if (this.closed) {
+        this.browserTools.close();
+        throw new Error('Pi 会话已关闭');
+      }
+    }
+    const bridgeEnv = this.browserTools?.definition().env;
     const args = [
       '--mode',
       'rpc',
@@ -132,7 +179,16 @@ export class PiSession implements AgentSession {
       '--extension',
       this.options.permissionsExtensionPath!,
       '--tools',
-      'read,bash,write,edit,grep,find,ls',
+      [
+        'read',
+        'bash',
+        'write',
+        'edit',
+        'grep',
+        'find',
+        'ls',
+        ...this.options.tools.map((tool) => tool.name),
+      ].join(','),
       ...(this.options.sessionDirectory ? ['--session-dir', this.options.sessionDirectory] : []),
       ...(this.id ? ['--session', this.id] : ['--session-id', id]),
     ];
@@ -140,6 +196,8 @@ export class PiSession implements AgentSession {
       cwd: this.options.workspace,
       env: {
         ...process.env,
+        ATHENA_MCP_URL: bridgeEnv?.ATHENA_MCP_URL ?? '',
+        ATHENA_MCP_TOKEN: bridgeEnv?.ATHENA_MCP_TOKEN ?? '',
         PATH: `${path.dirname(this.options.executablePath)}${path.delimiter}${process.env.PATH ?? '/usr/bin:/bin'}`,
       },
       detached: process.platform !== 'win32',
@@ -179,6 +237,8 @@ export class PiSession implements AgentSession {
     try {
       const state = await this.request('get_state', {}, 20000);
       if (!this.permissionReady) throw new Error('Pi 授权扩展未就绪，不能执行任务');
+      if (this.options.tools.length && !this.browserToolsReady)
+        throw new Error('Pi 浏览器工具未就绪，不能执行网页任务');
       if (!text(state?.sessionId) || state.isStreaming || state.pendingMessageCount > 0)
         throw new Error('Pi 未返回可用的空闲会话');
       if (state.sessionId !== id) throw new Error('Pi 返回了其他会话，已拒绝使用');
@@ -226,7 +286,14 @@ export class PiSession implements AgentSession {
             return [];
           const name = item.name.slice('skill:'.length);
           if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/i.test(name)) return [];
-          return [{ name, description: item.description, path: item.sourceInfo.path, userInvocable: true }];
+          return [
+            {
+              name,
+              description: item.description,
+              path: item.sourceInfo.path,
+              userInvocable: true,
+            },
+          ];
         });
       return normalizeProviderSkillDiscovery(
         {
@@ -237,7 +304,15 @@ export class PiSession implements AgentSession {
         { approvedRoot: this.options.workspace, providerManagedPaths: true },
       );
     } catch {
-      return { status: 'unavailable', source: 'provider', provider: { id: 'pi', name: 'Pi' }, skills: [], diagnostics: [{ code: 'capability-degraded', message: 'Pi Skill discovery is unavailable.' }] };
+      return {
+        status: 'unavailable',
+        source: 'provider',
+        provider: { id: 'pi', name: 'Pi' },
+        skills: [],
+        diagnostics: [
+          { code: 'capability-degraded', message: 'Pi Skill discovery is unavailable.' },
+        ],
+      };
     }
   }
 
@@ -260,11 +335,20 @@ export class PiSession implements AgentSession {
     selectedElement?: ElementRef,
     selection?: ModelSelection,
     skills: ProviderSkill[] = [],
+    images?: ImageAttachment[],
   ) {
     if (this.active || this.sending) throw new Error('请等待 Pi 当前任务完成，或先停止');
-    if (!prompt.trim() || prompt.length > 20000 || (context?.length ?? 0) > 60000)
+    const attachments = parseImages(images);
+    if (
+      (!prompt.trim() && !attachments.length) ||
+      prompt.length > 20000 ||
+      (context?.length ?? 0) > 60000
+    )
       throw new Error('Pi 消息格式或长度无效');
-    if (selectedElement) throw new Error('Pi 尚未接通所选网页元素，请移除元素上下文后发送');
+    if (selectedElement && !this.options.tools.length)
+      throw new Error('Pi 尚未接通所选网页元素，请移除元素上下文后发送');
+    if (this.browserTools?.pendingCalls) throw new Error('上一轮浏览器操作尚未结束，请稍后重试');
+    let selectedSnapshot: string | undefined;
     if (skills.some((skill) => skill.provider.id !== 'pi' || !skill.userInvocable))
       throw new Error('Pi Skill 选择无效');
     if (new Set(skills.map((skill) => skill.name)).size !== skills.length)
@@ -285,6 +369,10 @@ export class PiSession implements AgentSession {
     this.sending = true;
     try {
       await this.prepare(selection);
+      selectedSnapshot = await selectedElementContext(
+        selectedElement,
+        this.options.inspectSelectedElement,
+      );
     } finally {
       this.sending = false;
     }
@@ -321,9 +409,15 @@ export class PiSession implements AgentSession {
           ...selected.map((skill) => `/skill:${skill.name}`),
           prompt,
           context ? `<task_context>\n${context}\n</task_context>` : '',
+          selectedSnapshot
+            ? `<selected_element_snapshot>\n${selectedSnapshot}\n</selected_element_snapshot>`
+            : '',
         ]
           .filter(Boolean)
           .join('\n\n'),
+        ...(attachments.length
+          ? { images: attachments.map(({ data, mimeType }) => ({ type: 'image', data, mimeType })) }
+          : {}),
       },
       30000,
     )
@@ -341,6 +435,7 @@ export class PiSession implements AgentSession {
     const run = this.active;
     if (!run) return;
     run.cancelled = true;
+    this.browserTools?.cancelPending();
     this.cancelRequests();
     this.emit({ type: 'status', status: 'waiting', label: '正在停止 Pi' });
     try {
@@ -413,6 +508,14 @@ export class PiSession implements AgentSession {
       clearTimeout(pending.timer);
       if (record.success === true) pending.resolve(record.data);
       else pending.reject(new Error(`Pi ${pending.type} 失败，请在终端检查对应配置`));
+      return;
+    }
+    if (
+      record.type === 'extension_ui_request' &&
+      record.method === 'notify' &&
+      record.message === 'athena-browser-tools-v1'
+    ) {
+      this.browserToolsReady = true;
       return;
     }
     if (
@@ -529,6 +632,7 @@ export class PiSession implements AgentSession {
       text(record.toolCallId) &&
       text(record.toolName)
     ) {
+      if (this.options.tools.some((tool) => tool.name === record.toolName)) return;
       const call: ToolCall = {
         id: record.toolCallId,
         name: record.toolName,
@@ -549,7 +653,12 @@ export class PiSession implements AgentSession {
       this.finish(
         run.cancelled || record.aborted
           ? '任务已停止'
-          : (run.failed ?? (!run.answered ? 'Pi 未返回本轮回复，不能确认任务完成' : undefined)),
+          : (run.failed ??
+              (this.browserTools?.pendingCalls
+                ? 'Pi 浏览器操作尚未完成'
+                : !run.answered
+                  ? 'Pi 未返回本轮回复，不能确认任务完成'
+                  : undefined)),
       );
   }
   private handleUI(record: RecordValue) {
@@ -649,6 +758,7 @@ export class PiSession implements AgentSession {
     if (this.closed) return;
     this.cancelRequests();
     this.closed = true;
+    this.browserTools?.close();
     this.startupAbort.abort();
     this.ready = false;
     for (const pending of this.pending.values()) {

@@ -3,6 +3,15 @@ import test from 'node:test';
 import { WebExecution } from '../src/main/web-execution';
 import type { WebExecutionEvent } from '../src/shared/types';
 
+test('confirmed insertions cannot be replayed in the same turn after a lost reply', () => {
+  const flow = new WebExecution('insert-turn', () => {});
+  flow.assertCanMutate('insert-section');
+  flow.confirmMutation('insert-section');
+  assert.throws(() => flow.assertCanMutate('insert-section'), /不能重复/);
+  flow.assertCanMutate('insert-another-section');
+  new WebExecution('next-turn', () => {}).assertCanMutate('insert-section');
+});
+
 test('recovery requires a fresh matching-page observation and literal evidence; unknown never unlocks mutations', () => {
   const events: WebExecutionEvent[] = [];
   const flow = new WebExecution('turn-1', (e) => events.push(e));

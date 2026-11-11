@@ -1,5 +1,11 @@
 import type { BrowserRuntime } from './browser';
-import type { BrowserInput, ElementAnimation, ElementEdit, ElementQuery } from '../shared/types';
+import type {
+  BrowserInput,
+  ElementAnimation,
+  ElementEdit,
+  ElementInsertion,
+  ElementQuery,
+} from '../shared/types';
 function record(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('请求格式无效');
   return value as Record<string, unknown>;
@@ -57,6 +63,8 @@ export async function dispatchBrowserAction(
         changes.animation =
           data.animation === null ? null : (record(data.animation) as unknown as ElementAnimation);
       }
+      if (data.insert !== undefined)
+        changes.insert = record(data.insert) as unknown as ElementInsertion;
       return browser.editElement(string(data.ref, 1500), changes);
     }
     case 'browser:preview-styles': {

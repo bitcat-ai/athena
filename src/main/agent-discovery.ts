@@ -14,7 +14,7 @@ const definitions: { id: AgentId; name: string; commands: string[]; supported: b
   { id: 'gemini', name: 'Gemini CLI', commands: ['gemini'], supported: true },
   { id: 'pi', name: 'Pi', commands: ['pi'], supported: true },
   { id: 'cursor', name: 'Cursor Agent', commands: ['cursor-agent', 'agent'], supported: true },
-  { id: 'opencode', name: 'OpenCode', commands: ['opencode'], supported: false },
+  { id: 'opencode', name: 'OpenCode', commands: ['opencode'], supported: true },
 ];
 
 export async function executableDirectories(): Promise<string[]> {
@@ -125,30 +125,48 @@ export async function detectAgents(
             };
             continue;
           }
-          if (id === 'cursor' || id === 'pi' || id === 'claude' || id === 'gemini') {
+          const versionText = version.stdout
+            .replace(/\x1b\[[0-9;]*m/g, '')
+            .trim()
+            .split('\n')[0]
+            .slice(0, 120);
+          if (
+            id === 'cursor' ||
+            id === 'pi' ||
+            id === 'claude' ||
+            id === 'gemini' ||
+            id === 'opencode'
+          ) {
             const help = await exec(executable, ['--help'], options);
-            if (id === 'cursor' && !/cursor agent|start the cursor agent/i.test(help.stdout))
-              continue;
-            if (id === 'pi' && !/--mode.*rpc|RPC mode/i.test(help.stdout)) continue;
+            const helpText = `${help.stdout}\n${help.stderr}`;
+            if (id === 'cursor' && !/cursor agent|start the cursor agent/i.test(helpText)) continue;
+            if (id === 'pi' && !/--mode.*rpc|RPC mode/i.test(helpText)) continue;
             const required =
               id === 'claude'
-                ? ['--safe-mode', '--permission-prompts', '--tools']
+                ? ['--safe-mode', '--restricted', '--mcp-config', '--permission-prompts', '--tools']
                 : id === 'gemini'
-                  ? ['--admin-policy', '--approval-mode']
+                  ? ['--admin-policy', '--approval-mode', '--skip-trust']
                   : id === 'cursor'
                     ? ['--mode', '--output-format', '--trust']
-                    : [];
+                    : id === 'opencode'
+                      ? ['acp', '--pure']
+                      : [];
             if (
-              required.some((flag) => !help.stdout.includes(flag)) ||
-              (id === 'pi' && !piIsolationArguments(help.stdout))
+              required.some((flag) => !helpText.includes(flag)) ||
+              (id === 'pi' && !piIsolationArguments(helpText)) ||
+              (id === 'opencode' && !/^1\./.test(versionText))
             ) {
               found = {
                 id,
                 name,
                 path: executable,
                 available: true,
+                version: versionText,
                 supported: false,
-                detail: '当前 CLI 版本不支持所需的受限执行模式，请在终端更新后刷新',
+                detail:
+                  id === 'opencode'
+                    ? '当前适配支持具备 --pure 的 OpenCode 1.x，请核对 CLI 版本'
+                    : '当前 CLI 版本不支持所需的受限执行模式，请在终端更新后刷新',
               };
               continue;
             }
@@ -159,19 +177,19 @@ export async function detectAgents(
             supported,
             available: true,
             path: executable,
-            version: version.stdout
-              .replace(/\x1b\[[0-9;]*m/g, '')
-              .trim()
-              .split('\n')[0]
-              .slice(0, 120),
+            version: versionText,
             detail:
-              id === 'claude' || id === 'gemini'
-                ? '支持文本任务；本地文件和命令工具不可用'
-                : id === 'cursor'
-                  ? '支持只读任务；不执行文件修改或命令'
-                  : supported
-                    ? '沿用本机登录与模型服务配置，工具操作逐项确认'
-                    : '已检测到本机安装',
+              id === 'claude'
+                ? '支持文字、图片、Skill 与 Neo；本地文件只读，命令工具不可用'
+                : id === 'gemini'
+                  ? '支持文本任务；本地文件和命令工具不可用'
+                  : id === 'cursor'
+                    ? '支持只读任务；不执行文件修改或命令'
+                    : id === 'opencode'
+                      ? '支持文字、图片与 Neo；保留本机限制，文件与命令操作逐项确认'
+                      : supported
+                        ? '沿用本机登录与模型服务配置，工具操作逐项确认'
+                        : '已检测到本机安装',
           };
         } catch {
           found = {

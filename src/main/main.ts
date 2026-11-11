@@ -6,6 +6,7 @@ import {
   ipcMain,
   Menu,
   net,
+  nativeImage,
   safeStorage,
   shell,
 } from 'electron';
@@ -21,7 +22,13 @@ import { dispatchBrowserAction } from './browser-actions';
 import { createCodexUpdateChecker, detectAgents } from './agents';
 import { createAgentSession } from './agent-factory';
 import type { AgentSession } from './agent-session';
-import { conversationAgent, conversationModelSelection, supportsBrowser } from '../shared/agents';
+import {
+  conversationAgent,
+  conversationModelSelection,
+  supportsBrowser,
+  supportsImages,
+} from '../shared/agents';
+import { imageSource, parseImages, type ImageAttachment } from '../shared/images';
 import { NeoBrowserRuntime } from './neo-browser';
 import { copyText } from './clipboard';
 import { FeishuConnector } from './feishu';
@@ -143,7 +150,10 @@ let externalTurnQueue = Promise.resolve();
 
 function queueExternalTurn<T>(operation: () => Promise<T>): Promise<T> {
   const result = externalTurnQueue.then(operation, operation);
-  externalTurnQueue = result.then(() => undefined, () => undefined);
+  externalTurnQueue = result.then(
+    () => undefined,
+    () => undefined,
+  );
   return result;
 }
 let lastFrame: BrowserFrame | undefined;
@@ -207,8 +217,11 @@ function nativeSessionOptions() {
     ),
   };
 }
-function toolsFor(conversation: Conversation) {
-  return supportsBrowser(conversationAgent(conversation)) ? neo.getTools() : [];
+function toolsFor(conversation: Pick<Conversation, 'agent'>) {
+  const agent = conversationAgent(conversation);
+  if (!supportsBrowser(agent)) return [];
+  if (agent !== 'codex' && browser.getState().status !== 'ready') return [];
+  return neo.getTools();
 }
 function assertTaskEnvironment() {
   if (onboarding?.getState().requiresSetup && onboarding.getState().workspace.status !== 'ready')
@@ -268,11 +281,7 @@ async function listModels(
     const reusable =
       current?.isReady &&
       !preDiscoverySessions.has(current) &&
-      current.matchesConfiguration(
-        workspace,
-        executablePath,
-        supportsBrowser(id) ? neo.getTools() : [],
-      );
+      current.matchesConfiguration(workspace, executablePath, toolsFor({ agent: id }));
     const client = reusable
       ? current
       : (catalog.probe = createAgentSession(id, {
@@ -355,7 +364,11 @@ function prepareConversation(conversation: Conversation): Promise<void> {
   const request = (async () => {
     const info = selectableAgent(conversationAgent(conversation));
     try {
-      if (supportsBrowser(info.id) && onboarding?.allowsBrowserStartup !== false) await neo.start();
+      if (
+        supportsBrowser(info.id) &&
+        (onboarding?.allowsBrowserStartup !== false || browser.getState().status === 'ready')
+      )
+        await neo.start();
     } catch {
       /* Local CLI work does not require Neo. */
     }
@@ -453,6 +466,7 @@ async function resolveMentions(value: unknown) {
     '页面效果调整直接使用元素编辑工具。仅当用户要求修改或保存到源码时，核实项目与页面的对应关系、定位真实组件并验证修改；不要把 DOM 预览当成源码修改。',
     '</page_elements>',
   ].join('\n');
+  if (elementContext.length > 60_000) throw new Error('元素上下文过长，请减少引用或缩小预览改动');
   return { mentions, elementContext, first };
 }
 
@@ -658,7 +672,12 @@ function getSession(
       callTool: async (name: string, args: unknown) => {
         if (!supportsBrowser(conversationAgent(conversation)))
           return { text: '当前 CLI 未接通网页工具，不能执行此操作。', isError: true };
-        if (!active || active.conversationId !== conversation.id)
+        if (
+          !active ||
+          active.conversationId !== conversation.id ||
+          active.session !== session ||
+          active.cancelled
+        )
           return { text: '任务已经停止，不能再执行浏览器操作。', isError: true };
         if (
           active.readonly &&
@@ -707,8 +726,15 @@ async function runTurn(
   selectedElement?: ElementRef,
   mentions?: ElementMention[],
   selectedSkillNames: string[] = [],
-  selectedSkillExpectations: Array<{ name: string; providerId: string; providerPath?: string; contentHash?: string }> = [],
+  selectedSkillExpectations: Array<{
+    name: string;
+    providerId: string;
+    providerPath?: string;
+    contentHash?: string;
+  }> = [],
   displayText?: string,
+  images: ImageAttachment[] = [],
+  onAccepted?: () => void,
 ) {
   assertTaskEnvironment();
   if (active || startingTurn) throw new Error('当前任务还在进行，请先停止或等待完成');
@@ -721,19 +747,36 @@ async function runTurn(
   const providerSkills = providerNames.length
     ? await getSession(conversation, info.path, toolsFor(conversation)).discoverProviderSkills()
     : undefined;
-  if (providerSkills && (providerSkills.provider.id !== info.id || providerSkills.status !== 'ready'))
+  if (
+    providerSkills &&
+    (providerSkills.provider.id !== info.id || providerSkills.status !== 'ready')
+  )
     throw new Error('Provider Skill 当前不可用，请刷新后重试');
-  const selectedProviderSkills = selectProviderSkills(providerSkills?.skills ?? [], providerNames, info.id, selectedSkillExpectations);
-  const rescannedSkills = localSkillNames.length ? (await discoverSkills(store.data.settings.workspace)).skills : [];
-  const selectedSkills = [...selectSkills(rescannedSkills, localSkillNames), ...selectedProviderSkills];
+  const selectedProviderSkills = selectProviderSkills(
+    providerSkills?.skills ?? [],
+    providerNames,
+    info.id,
+    selectedSkillExpectations,
+  );
+  const rescannedSkills = localSkillNames.length
+    ? (await discoverSkills(store.data.settings.workspace)).skills
+    : [];
+  const selectedSkills = [
+    ...selectSkills(rescannedSkills, localSkillNames),
+    ...selectedProviderSkills,
+  ];
   const skillContext = buildSkillContext(selectSkills(rescannedSkills, localSkillNames));
   const skillUsage: SkillUsage[] = selectedSkills.map((skill) => ({
     name: skill.name,
     source: skill.source,
-    ...('provider' in skill ? { provider: skill.provider, providerPath: skill.providerPath } : { packagePath: skill.packagePath }),
+    ...('provider' in skill
+      ? { provider: skill.provider, providerPath: skill.providerPath }
+      : { packagePath: skill.packagePath }),
     contentHash: skill.contentHash,
     injectionStatus: 'provider' in skill ? 'degraded' : 'injected',
-    ...('provider' in skill ? { capabilityDegradation: 'CLI 未提供 Provider Skill 已应用确认。' } : {}),
+    ...('provider' in skill
+      ? { capabilityDegradation: 'CLI 未提供 Provider Skill 已应用确认。' }
+      : {}),
   }));
   if (selectedSkills.length) {
     conversation.selectedSkills = selectedSkills.map((skill) => skill.name);
@@ -746,11 +789,14 @@ async function runTurn(
     throw new Error('这段对话属于另一个工作目录。请切换回原目录，或新建对话。');
   if (!supportsBrowser(info.id) && selectedElement)
     throw new Error('当前 CLI 尚未接通网页元素工具，请移除元素上下文后发送');
-  if (!text.trim()) throw new Error('请输入任务');
+  if (images.length && !supportsImages(info.id))
+    throw new Error('当前 CLI 不支持图片，请选择 Codex、Claude、Pi 或 OpenCode');
+  if (!text.trim() && !images.length) throw new Error('请输入任务或粘贴图片');
   if (resetAfterTurn) resetConnections();
   const selectedModel = conversationModelSelection(store.data.settings, conversation);
   const modelSelection = selectedModel ? { ...selectedModel } : undefined;
-  if (!conversation.messages.length) conversation.title = text.trim().split('\n')[0].slice(0, 32);
+  if (!conversation.messages.length)
+    conversation.title = text.trim().split('\n')[0].slice(0, 32) || '图片对话';
   const visibleHistory = conversation.messages.slice();
   const user: ChatMessage = {
     id: randomUUID(),
@@ -762,6 +808,7 @@ async function runTurn(
     source,
     context,
     ...(mentions?.length ? { mentions } : {}),
+    ...(images.length ? { images } : {}),
   };
   const assistant: ChatMessage = {
     id: randomUUID(),
@@ -793,10 +840,15 @@ async function runTurn(
     throw error;
   });
   emit({ type: 'conversation:updated', conversation });
+  onAccepted?.();
   usage.start(assistant.id, info.id, modelSelection?.model);
   saveUsage();
   try {
-    if (supportsBrowser(info.id) && onboarding?.allowsBrowserStartup !== false) await neo.start();
+    if (
+      supportsBrowser(info.id) &&
+      (onboarding?.allowsBrowserStartup !== false || browser.getState().status === 'ready')
+    )
+      await neo.start();
   } catch {
     /* Local CLI tasks remain available; Neo reports its own connection state. */
   }
@@ -876,6 +928,7 @@ async function runTurn(
       selectedElement,
       modelSelection,
       selectedProviderSkills,
+      images,
     );
     const unresolved = neo.unresolvedResult(assistant.id);
     if (unresolved) throw new Error(unresolved);
@@ -1030,7 +1083,7 @@ function requestNativeApproval(request: Omit<ApprovalRequest, 'id' | 'kind'>): P
     });
   });
 }
-function startTurn(
+async function startTurn(
   conversation: Conversation,
   text: string,
   context?: string,
@@ -1038,12 +1091,24 @@ function startTurn(
   selectedElement?: ElementRef,
   mentions?: ElementMention[],
   selectedSkillNames: string[] = [],
-  selectedSkillExpectations: Array<{ name: string; providerId: string; providerPath?: string; contentHash?: string }> = [],
+  selectedSkillExpectations: Array<{
+    name: string;
+    providerId: string;
+    providerPath?: string;
+    contentHash?: string;
+  }> = [],
   displayText?: string,
+  images?: ImageAttachment[],
 ) {
   assertTaskEnvironment();
   if (active || startingTurn) throw new Error('当前任务还在进行，请先停止');
   assertOpenConversation(store.data.conversations, conversation);
+  let accepted = false;
+  let accept!: () => void, reject!: (error: unknown) => void;
+  const acceptance = new Promise<void>((resolve, fail) => {
+    accept = resolve;
+    reject = fail;
+  });
   void runTurn(
     conversation,
     text,
@@ -1055,11 +1120,21 @@ function startTurn(
     selectedSkillNames,
     selectedSkillExpectations,
     displayText,
+    images,
+    () => {
+      accepted = true;
+      accept();
+    },
   ).catch((error) => {
+    if (!accepted) {
+      reject(error);
+      return;
+    }
     // A failure that already sits on its message is not repeated as a toast.
     if (!(error && typeof error === 'object' && inlineFailures.has(error)))
       notice(error instanceof Error ? error.message : '任务失败', 'error');
   });
+  await acceptance;
   return { conversationId: conversation.id };
 }
 async function handleFeishuMessage(message: FeishuMessage) {
@@ -1190,11 +1265,20 @@ async function snapshot(): Promise<AppSnapshot> {
     if (onboarding?.blocksTasks) throw new Error('运行环境尚未准备好');
     const conversation = selectedConversation();
     const info = selectableAgent(conversationAgent(conversation));
-    providerSkillDiscovery = await getSession(conversation, info.path, toolsFor(conversation)).discoverProviderSkills();
+    providerSkillDiscovery = await getSession(
+      conversation,
+      info.path,
+      toolsFor(conversation),
+    ).discoverProviderSkills();
   } catch {
     providerSkillDiscovery = {
-      status: 'unavailable', source: 'provider', provider: { id: store.data.settings.agent, name: store.data.settings.agent }, skills: [],
-      diagnostics: [{ code: 'capability-degraded', message: 'Provider Skill discovery is unavailable.' }],
+      status: 'unavailable',
+      source: 'provider',
+      provider: { id: store.data.settings.agent, name: store.data.settings.agent },
+      skills: [],
+      diagnostics: [
+        { code: 'capability-degraded', message: 'Provider Skill discovery is unavailable.' },
+      ],
     };
   }
   return {
@@ -1287,7 +1371,7 @@ async function invoke(action: string, payload: unknown) {
       address: string(data.address, 100),
       name: string(data.name, 40),
     });
-  if (lastFrame) sharing!.onFrame(lastFrame);
+    if (lastFrame) sharing!.onFrame(lastFrame);
     return state;
   }
   if (action === 'share:stop') return sharing!.stop();
@@ -1330,7 +1414,10 @@ async function invoke(action: string, payload: unknown) {
     case 'skills:list': {
       assertTaskEnvironment();
       const data = payload === undefined ? {} : record(payload);
-      const conversation = data.conversationId === undefined ? selectedConversation() : getConversation(data.conversationId);
+      const conversation =
+        data.conversationId === undefined
+          ? selectedConversation()
+          : getConversation(data.conversationId);
       const info = selectableAgent(conversationAgent(conversation));
       return getSession(conversation, info.path!, toolsFor(conversation)).discoverProviderSkills();
     }
@@ -1428,6 +1515,19 @@ async function invoke(action: string, payload: unknown) {
     case 'conversation:send': {
       assertTaskEnvironment();
       const data = record(payload);
+      const taskText = string(data.text);
+      const images = parseImages(data.images);
+      if (!taskText.trim() && !images.length) throw new Error('请输入任务或粘贴图片');
+      const existing = data.id ? getConversation(data.id) : undefined;
+      const agent = existing ? conversationAgent(existing) : store.data.settings.agent;
+      if (images.length && !supportsImages(agent))
+        throw new Error('当前 CLI 不支持图片，请选择 Codex、Claude、Pi 或 OpenCode');
+      for (const image of images) {
+        const decoded = nativeImage.createFromDataURL(imageSource(image));
+        const { width, height } = decoded.getSize();
+        if (decoded.isEmpty() || width * height > 40_000_000)
+          throw new Error('图片无法读取或像素过多，请缩小图片后重试');
+      }
       if (data.selectedSkills !== undefined && !Array.isArray(data.selectedSkills))
         throw new Error('Skill 选择格式不正确');
       if (Array.isArray(data.selectedSkills) && data.selectedSkills.length > 3)
@@ -1444,20 +1544,26 @@ async function invoke(action: string, payload: unknown) {
             return {
               name: string(value.name, 100),
               providerId: string(value.providerId, 100),
-              ...(value.providerPath === undefined ? {} : { providerPath: string(value.providerPath, 4000) }),
-              ...(value.contentHash === undefined ? {} : { contentHash: string(value.contentHash, 512) }),
+              ...(value.providerPath === undefined
+                ? {}
+                : { providerPath: string(value.providerPath, 4000) }),
+              ...(value.contentHash === undefined
+                ? {}
+                : { contentHash: string(value.contentHash, 512) }),
             };
           })
         : [];
       const explicitSkills = selectedSkillNames;
       if (explicitSkills.length > 3) throw new Error('最多选择 3 个 Skill');
-      if (new Set(selectedSkillExpectations.map((item) => item.name)).size !== selectedSkillExpectations.length ||
-          selectedSkillExpectations.some((item) => !explicitSkills.includes(item.name)))
+      if (
+        new Set(selectedSkillExpectations.map((item) => item.name)).size !==
+          selectedSkillExpectations.length ||
+        selectedSkillExpectations.some((item) => !explicitSkills.includes(item.name))
+      )
         throw new Error('Skill 元数据与选择不匹配');
-      const taskText = string(data.text);
       const displayText = data.displayText === undefined ? undefined : string(data.displayText);
       const { mentions, elementContext, first } = await resolveMentions(data.mentions);
-      const conversation = data.id ? getConversation(data.id) : createConversation();
+      const conversation = existing ?? createConversation();
       return startTurn(
         conversation,
         taskText,
@@ -1468,6 +1574,7 @@ async function invoke(action: string, payload: unknown) {
         explicitSkills,
         selectedSkillExpectations,
         displayText,
+        images,
       );
     }
     case 'conversation:stop':
@@ -1892,20 +1999,32 @@ async function launch() {
       conversations: store.data.conversations.map((conversation) => ({
         id: conversation.id,
         title: conversation.title,
-        status: conversation.messages.some((message) => message.status === 'streaming') ? 'running' : 'idle',
+        status: conversation.messages.some((message) => message.status === 'streaming')
+          ? 'running'
+          : 'idle',
         agent: conversation.agent,
         model: conversation.modelSelection?.model,
       })),
       providers: agents.map((agent) => ({ id: agent.id, available: agent.available })),
-      capabilities: ['workspace.read', 'conversation.read', 'thread.read', 'thread.start', 'thread.send', 'thread.stop'],
+      capabilities: [
+        'workspace.read',
+        'conversation.read',
+        'thread.read',
+        'thread.start',
+        'thread.send',
+        'thread.stop',
+      ],
     }),
     threads: {
       start: async (input) => {
         assertTaskEnvironment();
         if (active || startingTurn) throw new Error('当前已有任务正在运行');
         // The request is checked in full first: a refused one must not leave a conversation behind.
-        if (input.workspace && input.workspace !== store.data.settings.workspace) throw new Error('工作目录不匹配');
-        const agent = selectableAgent((input.agent as AgentId | undefined) ?? store.data.settings.agent).id;
+        if (input.workspace && input.workspace !== store.data.settings.workspace)
+          throw new Error('工作目录不匹配');
+        const agent = selectableAgent(
+          (input.agent as AgentId | undefined) ?? store.data.settings.agent,
+        ).id;
         const conversation = newConversation('外部线程', agent);
         if (input.model !== undefined) {
           const catalog = await listModels(false, conversation);
@@ -1916,7 +2035,9 @@ async function launch() {
         if (active || startingTurn) throw new Error('当前已有任务正在运行');
         const previous = selectedConversationId;
         try {
-          await addPreparedConversation(store, conversation, () => prepareConversation(conversation));
+          await addPreparedConversation(store, conversation, () =>
+            prepareConversation(conversation),
+          );
         } catch (error) {
           // The CLI could not be prepared: the conversation was never shown and is not kept.
           releaseConversation(conversation.id);
@@ -1924,7 +2045,10 @@ async function launch() {
           throw error;
         }
         emit({ type: 'conversation:updated', conversation });
-        return { conversationId: conversation.id, agentSessionId: sessions.get(conversation.id)?.sessionId };
+        return {
+          conversationId: conversation.id,
+          agentSessionId: sessions.get(conversation.id)?.sessionId,
+        };
       },
       send: async (thread, text) => {
         const conversation = getConversation(thread.conversationId);

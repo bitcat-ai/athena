@@ -18,6 +18,8 @@ import type {
   ElementEdit,
   ElementEditResult,
   ElementAnimation,
+  ElementInsertion,
+  ElementNode,
   BrowserInput,
   BrowserState,
   BrowserTool,
@@ -32,6 +34,8 @@ import {
   ELEMENT_BACKGROUND_FUNCTIONS,
   ELEMENT_PREVIEW_LIMITS,
   ELEMENT_UNSAFE_CSS_PATTERN,
+  ELEMENT_INSERT_TAGS,
+  ELEMENT_INSERT_ATTRIBUTES,
 } from '../shared/types';
 import { CdpConnection } from './browser-cdp';
 import { browserPageSource } from './browser-page';
@@ -46,6 +50,84 @@ const editableStyles = new Set<string>(ELEMENT_STYLE_PROPERTIES);
 const animatedStyles = new Set<string>(ELEMENT_ANIMATION_PROPERTIES);
 const backgroundFunctions = new Set<string>(ELEMENT_BACKGROUND_FUNCTIONS);
 const unsafeCss = new RegExp(ELEMENT_UNSAFE_CSS_PATTERN, 'i');
+
+function validateInsertion(value: unknown): asserts value is ElementInsertion {
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    Array.isArray(value) ||
+    Object.keys(value).some((key) => !['position', 'node'].includes(key))
+  )
+    throw new Error('新增元素格式无效');
+  const insertion = value as ElementInsertion;
+  if (
+    !['append', 'prepend', 'before', 'after'].includes(insertion.position ?? 'append') ||
+    JSON.stringify(value).length > 60_000
+  )
+    throw new Error('新增元素位置无效或内容过长');
+  let count = 0,
+    textLength = 0;
+  const walk = (node: ElementNode, depth: number) => {
+    if (++count > 80 || depth > 8) throw new Error('一次最多创建 80 个节点，嵌套最多 8 层');
+    if (
+      !node ||
+      typeof node !== 'object' ||
+      Array.isArray(node) ||
+      !ELEMENT_INSERT_TAGS.includes(node.tag) ||
+      Object.keys(node).some(
+        (key) => !['tag', 'text', 'attributes', 'styles', 'children'].includes(key),
+      )
+    )
+      throw new Error('仅支持安全的 HTML 元素结构');
+    if (node.text !== undefined) {
+      if (typeof node.text !== 'string' || (textLength += node.text.length) > 20_000)
+        throw new Error('新增元素文字过长');
+    }
+    if (node.attributes !== undefined) {
+      if (
+        !node.attributes ||
+        typeof node.attributes !== 'object' ||
+        Array.isArray(node.attributes) ||
+        Object.keys(node.attributes).length > 20
+      )
+        throw new Error('元素属性格式无效');
+      for (const [key, item] of Object.entries(node.attributes)) {
+        if (
+          !(ELEMENT_INSERT_ATTRIBUTES as readonly string[]).includes(key) ||
+          typeof item !== 'string' ||
+          item.length > 4096
+        )
+          throw new Error('不支持的元素属性');
+        if (key === 'href' || key === 'src') {
+          if (key === 'src' && /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+=*$/.test(item))
+            continue;
+          const url = new URL(item, 'https://athena.invalid');
+          if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password)
+            throw new Error('元素链接仅支持 HTTP / HTTPS');
+        }
+        if (
+          key === 'type' &&
+          (node.tag === 'button'
+            ? item !== 'button'
+            : node.tag !== 'input' ||
+              !['text', 'search', 'number', 'checkbox', 'radio'].includes(item))
+        )
+          throw new Error('不支持此输入控件类型');
+      }
+    }
+    if (node.styles !== undefined) validateStyles(node.styles, editableStyles, true);
+    if (node.children !== undefined) {
+      if (!Array.isArray(node.children)) throw new Error('子元素格式无效');
+      node.children.forEach((child) => walk(child, depth + 1));
+    }
+    if (
+      ['input', 'img', 'br', 'hr'].includes(node.tag) &&
+      (node.text !== undefined || node.children?.length)
+    )
+      throw new Error('此元素不能包含子节点');
+  };
+  walk(insertion.node, 1);
+}
 
 function validateStyles(
   value: unknown,
@@ -218,6 +300,14 @@ function recordedEditValue(value: string): string {
       truncated ||= entries.length > 30;
     }
     if (typeof input.editId === 'string') output.editId = redactBrowserText(input.editId, 1500);
+    if (input.insert !== undefined) {
+      validateInsertion(input.insert);
+      output.insert = JSON.parse(
+        JSON.stringify(input.insert, (_key, item) =>
+          typeof item === 'string' ? redactBrowserText(item, 20_000) : item,
+        ),
+      );
+    }
     if (input.animation === null) output.animation = null;
     else if (input.animation !== undefined) {
       validateAnimation(input.animation);
@@ -2739,9 +2829,15 @@ export class BrowserRuntime {
       !changes ||
       typeof changes !== 'object' ||
       Array.isArray(changes) ||
-      Object.keys(changes).some((key) => !['text', 'styles', 'animation'].includes(key))
+      Object.keys(changes).some((key) => !['text', 'styles', 'animation', 'insert'].includes(key))
     )
       throw new Error('元素修改格式无效');
+    if (changes.insert !== undefined) {
+      if (Object.keys(changes).length !== 1)
+        throw new Error('新增元素需独立提交，再用返回的引用继续修改');
+      validateInsertion(changes.insert);
+      return;
+    }
     if (
       changes.text !== undefined &&
       (typeof changes.text !== 'string' || changes.text.length > 20_000)
@@ -2785,7 +2881,7 @@ export class BrowserRuntime {
     );
     const editId = this.registerEdit(tab, frame, result.editId);
     const metadata = tab.edits.find((edit) => edit.id === editId)!;
-    metadata.localRef = scope.localRef;
+    metadata.localRef = changes.insert ? result.element.ref : scope.localRef;
     metadata.changes = structuredClone(changes);
     await this.bridge(
       tab,
@@ -3052,10 +3148,49 @@ export class BrowserRuntime {
       ),
       tool(
         'edit',
-        '临时修改精确DOM文字、渐变背景、阴影、变换，或用animation结构创建可撤销WAAPI动效。styles支持列出的CSS属性；禁用URL、var/attr、代码、转义、!important和原始animation/transition属性。animation:null只取消Workbench自身动画；尊重减少动态效果设置。这是页面预览，不代表源码已修改。',
+        '修改精确 DOM 的文字、样式、可撤销 WAAPI 动效；或单独用 insert 在 ref 内部/前后创建嵌套 HTML 元素。新建返回新元素 ref，可继续 inspect/edit；要点击或填写它时重新获取 Neo snapshot。结构最多 80 节点/8 层，不接受 HTML 字符串、脚本、事件属性或敏感控件。新增输入控件不提交到原有表单。styles 禁止 URL、var/attr、代码和 !important；animation:null 只取消自己的动画。所有修改可撤销，仅影响当前页面预览，不代表源码已保存。',
         {
           ref,
           text: { type: 'string', maxLength: 20_000 },
+          insert: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['node'],
+            description:
+              '与 text/styles/animation 互斥。styles 可放在 node 内；position 默认 append。',
+            properties: {
+              position: { type: 'string', enum: ['append', 'prepend', 'before', 'after'] },
+              node: {
+                type: 'object',
+                additionalProperties: false,
+                required: ['tag'],
+                properties: {
+                  tag: { type: 'string', enum: [...ELEMENT_INSERT_TAGS] },
+                  text: { type: 'string', maxLength: 20_000 },
+                  attributes: {
+                    type: 'object',
+                    maxProperties: 20,
+                    propertyNames: { enum: [...ELEMENT_INSERT_ATTRIBUTES] },
+                    additionalProperties: { type: 'string', maxLength: 4096 },
+                  },
+                  styles: {
+                    type: 'object',
+                    maxProperties: ELEMENT_PREVIEW_LIMITS.styleCount,
+                    propertyNames: { enum: [...ELEMENT_STYLE_PROPERTIES] },
+                    additionalProperties: {
+                      type: 'string',
+                      maxLength: ELEMENT_PREVIEW_LIMITS.styleValueLength,
+                    },
+                  },
+                  children: {
+                    type: 'array',
+                    maxItems: 80,
+                    items: { $ref: '#/properties/insert/properties/node' },
+                  },
+                },
+              },
+            },
+          },
           styles: {
             type: 'object',
             maxProperties: ELEMENT_PREVIEW_LIMITS.styleCount,
@@ -3280,6 +3415,7 @@ export class BrowserRuntime {
                 ...(input.animation !== undefined
                   ? { animation: input.animation as ElementAnimation | null }
                   : {}),
+                ...(input.insert !== undefined ? { insert: input.insert as ElementInsertion } : {}),
               },
               'agent',
               assertLease,

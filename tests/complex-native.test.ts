@@ -459,3 +459,111 @@ test(
     }
   },
 );
+
+test(
+  'native structural insertions reconcile unknown receipts and never replay confirmed creations',
+  { skip: !binary, timeout: 30000 },
+  async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'athena-structure-receipt-'));
+    const site = createServer((_request, response) => {
+      response.setHeader('content-type', 'text/html;charset=utf-8');
+      response.end(
+        '<!doctype html><title>Structure receipt</title><main id="workspace">Original content</main>',
+      );
+    });
+    await new Promise<void>((resolve) => site.listen(0, '127.0.0.1', resolve));
+    let neo!: NeoBrowserRuntime;
+    const browser = new BrowserRuntime({
+      storageDir: path.join(directory, 'browser'),
+      binaryPath: binary,
+      onState() {},
+      onFrame() {},
+      onSelected() {},
+      onStep() {},
+      onHumanTakeover: () => neo?.onHumanInteraction(),
+    });
+    neo = new NeoBrowserRuntime(browser, {
+      directory: path.join(directory, 'neo'),
+      onState() {},
+      onDisconnect() {},
+      approve: async () => false,
+    });
+    try {
+      await browser.start(`http://127.0.0.1:${(site.address() as { port: number }).port}`);
+      await neo.start();
+      browser.allowAgentControl();
+      await neo.beginTask('structure-receipt');
+      const queried = await neo.callTool('workbench_browser_query', { selector: '#workspace' });
+      assert.ok(!queried.isError, queried.text);
+      const anchor = JSON.parse(queried.text).elements[0].ref;
+      const first = {
+        ref: anchor,
+        insert: {
+          node: { tag: 'section', text: 'Created once', attributes: { id: 'first-created' } },
+        },
+      };
+      const nativeCall = browser.callTool.bind(browser);
+      let loseReply = true,
+        insertions = 0;
+      browser.callTool = async (name, args) => {
+        const result = await nativeCall(name, args);
+        if (
+          name === 'workbench_browser_edit' &&
+          (args as Record<string, unknown>).insert &&
+          !result.isError
+        ) {
+          insertions++;
+          if (loseReply) {
+            loseReply = false;
+            return { text: 'Fixture lost the insertion receipt', isError: true };
+          }
+        }
+        return result;
+      };
+      assert.equal((await neo.callTool('workbench_browser_edit', first)).isError, true);
+      assert.equal((await neo.callTool('workbench_browser_edit', first)).isError, true);
+      assert.equal(insertions, 1);
+      const observed = await neo.callTool('workbench_browser_query', {
+        selector: '#first-created',
+      });
+      const evidence = JSON.parse(observed.text);
+      assert.equal(evidence.elements.length, 1);
+      const verified = await neo.callTool('neo_checkpoint', {
+        observationId: evidence.observationId,
+        summary: 'Insertion already exists',
+        evidence: 'Created once',
+        outcome: 'verified',
+      });
+      assert.equal(verified.isError, false, verified.text);
+      assert.match((await neo.callTool('workbench_browser_edit', first)).text, /不能重复/);
+      const second = {
+        ref: anchor,
+        insert: {
+          node: { tag: 'section', text: 'Second creation', attributes: { id: 'second-created' } },
+        },
+      };
+      const succeeded = await neo.callTool('workbench_browser_edit', second);
+      assert.ok(!succeeded.isError, succeeded.text);
+      assert.match((await neo.callTool('workbench_browser_edit', second)).text, /不能重复/);
+      assert.equal(insertions, 2);
+      assert.equal(
+        (await browser.queryElements({ selector: '#second-created' })).elements.length,
+        1,
+      );
+      const undone = await neo.callTool('workbench_browser_undo', {
+        editId: JSON.parse(succeeded.text).editId,
+      });
+      assert.ok(!undone.isError, undone.text);
+      assert.equal(
+        (await browser.queryElements({ selector: '#second-created' })).elements.length,
+        0,
+      );
+      await neo.finishTask('structure-receipt');
+    } finally {
+      await neo.stop();
+      await browser.dispose();
+      await new Promise<void>((resolve) => site.close(() => resolve()));
+      await rm(directory, { recursive: true, force: true });
+    }
+  },
+);

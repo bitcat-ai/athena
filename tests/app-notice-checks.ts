@@ -95,8 +95,9 @@ export async function checkAppNotices(page: Page) {
   await expect(draft).toBeFocused();
   await expect(cards).toHaveCount(0);
   const compact = await notice.boundingBox();
-  const browser = await page.getByRole('region', { name: '浏览器', exact: true }).boundingBox();
-  assert.ok(compact && browser && compact.x + compact.width <= browser.x + 1);
+  const viewport = page.viewportSize()!;
+  assert.ok(compact && Math.abs(compact.x + compact.width - (viewport.width - 16)) <= 1);
+  assert.ok(compact && Math.abs(compact.y - 64) <= 1);
   assert.ok(await notice.evaluate((node) => node.scrollWidth <= node.clientWidth + 1));
   await row(/优化首页交互/).click();
   await expect(page.locator('.topbar-title')).toContainText('优化首页交互');

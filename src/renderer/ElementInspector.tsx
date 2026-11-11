@@ -226,6 +226,7 @@ export function ElementInspector({
     ];
     const combined: ElementEdit = {};
     for (const patch of all) {
+      if (patch.insert) combined.insert = patch.insert;
       if (patch.text !== undefined) combined.text = patch.text;
       if (patch.styles) combined.styles = { ...combined.styles, ...patch.styles };
       if (patch.animation !== undefined) combined.animation = patch.animation;

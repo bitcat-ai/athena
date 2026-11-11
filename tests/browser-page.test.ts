@@ -687,7 +687,7 @@ test(
     ])
       await assert.rejects(
         bridge(page, 'edit', { ref: leaf.ref, ...patch }),
-        /Unsupported|Only text/,
+        /Unsupported|Only supported/,
       );
     assert.equal(await page.locator('#button-label').getAttribute('style'), null);
     const edit = await bridge<EditResult>(page, 'edit', { ref: leaf.ref, text: '保存预览' });
@@ -993,5 +993,142 @@ test(
       scrolls.map((e) => JSON.parse(e.value!).y),
       [100, 250],
     );
+  },
+);
+
+test(
+  'structural previews create nested elements with fresh refs, support subsequent edits and undo in dependency order',
+  { skip: !executable },
+  async (t) => {
+    const { page, find, events } = await fixture(t);
+    const anchor = await find('#box');
+    const insertion = {
+      position: 'after',
+      node: {
+        tag: 'section',
+        attributes: { id: 'preview-section', 'aria-label': 'Test section' },
+        styles: { padding: '16px', 'background-color': '#eeeeee' },
+        children: [
+          { tag: 'h2', text: 'New section' },
+          { tag: 'a', text: 'View details', attributes: { href: 'https://example.com/details' } },
+          { tag: 'button', text: 'Preview button' },
+        ],
+      },
+    };
+    const added = await bridge<EditResult>(page, 'edit', { ref: anchor.ref, insert: insertion });
+    assert.equal(added.element.tag, 'section');
+    assert.notEqual(added.element.ref, anchor.ref);
+    assert.equal((await find('#preview-section')).ref, added.element.ref);
+    assert.equal(await page.locator('#preview-section button').getAttribute('type'), 'button');
+    assert.equal(
+      await page.locator('#preview-section a').getAttribute('href'),
+      'https://example.com/details',
+    );
+    const changed = await bridge<EditResult>(page, 'edit', {
+      ref: added.element.ref,
+      styles: { 'background-color': '#ff0000' },
+    });
+    await assert.rejects(bridge(page, 'undo', added.editId), /changed|newer/i);
+    await bridge(page, 'undo', changed.editId);
+    await bridge(page, 'undo', added.editId);
+    assert.equal(await page.locator('#preview-section').count(), 0);
+    assert.equal(await page.locator('#box').textContent(), '普通容器');
+    await eventually(() =>
+      events.some((event) => event.kind === 'edit' && JSON.parse(event.value || '{}').insert),
+    );
+  },
+);
+
+test(
+  'structural previews reject executable, sensitive, duplicate and oversized nodes before changing the page',
+  { skip: !executable },
+  async (t) => {
+    const { page, find } = await fixture(t);
+    const anchor = await find('#box');
+    const before = await page.locator('#box').innerHTML();
+    for (const node of [
+      { tag: 'script', text: 'alert(1)' },
+      { tag: 'img', attributes: { onerror: 'alert(1)' } },
+      { tag: 'a', attributes: { href: 'javascript:alert(1)' } },
+      { tag: 'a', attributes: { href: 'https://user:password@example.com' } },
+      { tag: 'input', attributes: { type: 'password' } },
+      { tag: 'input', attributes: { id: 'account-email' } },
+      { tag: 'div', attributes: { id: 'heading' } },
+      { tag: 'div', styles: { background: 'url(https://example.com/track)' } },
+      { tag: 'input', children: [{ tag: 'span', text: 'hidden child' }] },
+      {
+        tag: 'div',
+        children: Array.from({ length: 80 }, () => ({ tag: 'span', text: 'too many' })),
+      },
+    ]) {
+      await assert.rejects(bridge(page, 'edit', { ref: anchor.ref, insert: { node } }));
+      assert.equal(await page.locator('#box').innerHTML(), before);
+    }
+    const sensitive = await find('#password-input');
+    await assert.rejects(
+      bridge(page, 'edit', { ref: sensitive.ref, insert: { node: { tag: 'span', text: 'no' } } }),
+    );
+  },
+);
+
+test(
+  'undoing created content preserves newer input and nodes replaced by the page',
+  { skip: !executable },
+  async (t) => {
+    const { page, find } = await fixture(t);
+    const anchor = await find('#box');
+    const input = await bridge<EditResult>(page, 'edit', {
+      ref: anchor.ref,
+      insert: {
+        node: {
+          tag: 'input',
+          attributes: { id: 'preview-search', type: 'search', placeholder: 'Search items' },
+        },
+      },
+    });
+    assert.equal(
+      await page.locator('#preview-search').evaluate((el: HTMLInputElement) => el.form),
+      null,
+    );
+    await page.locator('#preview-search').fill('unsaved input');
+    await assert.rejects(bridge(page, 'undo', input.editId), /newer changes/);
+    assert.equal(await page.locator('#preview-search').inputValue(), 'unsaved input');
+    await page.locator('#preview-search').fill('');
+    await bridge(page, 'undo', input.editId);
+    const section = await bridge<EditResult>(page, 'edit', {
+      ref: anchor.ref,
+      insert: {
+        node: {
+          tag: 'section',
+          attributes: { id: 'preview-owned' },
+          children: [{ tag: 'span', text: 'same content' }],
+        },
+      },
+    });
+    await page
+      .locator('#preview-owned span')
+      .evaluate((node) => node.replaceWith(node.cloneNode(true)));
+    await assert.rejects(bridge(page, 'undo', section.editId), /newer changes/);
+    assert.equal(await page.locator('#preview-owned').count(), 1);
+  },
+);
+
+test(
+  'created elements inside an open Shadow DOM retain their frame-local identity and undo',
+  { skip: !executable },
+  async (t) => {
+    const { page, find } = await fixture(t);
+    const anchor = await find('#deep-leaf');
+    const result = await bridge<EditResult>(page, 'edit', {
+      ref: anchor.ref,
+      insert: {
+        position: 'after',
+        node: { tag: 'span', text: 'Shadow addition', attributes: { id: 'preview-shadow' } },
+      },
+    });
+    assert.equal((await find('#preview-shadow')).ref, result.element.ref);
+    assert.ok(result.element.shadowPath.length);
+    await bridge(page, 'undo', result.editId);
+    assert.equal(await page.locator('#preview-shadow').count(), 0);
   },
 );

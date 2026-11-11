@@ -4,39 +4,43 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { StreamCliSession, type StreamCliId } from '../src/main/stream-cli-session';
-import type { AgentEvent } from '../src/shared/types';
+import { createAgentSession } from '../src/main/agent-factory';
+import type { AgentSession } from '../src/main/agent-session';
+import { executableAgents } from '../src/shared/agents';
+import type { AgentEvent, AgentId } from '../src/shared/types';
 
 const cli = process.env.WORKBENCH_LIVE_CLI;
 const executablePath = process.env.WORKBENCH_CLI_PATH;
 if (
   !cli ||
-  !['claude', 'gemini', 'cursor'].includes(cli) ||
+  !(executableAgents as readonly string[]).includes(cli) ||
   !executablePath ||
   !path.isAbsolute(executablePath)
 )
   throw new Error(
-    'Authorize a real model test with WORKBENCH_LIVE_CLI=claude|gemini|cursor and WORKBENCH_CLI_PATH.',
+    'Authorize a real model test with WORKBENCH_LIVE_CLI=codex|claude|gemini|pi|cursor|opencode and WORKBENCH_CLI_PATH.',
   );
 const workspace = await mkdtemp(path.join(os.tmpdir(), `athena-${cli}-live-`));
 const marker = `athena-${randomUUID()}`;
 const events: AgentEvent[] = [];
-let session: StreamCliSession;
+let session: AgentSession;
 let stopOnDelta = false;
 const make = (sessionId?: string) =>
-  new StreamCliSession({
-    cli: cli as StreamCliId,
+  createAgentSession(cli as AgentId, {
     workspace,
     executablePath,
     sessionId,
+    sessionDirectory: path.join(workspace, 'sessions'),
+    permissionsExtensionPath: path.resolve('resources/cli/pi-permissions.mjs'),
     tools: [],
     callTool: async () => ({ isError: true, text: 'Browser tools unavailable' }),
     onEvent(event) {
       events.push(event);
-      if (event.type === 'approval' && event.request.id.startsWith('cursor-workspace:')) {
+      if (event.type === 'approval') {
         session.resolveApproval(
           event.request.id,
-          event.request.detail.startsWith(`${workspace}\n`),
+          /^(cursor|gemini)-workspace:/.test(event.request.id) &&
+            event.request.detail.startsWith(`${workspace}\n`),
         );
       }
       if (event.type === 'delta' && stopOnDelta) {

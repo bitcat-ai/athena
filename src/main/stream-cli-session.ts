@@ -4,7 +4,15 @@ import { constants } from 'node:fs';
 import { lstat, mkdtemp, open, opendir, readdir, realpath, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import type { AgentSession, AgentSessionOptions } from './agent-session';
+import {
+  selectedElementContext,
+  type AgentSession,
+  type AgentSessionOptions,
+} from './agent-session';
+import { AgentMcpServer } from './agent-mcp';
+import { discoverClaudeModels, discoverCursorModels, discoverGeminiModels } from './cli-models';
+import { browserToolsFingerprint } from './agents';
+import { parseImages, type ImageAttachment } from '../shared/images';
 import { discoverClaudeSkills } from './claude-skills';
 import { unavailableProviderSkillDiscovery } from '../shared/provider-skills';
 import type { AgentEvent, BrowserTool, ElementRef, ToolCall } from '../shared/types';
@@ -58,11 +66,16 @@ interface Run {
   policyDirectory?: string;
   workspaceTrusted?: boolean;
   workspaceTrust?: { id: string; resolve(): void };
+  browserTools?: AgentMcpServer;
+  browserConfig?: string;
+  browserCalls?: Set<string>;
 }
 
 // Deliberately a small YAML subset: no aliases, tags, merges or executable configuration.
 // Unsupported frontmatter is skipped rather than accidentally exposing a hidden skill.
-function cursorSkillMetadata(text: string): { description: string; userInvocable: boolean; cliVisible: boolean } | undefined {
+function cursorSkillMetadata(
+  text: string,
+): { description: string; userInvocable: boolean; cliVisible: boolean } | undefined {
   const result = { description: '未提供描述', userInvocable: true, cliVisible: true };
   if (!text.startsWith('---\n') && !text.startsWith('---\r\n')) return result;
   const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(text);
@@ -70,7 +83,12 @@ function cursorSkillMetadata(text: string): { description: string; userInvocable
   const scalar = (value: string) => {
     const raw = value.trim();
     if (raw.startsWith('"')) {
-      try { const parsed: unknown = JSON.parse(raw); return typeof parsed === 'string' ? parsed : undefined; } catch { return; }
+      try {
+        const parsed: unknown = JSON.parse(raw);
+        return typeof parsed === 'string' ? parsed : undefined;
+      } catch {
+        return;
+      }
     }
     if (/^'([^']|'')*'$/.test(raw)) return raw.slice(1, -1).replace(/''/g, "'");
     if (/[\[\]{}&*!|>]/.test(raw)) return;
@@ -82,7 +100,11 @@ function cursorSkillMetadata(text: string): { description: string; userInvocable
   const keys = new Set<string>();
   for (const line of match[1].split(/\r?\n/)) {
     if (!line.trim() || /^\s*#/.test(line)) continue;
-    if (descriptionLines && /^\s+/.test(line)) { descriptionLines.push(line.trim()); result.description = descriptionLines.join(' '); continue; }
+    if (descriptionLines && /^\s+/.test(line)) {
+      descriptionLines.push(line.trim());
+      result.description = descriptionLines.join(' ');
+      continue;
+    }
     descriptionLines = undefined;
     if (/^\s*\t/.test(line)) return;
     if (section === 'surfaces' && /^\s+-\s+/.test(line)) {
@@ -98,11 +120,17 @@ function cursorSkillMetadata(text: string): { description: string; userInvocable
       if (keys.has(key)) return;
       keys.add(key);
       section = key;
-      if (key === 'description' && /^[|>][-+]?$/.test(raw)) { descriptionLines = []; result.description = ''; }
-      else if (key === 'description') { const value = scalar(raw); if (value === undefined) return; result.description = value || result.description; }
-      else if (key === 'user-invocable') {
+      if (key === 'description' && /^[|>][-+]?$/.test(raw)) {
+        descriptionLines = [];
+        result.description = '';
+      } else if (key === 'description') {
+        const value = scalar(raw);
+        if (value === undefined) return;
+        result.description = value || result.description;
+      } else if (key === 'user-invocable') {
         const value = scalar(raw)?.toLowerCase();
-        if (!value || !['true', 'false', 'yes', 'no', 'on', 'off', '1', '0'].includes(value)) return;
+        if (!value || !['true', 'false', 'yes', 'no', 'on', 'off', '1', '0'].includes(value))
+          return;
         result.userInvocable = !['false', 'no', 'off', '0'].includes(value);
       } else if (key === 'metadata' && raw) return;
       else if (key === 'metadata' && !raw) section = 'metadata';
@@ -111,14 +139,16 @@ function cursorSkillMetadata(text: string): { description: string; userInvocable
       section = 'surfaces';
       if (!raw) surfaces = [];
       else {
-        const values = raw.startsWith('[') && raw.endsWith(']') ? raw.slice(1, -1).split(',') : [raw];
+        const values =
+          raw.startsWith('[') && raw.endsWith(']') ? raw.slice(1, -1).split(',') : [raw];
         const parsed = values.map(scalar);
         if (parsed.some((value) => value === undefined)) return;
         surfaces = parsed.flatMap((value) => value!.split(',')).filter(Boolean);
       }
     }
   }
-  result.cliVisible = !surfaces?.length || surfaces.some((value) => value.trim().toLowerCase() === 'cli');
+  result.cliVisible =
+    !surfaces?.length || surfaces.some((value) => value.trim().toLowerCase() === 'cli');
   return result;
 }
 
@@ -132,7 +162,8 @@ async function discoverCursorSkills(workspace: string): Promise<ProviderSkillDis
   let entriesLeft = 10_000;
   let bytesLeft = 8_000_000;
   const seenRoots = new Set<string>();
-  const missing = (error: unknown) => ['ENOENT', 'ENOTDIR'].includes((error as NodeJS.ErrnoException).code ?? '');
+  const missing = (error: unknown) =>
+    ['ENOENT', 'ENOTDIR'].includes((error as NodeJS.ErrnoException).code ?? '');
   const home = path.resolve(os.homedir());
   const bases: string[] = [];
   // Nearest project roots win; user roots and Cursor's synced built-ins come last.
@@ -141,7 +172,12 @@ async function discoverCursorSkills(workspace: string): Promise<ProviderSkillDis
     if (path.dirname(base) === base || bases.length >= 64) break;
   }
   bases.push(home);
-  const roots = bases.flatMap((base) => ['.cursor', '.agents', '.codex', '.claude'].map((directory) => ({ base, relative: path.join(directory, 'skills') })));
+  const roots = bases.flatMap((base) =>
+    ['.cursor', '.agents', '.codex', '.claude'].map((directory) => ({
+      base,
+      relative: path.join(directory, 'skills'),
+    })),
+  );
   roots.push({ base: home, relative: path.join('.cursor', 'skills-cursor') });
   for (const { base, relative } of roots) {
     if (entriesLeft <= 0 || bytesLeft <= 0) break;
@@ -149,10 +185,16 @@ async function discoverCursorSkills(workspace: string): Promise<ProviderSkillDis
     try {
       const canonicalBase = await realpath(base);
       root = path.join(canonicalBase, relative);
-      if (await realpath(root) !== root) { warn('unsafe-path', '已跳过符号链接 Skill 根目录'); continue; }
+      if ((await realpath(root)) !== root) {
+        warn('unsafe-path', '已跳过符号链接 Skill 根目录');
+        continue;
+      }
       if (seenRoots.has(root)) continue;
       seenRoots.add(root);
-    } catch (error) { if (!missing(error)) warn('unreadable-entry', '部分 Cursor Skill 根目录无法读取'); continue; }
+    } catch (error) {
+      if (!missing(error)) warn('unreadable-entry', '部分 Cursor Skill 根目录无法读取');
+      continue;
+    }
     const visit = async (directory: string, depth: number): Promise<void> => {
       if (entriesLeft <= 0 || bytesLeft <= 0) return;
       entriesLeft--;
@@ -161,9 +203,13 @@ async function discoverCursorSkills(workspace: string): Promise<ProviderSkillDis
         const info = await lstat(entryPath);
         if (info.isSymbolicLink()) warn('unsafe-path', '已跳过符号链接 Skill 文件');
         else if (info.isFile()) {
-          if (info.size > 1_000_000 || info.size > bytesLeft) warn('oversized-entry', '已跳过超出读取预算的 Cursor Skill');
+          if (info.size > 1_000_000 || info.size > bytesLeft)
+            warn('oversized-entry', '已跳过超出读取预算的 Cursor Skill');
           else {
-            const file = await open(entryPath, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+            const file = await open(
+              entryPath,
+              constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+            );
             try {
               const opened = await file.stat();
               if (opened.isFile() && opened.size <= 1_000_000 && opened.size <= bytesLeft) {
@@ -180,17 +226,28 @@ async function discoverCursorSkills(workspace: string): Promise<ProviderSkillDis
                   const contents = buffer.subarray(0, size);
                   const metadata = cursorSkillMetadata(contents.toString('utf8'));
                   const name = path.basename(directory);
-                  if (!metadata) warn('invalid-metadata', '已跳过无法安全解析元数据的 Cursor Skill');
-                  else if (metadata.cliVisible && identifier(name) && !skills.has(name)) skills.set(name, {
-                    name, description: metadata.description, userInvocable: metadata.userInvocable,
-                    providerPath: entryPath, contentHash: createHash('sha256').update(contents).digest('hex'), source: 'provider', provider,
-                  });
+                  if (!metadata)
+                    warn('invalid-metadata', '已跳过无法安全解析元数据的 Cursor Skill');
+                  else if (metadata.cliVisible && identifier(name) && !skills.has(name))
+                    skills.set(name, {
+                      name,
+                      description: metadata.description,
+                      userInvocable: metadata.userInvocable,
+                      providerPath: entryPath,
+                      contentHash: createHash('sha256').update(contents).digest('hex'),
+                      source: 'provider',
+                      provider,
+                    });
                 }
               }
-            } finally { await file.close(); }
+            } finally {
+              await file.close();
+            }
           }
         }
-      } catch (error) { if (!missing(error)) warn('unreadable-entry', '部分 Cursor Skill 文件无法读取'); }
+      } catch (error) {
+        if (!missing(error)) warn('unreadable-entry', '部分 Cursor Skill 文件无法读取');
+      }
       if (depth >= 10) return;
       try {
         const children: string[] = [];
@@ -198,24 +255,39 @@ async function discoverCursorSkills(workspace: string): Promise<ProviderSkillDis
         for await (const entry of directoryHandle) {
           if (entriesLeft-- <= 0) break;
           if (entry.name === 'node_modules') continue;
-          if (entry.isSymbolicLink()) { warn('unsafe-path', '已跳过符号链接 Skill 目录'); continue; }
+          if (entry.isSymbolicLink()) {
+            warn('unsafe-path', '已跳过符号链接 Skill 目录');
+            continue;
+          }
           if (entry.isDirectory()) children.push(entry.name);
         }
         for (const child of children.sort()) {
           if (entriesLeft <= 0 || bytesLeft <= 0) break;
           const childPath = path.join(directory, child);
-          if (await realpath(childPath) !== childPath) { warn('unsafe-path', '已跳过符号链接 Skill 目录'); continue; }
+          if ((await realpath(childPath)) !== childPath) {
+            warn('unsafe-path', '已跳过符号链接 Skill 目录');
+            continue;
+          }
           await visit(childPath, depth + 1);
         }
-      } catch (error) { if (!missing(error)) warn('unreadable-entry', '部分 Cursor Skill 目录无法读取'); }
+      } catch (error) {
+        if (!missing(error)) warn('unreadable-entry', '部分 Cursor Skill 目录无法读取');
+      }
     };
     await visit(root, 0);
   }
-  if (entriesLeft <= 0 || bytesLeft <= 0) warn('capability-degraded', 'Cursor Skill 扫描达到本地安全预算，结果可能不完整');
-  return { provider, source: 'provider', status: skills.size ? 'ready' : diagnostics.length ? 'unavailable' : 'empty', skills: [...skills.values()].sort((a, b) => a.name.localeCompare(b.name)), diagnostics };
+  if (entriesLeft <= 0 || bytesLeft <= 0)
+    warn('capability-degraded', 'Cursor Skill 扫描达到本地安全预算，结果可能不完整');
+  return {
+    provider,
+    source: 'provider',
+    status: skills.size ? 'ready' : diagnostics.length ? 'unavailable' : 'empty',
+    skills: [...skills.values()].sort((a, b) => a.name.localeCompare(b.name)),
+    diagnostics,
+  };
 }
 
-/** One native JSONL print process per turn; only native IDs may be resumed. No host tool bridge. */
+/** One native JSONL print process per turn; only native IDs may be resumed. */
 export class StreamCliSession implements AgentSession {
   private id?: string;
   private ready = false;
@@ -224,6 +296,7 @@ export class StreamCliSession implements AgentSession {
   private selection?: ModelSelection;
   private active?: Run;
   private calls = new Map<string, ToolCall>();
+  private discovery = new AbortController();
 
   constructor(private options: StreamCliSessionOptions) {
     if (!['claude', 'gemini', 'cursor'].includes(options.cli)) throw new Error('不支持的 CLI 协议');
@@ -257,8 +330,7 @@ export class StreamCliSession implements AgentSession {
     return (
       workspace === this.options.workspace &&
       executablePath === this.options.executablePath &&
-      tools.length === 0 &&
-      this.options.tools.length === 0
+      browserToolsFingerprint(tools) === browserToolsFingerprint(this.options.tools)
     );
   }
   private emit(event: AgentEvent) {
@@ -267,8 +339,10 @@ export class StreamCliSession implements AgentSession {
   async prepare(selection?: ModelSelection) {
     if (this.closed) throw new Error('CLI 会话已关闭');
     if (selection && this.active) throw new Error('任务进行中，不能切换 CLI 模型');
-    if (this.options.tools.length)
+    if (this.options.tools.length && this.options.cli !== 'claude')
       throw new Error('此 CLI 尚未接通宿主浏览器工具，请禁用浏览器能力');
+    if (this.options.tools.some((tool) => !tool.name || !tool.inputSchema))
+      throw new Error('浏览器工具定义无效');
     if (
       selection &&
       (!selection.model.trim() ||
@@ -287,18 +361,34 @@ export class StreamCliSession implements AgentSession {
     this.ready = true;
   }
   async discoverProviderSkills() {
-    if (this.options.cli === 'cursor')
-      return discoverCursorSkills(this.options.workspace);
+    if (this.options.cli === 'cursor') return discoverCursorSkills(this.options.workspace);
     if (this.options.cli === 'claude') return discoverClaudeSkills(this.options.workspace);
     const provider = this.options.cli;
     const names = { gemini: 'Gemini CLI' } as const;
-    const reason = 'Gemini skill activation is blocked by the deny-all admin policy, and no safe discovery RPC is verified.';
+    const reason =
+      'Gemini skill activation is blocked by the deny-all admin policy, and no safe discovery RPC is verified.';
     return unavailableProviderSkillDiscovery({ id: provider, name: names[provider] }, reason);
   }
 
   async listModels(): Promise<ModelOption[]> {
     await this.prepare();
-    return []; // No shared, authoritative structured model catalog for these three print protocols.
+    if (this.options.cli === 'claude')
+      return discoverClaudeModels(
+        this.options.executablePath,
+        this.options.workspace,
+        this.discovery.signal,
+      );
+    if (this.options.cli === 'cursor')
+      return discoverCursorModels(
+        this.options.executablePath,
+        this.options.workspace,
+        this.discovery.signal,
+      );
+    return discoverGeminiModels(
+      this.options.executablePath,
+      this.options.workspace,
+      this.discovery.signal,
+    );
   }
   async send(
     prompt: string,
@@ -306,33 +396,75 @@ export class StreamCliSession implements AgentSession {
     selectedElement?: ElementRef,
     selection?: ModelSelection,
     skills: ProviderSkill[] = [],
+    images?: ImageAttachment[],
   ) {
     if (this.active || this.sending) throw new Error('请等待当前 CLI 任务完成，或先停止');
-    if (!prompt.trim() || prompt.length > 20000 || (context?.length ?? 0) > 60000)
+    const attachments = parseImages(images);
+    if (attachments.length && this.options.cli !== 'claude')
+      throw new Error('当前 CLI 不支持图片，请选择 Codex、Claude、Pi 或 OpenCode');
+    if (
+      (!prompt.trim() && !attachments.length) ||
+      prompt.length > 20000 ||
+      (context?.length ?? 0) > 60000
+    )
       throw new Error('CLI 消息格式或长度无效');
-    if (selectedElement) throw new Error('此 CLI 尚未接通所选网页元素');
+    if (selectedElement && (this.options.cli !== 'claude' || !this.options.tools.length))
+      throw new Error('此 CLI 尚未接通所选网页元素');
+    let selectedSnapshot: string | undefined;
     this.sending = true;
     try {
       await this.prepare(selection);
+      selectedSnapshot = await selectedElementContext(
+        selectedElement,
+        this.options.inspectSelectedElement,
+      );
       if (this.options.cli === 'claude' && skills.length) {
         const discovery = await discoverClaudeSkills(this.options.workspace);
-        const selected = selectProviderSkills(discovery.skills, skills.map((skill) => skill.name), 'claude', skills.map((skill) => ({
-          name: skill.name, providerId: skill.provider.id, providerPath: skill.providerPath, contentHash: skill.contentHash,
-        })));
+        const selected = selectProviderSkills(
+          discovery.skills,
+          skills.map((skill) => skill.name),
+          'claude',
+          skills.map((skill) => ({
+            name: skill.name,
+            providerId: skill.provider.id,
+            providerPath: skill.providerPath,
+            contentHash: skill.contentHash,
+          })),
+        );
         // Claude expands only one slash command at the start of a text block. Earlier
         // explicitly selected skills are read by path, never disguised as dollar mentions.
         const last = selected.at(-1)!;
-        const earlier = selected.slice(0, -1).map((skill) => `The user also invoked /${skill.name}. Read and follow ${JSON.stringify(skill.providerPath)}.`);
+        const earlier = selected
+          .slice(0, -1)
+          .map(
+            (skill) =>
+              `The user also invoked /${skill.name}. Read and follow ${JSON.stringify(skill.providerPath)}.`,
+          );
         prompt = `/${last.name} ${[prompt, ...earlier].join('\n\n')}`;
       }
       if (this.options.cli === 'cursor' && (skills.length || /(^|\s)\$[a-zA-Z0-9]/.test(prompt))) {
         const discovery = await discoverCursorSkills(this.options.workspace);
-        const selected = selectProviderSkills(discovery.skills, skills.map((skill) => skill.name), 'cursor', skills.map((skill) => ({
-          name: skill.name, providerId: skill.provider.id, providerPath: skill.providerPath, contentHash: skill.contentHash,
-        })));
-        const invocable = new Set(discovery.skills.filter((skill) => skill.userInvocable).map((skill) => skill.name));
-        prompt = prompt.replace(/(^|\s)\$([a-zA-Z0-9][a-zA-Z0-9._-]*)(?=\s|$)/g, (match, prefix: string, name: string) => invocable.has(name) ? `${prefix}/${name}` : match);
-        if (selected.length) prompt = `${selected.map((skill) => `/${skill.name}`).join('\n')}\n\n${prompt}`;
+        const selected = selectProviderSkills(
+          discovery.skills,
+          skills.map((skill) => skill.name),
+          'cursor',
+          skills.map((skill) => ({
+            name: skill.name,
+            providerId: skill.provider.id,
+            providerPath: skill.providerPath,
+            contentHash: skill.contentHash,
+          })),
+        );
+        const invocable = new Set(
+          discovery.skills.filter((skill) => skill.userInvocable).map((skill) => skill.name),
+        );
+        prompt = prompt.replace(
+          /(^|\s)\$([a-zA-Z0-9][a-zA-Z0-9._-]*)(?=\s|$)/g,
+          (match, prefix: string, name: string) =>
+            invocable.has(name) ? `${prefix}/${name}` : match,
+        );
+        if (selected.length)
+          prompt = `${selected.map((skill) => `/${skill.name}`).join('\n')}\n\n${prompt}`;
       }
     } finally {
       this.sending = false;
@@ -363,11 +495,22 @@ export class StreamCliSession implements AgentSession {
     // Launch asynchronously so the returned rejection is attached before a setup failure can settle it.
     void this.launch(
       run,
-      [prompt, context ? `<task_context>\n${context}\n</task_context>` : '']
+      [
+        prompt,
+        context ? `<task_context>\n${context}\n</task_context>` : '',
+        selectedSnapshot
+          ? `<selected_element_snapshot>\n${selectedSnapshot}\n</selected_element_snapshot>`
+          : '',
+      ]
         .filter(Boolean)
         .join('\n\n'),
       this.selection,
-    ).catch(() => this.stop(run, '无法启动本机 CLI，请检查安装与受限模式支持'));
+      attachments,
+    ).catch(() => {
+      run.browserTools?.close();
+      void this.removePolicy(run).catch(() => {});
+      this.stop(run, '无法启动本机 CLI，请检查安装与受限模式支持');
+    });
     return run.done;
   }
   private async arguments(run: Run, selection?: ModelSelection): Promise<string[]> {
@@ -383,14 +526,22 @@ export class StreamCliSession implements AgentSession {
         '--tools',
         'Read,Glob,Grep,Skill',
         '--allowedTools',
-        'Read,Glob,Grep,Skill',
+        [
+          'Read',
+          'Glob',
+          'Grep',
+          'Skill',
+          ...(run.browserConfig
+            ? this.options.tools.map((tool) => `mcp__athena__${tool.name}`)
+            : []),
+        ].join(','),
         '--disallowedTools',
         'Write,Edit,Bash,Task,WebFetch,WebSearch',
         '--settings',
         JSON.stringify({ disableAllHooks: true, disableSkillShellExecution: true }),
         '--strict-mcp-config',
         '--mcp-config',
-        '{"mcpServers":{}}',
+        run.browserConfig ?? '{"mcpServers":{}}',
         '--permission-mode',
         'dontAsk',
         '--permission-prompts',
@@ -441,27 +592,64 @@ export class StreamCliSession implements AgentSession {
       policy,
       '--extensions',
       'none',
+      ...(run.workspaceTrusted ? ['--skip-trust'] : []),
       ...resume,
       ...model,
     ];
   }
-  private async launch(run: Run, prompt: string, selection?: ModelSelection) {
-    if (this.options.cli === 'cursor') {
+  private async launch(
+    run: Run,
+    prompt: string,
+    selection?: ModelSelection,
+    images: ImageAttachment[] = [],
+  ) {
+    if (this.options.cli === 'claude' && this.options.tools.length) {
+      run.browserTools = new AgentMcpServer(
+        this.options.tools,
+        async (name, args) => {
+          if (this.active !== run || this.closed || run.failure || !run.initialized)
+            throw new Error('任务未就绪');
+          const result = await this.options.callTool(name, args);
+          if (this.active !== run || this.closed || run.failure) throw new Error('任务已停止');
+          return result;
+        },
+        (call) => {
+          if (
+            this.active === run &&
+            run.initialized &&
+            (call.status !== 'running' || (!run.failure && !this.closed))
+          )
+            this.emit({ type: 'tool', call });
+        },
+      );
+      await run.browserTools.start();
+      run.policyDirectory = await mkdtemp(path.join(os.tmpdir(), 'athena-claude-tools-'));
+      run.browserConfig = path.join(run.policyDirectory, 'mcp.json');
+      await writeFile(
+        run.browserConfig,
+        JSON.stringify({
+          mcpServers: { athena: { ...run.browserTools.definition(), alwaysLoad: true } },
+        }),
+        { mode: 0o600 },
+      );
+    }
+    if (this.options.cli === 'cursor' || this.options.cli === 'gemini') {
+      const name = this.options.cli === 'gemini' ? 'Gemini' : 'Cursor';
       await new Promise<void>((resolve) => {
-        const id = `cursor-workspace:${run.turnId}`;
+        const id = `${this.options.cli}-workspace:${run.turnId}`;
         run.workspaceTrust = { id, resolve };
         run.deadline = setTimeout(
-          () => this.stop(run, 'Cursor 工作目录确认已超时'),
+          () => this.stop(run, `${name} 工作目录确认已超时`),
           15 * 60 * 1000,
         );
-        this.emit({ type: 'status', status: 'waiting', label: '等待确认 Cursor 工作目录' });
+        this.emit({ type: 'status', status: 'waiting', label: `等待确认 ${name} 工作目录` });
         this.emit({
           type: 'approval',
           request: {
             id,
             kind: 'other',
-            title: '允许 Cursor 使用这个工作目录？',
-            detail: `${this.options.workspace}\n\n仅限本次任务。Cursor 将读取目录并加载项目配置；其中的 hooks 或 MCP 可能执行代码，请仅确认你信任的目录。模型仍以 Ask 只读模式运行。`,
+            title: `允许 ${name} 使用这个工作目录？`,
+            detail: `${this.options.workspace}\n\n仅限本次任务。${name} 将读取目录并加载项目配置；其中的 hooks 或 MCP 可能执行代码，请仅确认你信任的目录。${this.options.cli === 'cursor' ? '模型仍以 Ask 只读模式运行。' : '原生文件和命令工具仍被禁用。'}`,
           },
         });
       });
@@ -474,10 +662,12 @@ export class StreamCliSession implements AgentSession {
       return;
     }
     // Prompt travels on stdin, never as an option/argv. Never answer native permission prompts here.
+    if (images.length) args.push('--input-format', 'stream-json');
     const child = spawn(this.options.executablePath, args, {
       cwd: this.options.workspace,
       env: {
         ...process.env,
+        ...(run.browserConfig ? { ENABLE_TOOL_SEARCH: 'false' } : {}),
         ...(this.options.cli === 'claude' ? { CLAUDE_CODE_SAFE_MODE: '0' } : {}),
         PATH: `${path.dirname(this.options.executablePath)}${path.delimiter}${process.env.PATH ?? '/usr/bin:/bin'}`,
       },
@@ -556,7 +746,25 @@ export class StreamCliSession implements AgentSession {
       this.options.cli === 'cursor' ? 60000 : 30000,
     );
     run.deadline = setTimeout(() => this.stop(run, 'CLI 任务超时，已停止'), 15 * 60 * 1000);
-    child.stdin.end(prompt);
+    child.stdin.end(
+      images.length
+        ? `${JSON.stringify({
+            type: 'user',
+            message: {
+              role: 'user',
+              content: [
+                ...(prompt ? [{ type: 'text', text: prompt }] : []),
+                ...images.map(({ mimeType, data }) => ({
+                  type: 'image',
+                  source: { type: 'base64', media_type: mimeType, data },
+                })),
+              ],
+            },
+            parent_tool_use_id: null,
+            session_id: run.expectedSession ?? '',
+          })}\n`
+        : prompt,
+    );
   }
   private initialize(run: Run, id: unknown) {
     if (!identifier(id) || (run.expectedSession && id !== run.expectedSession)) {
@@ -631,6 +839,18 @@ export class StreamCliSession implements AgentSession {
       (cli === 'gemini' && record.type === 'init') ||
       (cli !== 'gemini' && record.type === 'system' && record.subtype === 'init')
     ) {
+      if (
+        run.browserTools &&
+        (!Array.isArray(record.mcp_servers) ||
+          !record.mcp_servers.some(
+            (server: Json) => server.name === 'athena' && server.status === 'connected',
+          ) ||
+          !Array.isArray(record.tools) ||
+          this.options.tools.some((tool) => !record.tools.includes(`mcp__athena__${tool.name}`)))
+      ) {
+        this.stop(run, 'Claude 尚未加载完整的 Neo 浏览器工具，请重试连接');
+        return;
+      }
       this.initialize(run, record.session_id);
       return;
     }
@@ -672,7 +892,10 @@ export class StreamCliSession implements AgentSession {
         this.stop(run, denied ? 'CLI 工具权限被拒绝，本轮能力受限' : 'CLI 未成功完成本轮任务');
         return;
       }
-      if ([...this.calls.values()].some((call) => call.status === 'running')) {
+      if (
+        run.browserTools?.pendingCalls ||
+        [...this.calls.values()].some((call) => call.status === 'running')
+      ) {
         this.stop(run, 'CLI 工具尚未完成，不能确认任务成功');
         return;
       }
@@ -718,15 +941,43 @@ export class StreamCliSession implements AgentSession {
       run.messageText = '';
       for (const block of Array.isArray(r.message?.content) ? r.message.content : []) {
         if (block.type !== 'tool_use') continue;
+        if (
+          run.browserTools &&
+          this.options.tools.some((tool) => block.name === `mcp__athena__${tool.name}`)
+        ) {
+          if (
+            typeof block.id !== 'string' ||
+            !block.id ||
+            block.id.length > 512 ||
+            run.browserCalls?.has(block.id)
+          ) {
+            this.stop(run, 'Claude 浏览器工具开始记录无效');
+            return;
+          }
+          run.browserCalls ??= new Set();
+          run.browserCalls.add(block.id);
+          continue;
+        }
         if (!['Read', 'Glob', 'Grep', 'Skill'].includes(block.name)) {
           this.stop(run, 'CLI 返回了已禁用的工具调用');
           return;
         }
-        if (typeof block.id !== 'string' || !block.id || block.id.length > 512 || this.calls.has(block.id) || !object(block.input)) {
+        if (
+          typeof block.id !== 'string' ||
+          !block.id ||
+          block.id.length > 512 ||
+          this.calls.has(block.id) ||
+          !object(block.input)
+        ) {
           this.stop(run, 'Claude 原生工具开始记录无效');
           return;
         }
-        const call: ToolCall = { id: block.id, name: block.name, input: block.input, status: 'running' };
+        const call: ToolCall = {
+          id: block.id,
+          name: block.name,
+          input: block.input,
+          status: 'running',
+        };
         this.calls.set(call.id, call);
         this.emit({ type: 'tool', call: { ...call } });
       }
@@ -734,14 +985,22 @@ export class StreamCliSession implements AgentSession {
     if (r.type === 'user') {
       for (const block of Array.isArray(r.message?.content) ? r.message.content : []) {
         if (block.type !== 'tool_result') continue;
+        if (run.browserCalls?.delete(block.tool_use_id)) continue;
         const call = this.calls.get(block.tool_use_id);
-        if (!call || call.status !== 'running' || (block.is_error !== undefined && typeof block.is_error !== 'boolean')) {
+        if (
+          !call ||
+          call.status !== 'running' ||
+          (block.is_error !== undefined && typeof block.is_error !== 'boolean')
+        ) {
           this.stop(run, 'Claude 未返回匹配的原生工具结果');
           return;
         }
         call.status = block.is_error === true ? 'error' : 'done';
         this.emit({ type: 'tool', call: { ...call } });
-        if (call.status === 'error') { this.stop(run, 'Claude 原生工具执行失败'); return; }
+        if (call.status === 'error') {
+          this.stop(run, 'Claude 原生工具执行失败');
+          return;
+        }
       }
     }
     if (r.type === 'result') {
@@ -862,16 +1121,24 @@ export class StreamCliSession implements AgentSession {
   resolveApproval(id: string, approved: boolean): void {
     const run = this.active;
     const pending = run?.workspaceTrust;
-    if (!run || this.closed || !pending || pending.id !== id) {
-      if (id.startsWith('cursor-workspace:')) throw new Error('审批已失效');
+    if (!run || this.closed || !pending || pending.id !== id || typeof approved !== 'boolean') {
+      if (/^(cursor|gemini)-workspace:/.test(id)) throw new Error('审批已失效');
       throw new Error('此 CLI 尚未接通原生工具审批');
     }
     run.workspaceTrust = undefined;
     this.emit({ type: 'request-resolved', id });
     if (approved) {
       run.workspaceTrusted = true;
-      this.emit({ type: 'status', status: 'starting', label: 'Cursor 正在启动' });
-    } else this.stop(run, '已拒绝 Cursor 使用此工作目录');
+      this.emit({
+        type: 'status',
+        status: 'starting',
+        label: `${this.options.cli === 'gemini' ? 'Gemini' : 'Cursor'} 正在启动`,
+      });
+    } else
+      this.stop(
+        run,
+        `已拒绝 ${this.options.cli === 'gemini' ? 'Gemini' : 'Cursor'} 使用此工作目录`,
+      );
     pending.resolve();
   }
   resolveUserInput(_id: string, _answers: Record<string, string[]>): void {
@@ -909,6 +1176,7 @@ export class StreamCliSession implements AgentSession {
   private stop(run: Run, reason: string) {
     if (this.active !== run) return;
     run.failure ??= reason;
+    run.browserTools?.close();
     this.killGroup(run);
     if (!run.child) this.finish(run, run.failure);
   }
@@ -920,6 +1188,7 @@ export class StreamCliSession implements AgentSession {
     clearTimeout(run.startup);
     clearTimeout(run.deadline);
     // Do not cancel escalation: surviving descendants must still receive SIGKILL after leader exit.
+    run.browserTools?.close();
     this.active = undefined;
     if (run.workspaceTrust) {
       const pending = run.workspaceTrust;
@@ -929,6 +1198,7 @@ export class StreamCliSession implements AgentSession {
     }
     void this.removePolicy(run).catch(() => {});
     if (failure) {
+      this.discovery.abort();
       this.closed = true;
       this.ready = false;
       this.emit({ type: 'error', message: failure });
@@ -943,6 +1213,7 @@ export class StreamCliSession implements AgentSession {
   }
   close() {
     if (this.closed) return;
+    this.discovery.abort();
     this.closed = true;
     this.ready = false;
     if (this.active) this.stop(this.active, 'CLI 会话已关闭');

@@ -89,7 +89,7 @@ const decideWorkspace = async (approved: boolean) => {
   for (const pending of state.pendingRequests || []) {
     assert.equal(pending.kind, 'approval', 'Unexpected native user input');
     if (pending.kind !== 'approval') continue;
-    assert.ok(pending.request.id.startsWith('cursor-workspace:'));
+    assert.ok(pending.request.id.startsWith(`${cli}-workspace:`));
     assert.equal(pending.conversationId, conversationId);
     assert.ok(pending.request.detail.startsWith(`${saved.settings.workspace}\n`));
     const panel = page.locator('.req[data-request-key]');
@@ -138,6 +138,7 @@ try {
       await page.reload();
       await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
       await page.locator('.sidebar-settings').click();
+      await page.locator('.runtime-installations summary').click();
       const icons = page.locator('.agent-setting-row img.agent-icon');
       await expect(icons).toHaveCount(6);
       await expect

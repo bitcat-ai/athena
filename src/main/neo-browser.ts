@@ -231,7 +231,7 @@ export class NeoBrowserRuntime {
       if (!readonly) await this.browser.setNativeAgentActive(true);
       return {
         sessionId: client.id,
-        context: `<neo_browser_context>\n${JSON.stringify({ engine: 'BrowserOS neo', currentPage: current, pages, sessionId: client.id }).replace(/</g, '\\u003c')}\nNeo pageId 是原生页面编号，不能与 Athena 的元素 ref 或 CDP targetId 混用。先使用当前页；在需要时用 neo_tabs 新建页。网页任务使用 neo_* 原生工具。选中元素的可撤销外观预览使用 workbench_browser_query/inspect/edit/undo。\n</neo_browser_context>`,
+        context: `<neo_browser_context>\n${JSON.stringify({ engine: 'BrowserOS neo', currentPage: current, pages, sessionId: client.id }).replace(/</g, '\\u003c')}\n你与用户操作同一个可见网页。先使用当前页；需要新页面时用 neo_tabs，并用 neo_focus_page 将结果显示在右侧。网页观察、点击、填写、滚动、导航使用 neo_* 原生工具。创建或调整页面元素时使用 workbench_browser_query/inspect/edit/undo；edit 的 insert 可创建嵌套元素，返回新 ref，后续可继续修改并撤销。创建后先观察真实结果再给出结论；DOM 预览不代表源码已保存。Neo pageId/元素引用与 Athena ref/CDP targetId 各有作用域，不能混用；新建元素后用 Neo snapshot 获取新的操作引用。\n</neo_browser_context>`,
       };
     } catch (error) {
       if (this.current === task) this.current = undefined;
@@ -264,6 +264,8 @@ export class NeoBrowserRuntime {
   async callTool(name: string, args: Record<string, unknown>): Promise<ToolResult> {
     if (name === 'neo_status') return { text: JSON.stringify(this.getState()) };
     const task = this.current;
+    if (!task && name === 'workbench_browser_edit' && args.insert !== undefined)
+      return { text: 'Neo 网页任务尚未建立，请重新连接浏览器后创建元素。', isError: true };
     if (!task)
       return name.startsWith('workbench_browser_')
         ? this.browser.callTool(name, args)
@@ -292,7 +294,7 @@ export class NeoBrowserRuntime {
     const operationId = randomUUID();
     let dispatched = false;
     let mutating = false;
-    const pageId = typeof args.page === 'number' ? args.page : undefined;
+    let pageId = typeof args.page === 'number' ? args.page : undefined;
     const ordered = (value: any): any =>
       Array.isArray(value)
         ? value.map(ordered)
@@ -339,28 +341,6 @@ export class NeoBrowserRuntime {
         return { text, isError: false };
       }
       checkInteraction();
-      if (name.startsWith('workbench_browser_')) {
-        const readOnly = ['workbench_browser_query', 'workbench_browser_inspect'].includes(name);
-        if (!readOnly) {
-          if (task.needsObservation) throw new Error('用户已操作页面，请先重新读取当前页面。');
-          task.execution.assertCanMutate(signature);
-        }
-        const result = await this.browser.callTool(name, args);
-        checkInteraction();
-        if (readOnly && !result.isError && !task.execution.needsRecovery) {
-          task.needsObservation = false;
-          if (!task.readonly) this.browser.allowAgentControl();
-        }
-        event(result.isError ? 'failed' : 'succeeded');
-        return result;
-      }
-      const native = name.slice(4);
-      if (!name.startsWith('neo_') || (!nativeNames.has(native) && native !== 'focus_page'))
-        throw new Error('未开放的 Neo 操作');
-      if (task.needsObservation && !this.isReadOnly(name, args))
-        throw new Error(
-          '用户已操作页面，请先用 snapshot/read/grep 重新观察当前状态，再继续网页任务。',
-        );
       if (task.reconnectClient) {
         await task.reconnectClient;
         checkInteraction();
@@ -387,6 +367,52 @@ export class NeoBrowserRuntime {
           throw error;
         }
       }
+      if (name.startsWith('workbench_browser_')) {
+        const readOnly = ['workbench_browser_query', 'workbench_browser_inspect'].includes(name);
+        const currentPage = (await task.client.pages()).find(
+          (page) => page.targetId === this.browser.getState().activeTabId,
+        );
+        checkInteraction();
+        if (!currentPage) throw new Error('Neo 与当前可见页面尚未对应，请重新读取页面');
+        pageId = currentPage.pageId;
+        if (!readOnly) {
+          if (task.needsObservation) throw new Error('用户已操作页面，请先重新读取当前页面。');
+          task.execution.assertCanMutate(signature);
+        }
+        mutating = !readOnly;
+        if (mutating) task.execution.mutate();
+        dispatched = true;
+        task.running = { signature, page: pageId, mutating };
+        let result: ToolResult;
+        try {
+          result = await this.browser.callTool(name, args);
+        } finally {
+          task.running = undefined;
+        }
+        checkInteraction();
+        if (result.isError && mutating) task.execution.requireRecovery(signature, pageId);
+        // A lost MCP reply must not allow the same insertion to create a duplicate tree.
+        if (!result.isError && name === 'workbench_browser_edit' && args.insert !== undefined)
+          task.execution.confirmMutation(signature);
+        if (readOnly && !result.isError) {
+          const observationId = task.execution.observe(result.text, pageId);
+          result = {
+            ...result,
+            text: JSON.stringify({ ...JSON.parse(result.text), observationId }),
+          };
+          task.needsObservation = false;
+          if (!task.readonly && !task.execution.needsRecovery) this.browser.allowAgentControl();
+        }
+        event(result.isError ? 'failed' : 'succeeded');
+        return result;
+      }
+      const native = name.slice(4);
+      if (!name.startsWith('neo_') || (!nativeNames.has(native) && native !== 'focus_page'))
+        throw new Error('未开放的 Neo 操作');
+      if (task.needsObservation && !this.isReadOnly(name, args))
+        throw new Error(
+          '用户已操作页面，请先用 snapshot/read/grep 重新观察当前状态，再继续网页任务。',
+        );
       if (args.url !== undefined && args.url !== null && args.url !== 'about:blank') {
         if (typeof args.url !== 'string') throw new Error('网页地址格式无效');
         normalizeBrowserUrl(args.url);
