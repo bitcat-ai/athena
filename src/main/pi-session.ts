@@ -1,8 +1,10 @@
 import { execFile, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { realpath } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import path from 'node:path';
 import { piIsolationArguments } from './agent-discovery';
+import { normalizeProviderSkillDiscovery } from '../shared/provider-skills';
 import { cliEnvironment } from './agent-process';
 import { parseImages, type ImageAttachment } from '../shared/images';
 import {
@@ -13,6 +15,7 @@ import {
 import { AgentMcpServer } from './agent-mcp';
 import { browserToolsFingerprint } from './agents';
 import type { AgentEvent, BrowserTool, ElementRef, ToolCall } from '../shared/types';
+import type { ProviderSkill, ProviderSkillDiscovery } from '../shared/skills';
 import {
   unknownTokens,
   zeroTokens,
@@ -266,6 +269,53 @@ export class PiSession implements AgentSession {
       (model: unknown) => object(model) && text(model.id) && text(model.provider),
     );
   }
+  async discoverProviderSkills(): Promise<ProviderSkillDiscovery> {
+    try {
+      await this.prepare();
+      const data = await this.request('get_commands');
+      if (!Array.isArray(data?.commands)) throw new Error('Pi 命令目录格式无效');
+      const skills = data.commands
+        .filter((item: unknown) => object(item) && item.source === 'skill')
+        .flatMap((item: RecordValue) => {
+          if (
+            typeof item.name !== 'string' ||
+            !item.name.startsWith('skill:') ||
+            typeof item.sourceInfo?.path !== 'string' ||
+            !path.isAbsolute(item.sourceInfo.path)
+          )
+            return [];
+          const name = item.name.slice('skill:'.length);
+          if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/i.test(name)) return [];
+          return [
+            {
+              name,
+              description: item.description,
+              path: item.sourceInfo.path,
+              userInvocable: true,
+            },
+          ];
+        });
+      return normalizeProviderSkillDiscovery(
+        {
+          provider: { id: 'pi', name: 'Pi' },
+          capability: 'supported',
+          skills,
+        },
+        { approvedRoot: this.options.workspace, providerManagedPaths: true },
+      );
+    } catch {
+      return {
+        status: 'unavailable',
+        source: 'provider',
+        provider: { id: 'pi', name: 'Pi' },
+        skills: [],
+        diagnostics: [
+          { code: 'capability-degraded', message: 'Pi Skill discovery is unavailable.' },
+        ],
+      };
+    }
+  }
+
   async listModels(): Promise<ModelOption[]> {
     await this.prepare();
     const [models, state] = await Promise.all([this.models(), this.request('get_state')]);
@@ -284,6 +334,7 @@ export class PiSession implements AgentSession {
     context?: string,
     selectedElement?: ElementRef,
     selection?: ModelSelection,
+    skills: ProviderSkill[] = [],
     images?: ImageAttachment[],
   ) {
     if (this.active || this.sending) throw new Error('请等待 Pi 当前任务完成，或先停止');
@@ -298,6 +349,23 @@ export class PiSession implements AgentSession {
       throw new Error('Pi 尚未接通所选网页元素，请移除元素上下文后发送');
     if (this.browserTools?.pendingCalls) throw new Error('上一轮浏览器操作尚未结束，请稍后重试');
     let selectedSnapshot: string | undefined;
+    if (skills.some((skill) => skill.provider.id !== 'pi' || !skill.userInvocable))
+      throw new Error('Pi Skill 选择无效');
+    if (new Set(skills.map((skill) => skill.name)).size !== skills.length)
+      throw new Error('Pi Skill 选择不能重复');
+    if (skills.length > 3) throw new Error('最多选择 3 个 Skill');
+    let fresh: ProviderSkillDiscovery | undefined;
+    if (skills.length) fresh = await this.discoverProviderSkills();
+    const selected = skills.map((skill) => {
+      const current = fresh?.skills.find((item) => item.name === skill.name);
+      if (
+        !current ||
+        current.providerPath !== skill.providerPath ||
+        current.contentHash !== skill.contentHash
+      )
+        throw new Error(`Pi Skill 已变化，请刷新后重试：${skill.name}`);
+      return current;
+    });
     this.sending = true;
     try {
       await this.prepare(selection);
@@ -338,6 +406,7 @@ export class PiSession implements AgentSession {
       'prompt',
       {
         message: [
+          ...selected.map((skill) => `/skill:${skill.name}`),
           prompt,
           context ? `<task_context>\n${context}\n</task_context>` : '',
           selectedSnapshot

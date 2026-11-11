@@ -37,6 +37,29 @@ export function feishuConversation(
   );
 }
 
+/**
+ * 登记一段新对话并为它做好准备，成功后才写入磁盘。
+ * 准备失败时撤回登记，不留下一段没有内容的对话。
+ */
+export async function addPreparedConversation(
+  store: ConversationStore,
+  conversation: Conversation,
+  prepare: () => Promise<void>,
+): Promise<Conversation> {
+  store.data.conversations.unshift(conversation);
+  try {
+    await prepare();
+    await store.save();
+  } catch (error) {
+    const index = store.data.conversations.indexOf(conversation);
+    if (index >= 0) store.data.conversations.splice(index, 1);
+    // 准备期间别处可能已经落盘过这段对话，撤回后再写一次。
+    await store.save().catch(() => {});
+    throw error;
+  }
+  return conversation;
+}
+
 function find(store: ConversationStore, id: string) {
   const conversation = store.data.conversations.find((item) => item.id === id);
   if (!conversation) throw new Error('找不到这个对话');

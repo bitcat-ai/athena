@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { testImage } from './image-fixture';
 import test from 'node:test';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { StreamCliSession, type StreamCliId } from '../src/main/stream-cli-session';
@@ -66,6 +66,10 @@ process.stdin.setEncoding('utf8'); process.stdin.on('data',s=>input+=s); process
  if(mode==='result-error'){out(cli==='gemini'?{type:'result',status:'error',error:{message:'sk-secret-native-error'}}:{type:'result',subtype:'error_during_execution',is_error:true,result:'sk-secret-native-error'});return;}
  if(mode==='tool-disabled'){out(cli==='gemini'?{type:'tool_use',tool_id:'tool-1',tool_name:'write_file',parameters:{}}:{type:'assistant',message:{role:'assistant',content:[{type:'tool_use',id:'tool-1',name:'Write',input:{}}]}});return;}
  if(mode==='denied'){out({type:'result',subtype:'success',is_error:false,permission_denials:[{tool_name:'Write'}],result:'blocked'});return;}
+ if(cli==='claude' && mode.startsWith('read-')) {
+  out({type:'assistant',message:{role:'assistant',content:[{type:'tool_use',id:'read:1',name:'Read',input:{file_path:'evidence.txt'}}]}});
+  if(mode!=='read-pending') out({type:'user',message:{role:'user',content:[{type:'tool_result',tool_use_id:'read:1',is_error:mode==='read-error',content:'HIDDEN_TOOL_OUTPUT'}]}});
+ }
  if(cli==='claude') {
   out({type:'stream_event',event:{type:'message_start',message:{model:'actual-claude'}}});
   out({type:'stream_event',event:{type:'content_block_delta',delta:{type:'thinking_delta',thinking:'HIDDEN_THINKING'}}});
@@ -190,6 +194,314 @@ for (const [mode, expected] of [
   });
 }
 
+test('Claude discovers native config skills with user precedence, settings overrides and optional descriptions without invoking CLI', async (t) => {
+  const f = await fixture('claude');
+  const config = path.join(f.directory, 'custom-config');
+  const previous = process.env.CLAUDE_CONFIG_DIR;
+  process.env.CLAUDE_CONFIG_DIR = config;
+  t.after(() => {
+    if (previous === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+    else process.env.CLAUDE_CONFIG_DIR = previous;
+  });
+  try {
+    for (const [root, name, body] of [
+      [path.join(config, 'skills'), 'review', '---\nname: not-the-command\n---\nUser body'],
+      [
+        path.join(f.directory, '.claude/skills'),
+        'review',
+        '---\ndescription: Project loses\n---\n',
+      ],
+      [path.join(config, 'skills'), 'off', 'Hidden'],
+      [path.join(config, 'skills'), 'manual', '---\nuser-invocable: false\n---\n'],
+    ]) {
+      await mkdir(path.join(root, name), { recursive: true });
+      await writeFile(path.join(root, name, 'SKILL.md'), body);
+    }
+    await writeFile(
+      path.join(config, 'settings.json'),
+      '{ /* native JSONC */ skillOverrides: { off: "off", }, }',
+    );
+    const discovery = await f.session.discoverProviderSkills();
+    assert.equal(discovery.status, 'ready');
+    assert.deepEqual(
+      discovery.skills.map((skill) => skill.name),
+      ['manual', 'review'],
+    );
+    const review = discovery.skills.find((skill) => skill.name === 'review')!;
+    assert.equal(review.providerPath, path.join(config, 'skills/review/SKILL.md'));
+    assert.match(review.contentHash!, /^[a-f0-9]{64}$/);
+    assert.equal(discovery.skills[0].userInvocable, false);
+    await assert.rejects(readFile(path.join(f.directory, 'args.jsonl')));
+  } finally {
+    await f.cleanup();
+  }
+});
+
+test('Claude reads enabled plugin skills statically and ignores disabled plugins and escaping manifest paths', async (t) => {
+  const f = await fixture('claude');
+  const home = path.join(f.directory, 'home');
+  t.mock.method(os, 'homedir', () => home);
+  try {
+    const config = path.join(home, '.claude');
+    const install = path.join(f.directory, 'plugin');
+    await mkdir(path.join(config, 'plugins'), { recursive: true });
+    await mkdir(path.join(install, '.claude-plugin'), { recursive: true });
+    await mkdir(path.join(install, 'skills/review'), { recursive: true });
+    await writeFile(
+      path.join(install, 'skills/review/SKILL.md'),
+      '---\nname: not-native\ndescription: Plugin review\n---\n',
+    );
+    await writeFile(
+      path.join(install, '.claude-plugin/plugin.json'),
+      JSON.stringify({ name: 'quality', skills: ['../../outside'] }),
+    );
+    await writeFile(
+      path.join(config, 'settings.json'),
+      JSON.stringify({ enabledPlugins: { 'quality@local': true, 'disabled@local': false } }),
+    );
+    await writeFile(
+      path.join(config, 'plugins/installed_plugins.json'),
+      JSON.stringify({
+        plugins: {
+          'quality@local': [{ scope: 'project', projectPath: f.directory, installPath: install }],
+          'disabled@local': [{ scope: 'user', installPath: install }],
+        },
+      }),
+    );
+    const discovery = await f.session.discoverProviderSkills();
+    assert.deepEqual(
+      discovery.skills.map((skill) => skill.name),
+      ['quality:review'],
+    );
+    assert.equal(discovery.skills[0].description, 'Plugin review');
+    assert.equal(discovery.skills[0].providerPath, path.join(install, 'skills/review/SKILL.md'));
+    await assert.rejects(readFile(path.join(f.directory, 'args.jsonl')));
+  } finally {
+    await f.cleanup();
+  }
+});
+
+test('Claude selected skills use a real leading slash and preserve native read-only permissions', async (t) => {
+  const f = await fixture('claude');
+  t.mock.method(os, 'homedir', () => path.join(f.directory, 'home'));
+  try {
+    const root = path.join(f.directory, '.claude/skills/review');
+    await mkdir(root, { recursive: true });
+    await writeFile(
+      path.join(root, 'SKILL.md'),
+      '---\ndisable-model-invocation: true\n---\nPRIVATE_BODY',
+    );
+    const discovery = await f.session.discoverProviderSkills();
+    const skill = discovery.skills.find((item) => item.name === 'review')!;
+    await f.session.send('Review this diff', 'Retain context', undefined, undefined, [skill]);
+    const call = (await f.logs())[0];
+    assert.equal(
+      call.input,
+      '/review Review this diff\n\n<task_context>\nRetain context\n</task_context>',
+    );
+    assert.equal(call.args.includes('--safe-mode'), false);
+    assert.equal(call.args.includes('--disable-slash-commands'), false);
+    assert.equal(call.args[call.args.indexOf('--tools') + 1], 'Read,Glob,Grep,Skill');
+    assert.equal(call.args[call.args.indexOf('--allowedTools') + 1], 'Read,Glob,Grep,Skill');
+    assert.equal(call.args[call.args.indexOf('--permission-mode') + 1], 'dontAsk');
+    const settings = JSON.parse(call.args[call.args.indexOf('--settings') + 1]);
+    assert.equal(settings.disableAllHooks, true);
+    assert.equal(settings.disableSkillShellExecution, true);
+    assert.equal(
+      call.args[call.args.indexOf('--disallowedTools') + 1],
+      'Write,Edit,Bash,Task,WebFetch,WebSearch',
+    );
+    assert.ok(!call.input.includes('PRIVATE_BODY'));
+    await f.session.send('Review the image', undefined, undefined, undefined, [skill], [testImage]);
+    const imageMessage = JSON.parse((await f.logs())[1].input).message;
+    assert.ok(imageMessage.content[0].text.startsWith('/review Review the image'));
+    assert.equal(imageMessage.content[1].source.data, testImage.data);
+    await writeFile(skill.providerPath!, 'Changed');
+    await assert.rejects(
+      f.session.send('stale', undefined, undefined, undefined, [skill]),
+      /改变|不可用/,
+    );
+    assert.equal((await f.logs()).length, 2);
+  } finally {
+    await f.cleanup();
+  }
+});
+
+test('Cursor discovers project skills before user skills with metadata and bounded nested entries', async (t) => {
+  const f = await fixture('cursor');
+  const home = path.join(f.directory, 'home');
+  t.mock.method(os, 'homedir', () => home);
+  try {
+    const projectRoot = path.join(f.directory, '.cursor', 'skills');
+    const userRoot = path.join(home, '.cursor', 'skills');
+    await mkdir(path.join(projectRoot, 'nested', 'review'), { recursive: true });
+    await writeFile(
+      path.join(projectRoot, 'nested', 'review', 'SKILL.md'),
+      '---\nname: ignored-name\ndescription: Project review\nuser-invocable: false\n---\nBody',
+    );
+    await mkdir(path.join(userRoot, 'nested', 'review'), { recursive: true });
+    await writeFile(
+      path.join(userRoot, 'nested', 'review', 'SKILL.md'),
+      '---\ndescription: User review\nmetadata:\n  surfaces: [cli]\n---\nBody',
+    );
+    await mkdir(path.join(projectRoot, 'hidden'), { recursive: true });
+    await writeFile(
+      path.join(projectRoot, 'hidden', 'SKILL.md'),
+      '---\nmetadata:\n  surfaces: [web]\n---\nBody',
+    );
+    const discovery = await f.session.discoverProviderSkills();
+    assert.equal(discovery.status, 'ready');
+    assert.deepEqual(
+      discovery.skills.map((skill) => skill.name),
+      ['review'],
+    );
+    assert.equal(discovery.skills[0]?.description, 'Project review');
+    assert.equal(discovery.skills[0]?.userInvocable, false);
+    assert.match(
+      discovery.skills[0]?.providerPath ?? '',
+      /\.cursor[\/]skills[\/]nested[\/]review[\/]SKILL\.md$/,
+    );
+    assert.equal(discovery.skills[0]?.contentHash?.length, 64);
+  } finally {
+    await rm(path.join(home, '.cursor', 'skills', 'nested', 'review'), {
+      recursive: true,
+      force: true,
+    });
+    await f.cleanup();
+  }
+});
+
+test('Cursor sends selected native skills on stdin and rewrites only known invocable dollar mentions', async (t) => {
+  const f = await fixture('cursor');
+  t.mock.method(os, 'homedir', () => path.join(f.directory, 'home'));
+  try {
+    for (const name of ['review', 'hidden']) {
+      const directory = path.join(f.directory, '.cursor', 'skills', name);
+      await mkdir(directory, { recursive: true });
+      await writeFile(
+        path.join(directory, 'SKILL.md'),
+        `---\ndescription: Review changes\nuser-invocable: ${name !== 'hidden'}\n---\nPRIVATE_SKILL_BODY`,
+      );
+    }
+    const discovery = await f.session.discoverProviderSkills();
+    const skill = discovery.skills.find((item) => item.name === 'review')!;
+    await f.session.send('$review $unknown $hidden $10', '$review context', undefined, undefined, [
+      skill,
+    ]);
+    const call = (await f.logs())[0];
+    assert.equal(
+      call.input,
+      '/review\n\n/review $unknown $hidden $10\n\n<task_context>\n$review context\n</task_context>',
+    );
+    assert.ok(!JSON.stringify(call.args).includes('/review'));
+    assert.ok(!call.input.includes('PRIVATE_SKILL_BODY'));
+    assert.equal(call.args[call.args.indexOf('--mode') + 1], 'ask');
+    assert.equal(f.events.filter((event) => event.type === 'approval').length, 1);
+    await writeFile(skill.providerPath!, 'Changed');
+    await assert.rejects(
+      f.session.send('stale', undefined, undefined, undefined, [skill]),
+      /改变|不可用/,
+    );
+    assert.equal((await f.logs()).length, 1);
+  } finally {
+    await f.cleanup();
+  }
+});
+
+test('Cursor covers provider roots and ancestors while rejecting unsafe, deep, dependency and oversized entries', async (t) => {
+  const f = await fixture('cursor');
+  const home = path.join(f.directory, 'home');
+  t.mock.method(os, 'homedir', () => home);
+  const put = async (
+    base: string,
+    root: string,
+    name: string,
+    content = '---\ndescription: Valid\n---\nBody',
+  ) => {
+    const directory = path.join(base, root, name);
+    await mkdir(directory, { recursive: true });
+    const file = path.join(directory, 'SKILL.md');
+    await writeFile(file, content);
+    return file;
+  };
+  try {
+    for (const [root, name] of [
+      ['.cursor/skills', 'cursor'],
+      ['.agents/skills', 'agents'],
+      ['.codex/skills', 'codex'],
+      ['.claude/skills', 'claude'],
+    ]) {
+      await put(f.directory, root, name);
+      await put(home, root, `user-${name}`);
+    }
+    await put(home, '.cursor/skills-cursor', 'builtin');
+    await put(home, '.cursor/skills-cursor', 'cursor', '---\ndescription: Must lose\n---\n');
+    await put(
+      f.directory,
+      '.cursor/skills',
+      'block-list',
+      '---\nmetadata:\n  surfaces:\n    - web\n---\n',
+    );
+    await put(
+      f.directory,
+      '.cursor/skills',
+      'cli-list',
+      '---\ndescription: >\n  Folded description\n  second line\nmetadata:\n  surfaces:\n    - cli\n---\n',
+    );
+    await put(f.directory, '.cursor/skills', 'bad', '---\nuser-invocable: maybe\n---\n');
+    await put(f.directory, '.cursor/skills', 'huge', 'x'.repeat(1_000_001));
+    await put(f.directory, '.cursor/skills', 'node_modules/dependency');
+    await put(f.directory, '.cursor/skills', `${Array(10).fill('nested').join('/')}/too-deep`);
+    const outside = await put(f.directory, 'outside', 'escaped');
+    await symlink(path.dirname(outside), path.join(f.directory, '.cursor/skills/link-directory'));
+    await mkdir(path.join(f.directory, '.cursor/skills/link-file'));
+    await symlink(outside, path.join(f.directory, '.cursor/skills/link-file/SKILL.md'));
+    const child = path.join(f.directory, 'subproject');
+    await mkdir(child);
+    const session = new StreamCliSession({
+      cli: 'cursor',
+      workspace: child,
+      executablePath: f.executablePath,
+      tools: [],
+      onEvent: () => {},
+      callTool: async () => {
+        throw new Error('No tools');
+      },
+    });
+    try {
+      const discovery = await session.discoverProviderSkills();
+      assert.deepEqual(
+        discovery.skills.map((skill) => skill.name),
+        [
+          'agents',
+          'builtin',
+          'claude',
+          'cli-list',
+          'codex',
+          'cursor',
+          'user-agents',
+          'user-claude',
+          'user-codex',
+          'user-cursor',
+        ],
+      );
+      assert.equal(discovery.skills.find((skill) => skill.name === 'cursor')?.description, 'Valid');
+      assert.equal(
+        discovery.skills.find((skill) => skill.name === 'cli-list')?.description,
+        'Folded description second line',
+      );
+      assert.ok(discovery.diagnostics.some((item) => item.code === 'unsafe-path'));
+      assert.ok(discovery.diagnostics.some((item) => item.code === 'oversized-entry'));
+      assert.ok(discovery.diagnostics.some((item) => item.code === 'invalid-metadata'));
+      await assert.rejects(readFile(path.join(f.directory, 'args.jsonl')));
+    } finally {
+      session.close();
+    }
+  } finally {
+    await f.cleanup();
+  }
+});
+
 test('Cursor asks the host before trusting a workspace and keeps Ask restrictions after approval', async () => {
   const f = await fixture('cursor', 'normal', undefined, false);
   try {
@@ -308,8 +620,8 @@ for (const cli of cliIds) {
           .some((a) => /skip-permissions|^--yolo$|^--force$|^--approve-mcps$/.test(a)),
       );
       if (cli === 'claude') {
-        assert.equal(calls[0].args[calls[0].args.indexOf('--tools') + 1], '');
-        assert.ok(calls[0].args.includes('--safe-mode'));
+        assert.equal(calls[0].args[calls[0].args.indexOf('--tools') + 1], 'Read,Glob,Grep,Skill');
+        assert.equal(calls[0].args.includes('--safe-mode'), false);
         assert.equal(calls[0].args[calls[0].args.indexOf('--permission-prompts') + 1], 'none');
       } else if (cli === 'gemini') {
         assert.equal(calls[0].args[calls[0].args.indexOf('--approval-mode') + 1], 'plan');
@@ -469,6 +781,31 @@ for (const cli of ['claude', 'gemini'] as const)
       await f.cleanup();
     }
   });
+for (const mode of ['read-success', 'read-error', 'read-pending']) {
+  test(`Claude native ${mode} tracks real read evidence and never converts failure to success`, async () => {
+    const f = await fixture('claude', mode);
+    try {
+      if (mode === 'read-success') {
+        await f.session.send('Read evidence');
+        assert.deepEqual(
+          f.events.filter((event) => event.type === 'tool').map((event) => event.call.status),
+          ['running', 'done'],
+        );
+        assert.equal(JSON.stringify(f.events).includes('HIDDEN_TOOL_OUTPUT'), false);
+      } else {
+        await assert.rejects(f.session.send('Read evidence'));
+        assert.equal(
+          f.events.some((event) => event.type === 'complete'),
+          false,
+        );
+      }
+      assert.equal(f.hostCalls(), 0);
+    } finally {
+      await f.cleanup();
+    }
+  });
+}
+
 test('claude: permission denial is not task success', async () => {
   const f = await fixture('claude', 'denied');
   try {
@@ -651,6 +988,21 @@ test('stream-cli-session: explicit close rejects an active turn instead of compl
     await f.cleanup();
   }
 });
+test('Gemini discovery reports constrained capabilities without launching a CLI', async () => {
+  for (const [cli, expected] of [['gemini', /blocked by the deny-all admin policy/]] as const) {
+    const f = await fixture(cli);
+    try {
+      const discovery = await f.session.discoverProviderSkills();
+      assert.equal(discovery.status, 'unavailable');
+      assert.deepEqual(discovery.skills, []);
+      assert.match(discovery.diagnostics[0].message, expected);
+      await assert.rejects(readFile(path.join(f.directory, 'args.jsonl')));
+    } finally {
+      await f.cleanup();
+    }
+  }
+});
+
 test('stream-cli-session: prepare remembers explicit model selection without running a discovery prompt', async () => {
   const f = await fixture('claude');
   try {
@@ -679,7 +1031,7 @@ test('stream-cli-session: interrupt during prepare prevents a late launch', asyn
 test('Claude uses streaming image content while unsupported CLIs reject before launch', async (t) => {
   const f = await fixture('claude');
   t.after(f.cleanup);
-  await f.session.send('', undefined, undefined, undefined, [testImage]);
+  await f.session.send('', undefined, undefined, undefined, undefined, [testImage]);
   const [record] = await f.logs();
   assert.ok(record.args.includes('--input-format'));
   const input = JSON.parse(record.input);
@@ -691,7 +1043,7 @@ test('Claude uses streaming image content while unsupported CLIs reject before l
     const unsupported = await fixture(cli);
     t.after(unsupported.cleanup);
     await assert.rejects(
-      unsupported.session.send('look', undefined, undefined, undefined, [testImage]),
+      unsupported.session.send('look', undefined, undefined, undefined, undefined, [testImage]),
       /不支持图片/,
     );
     await assert.rejects(unsupported.logs(), { code: 'ENOENT' });
@@ -715,9 +1067,16 @@ test('Claude native MCP configuration routes browser calls and is revoked after 
   );
   assert.equal(events[0].call.name, 'neo_status');
   const [call] = await f.logs();
-  assert.ok(call.args.includes('--restricted'));
-  assert.ok(call.args.includes('mcp__athena__neo_status'));
-  assert.equal(call.args[call.args.indexOf('--tools') + 1], '');
+  assert.ok(!call.args.includes('--restricted'));
+  assert.equal(call.args.filter((arg: string) => arg === '--allowedTools').length, 1);
+  assert.deepEqual(call.args[call.args.indexOf('--allowedTools') + 1].split(','), [
+    'Read',
+    'Glob',
+    'Grep',
+    'Skill',
+    'mcp__athena__neo_status',
+  ]);
+  assert.equal(call.args[call.args.indexOf('--tools') + 1], 'Read,Glob,Grep,Skill');
   assert.ok(!call.args.includes('--safe-mode'));
   const bridge = JSON.parse(await readFile(path.join(f.directory, 'bridge.json'), 'utf8'));
   assert.equal(bridge.mode, 0o600);

@@ -1,4 +1,6 @@
 import type { ElementControlSurface } from './element-controls';
+import type { WorkspaceSkill } from './skills';
+import type { TaskSelection } from './access';
 export type AgentId = 'codex' | 'claude' | 'opencode' | 'gemini' | 'pi' | 'cursor';
 export interface AgentInfo {
   id: AgentId;
@@ -514,6 +516,7 @@ export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   text: string;
+  displayText?: string;
   createdAt: number;
   status?: 'streaming' | 'done' | 'error';
   source?: 'desktop' | 'feishu';
@@ -545,7 +548,13 @@ export interface Conversation {
   agentToolsFingerprint?: string;
   previousAgentSessionIds?: string[];
   workspace?: string;
+  selectedSkills?: string[];
+  skillUsage?: import('./skills').SkillUsage[];
   remoteChatId?: string;
+  /** Explicit task capabilities; absent on legacy conversations. */
+  selection?: TaskSelection;
+  /** MCP capabilities selected independently from Skills. */
+  mcpSelection?: string[];
   /** 归档时间。缺省表示未归档；归档只是从主列表收起，记录本身保留。 */
   archivedAt?: number;
 }
@@ -592,6 +601,9 @@ export interface AppSnapshot {
   localUser?: { name: string };
   settings: Settings;
   agents: AgentInfo[];
+  skills?: WorkspaceSkill[];
+  providerSkills?: import('./skills').ProviderSkill[];
+  providerSkillDiscovery?: import('./skills').ProviderSkillDiscovery;
   codexConnection?: CodexConnectionState;
   browser: BrowserState;
   neo?: NativeNeoState;
@@ -600,6 +612,7 @@ export interface AppSnapshot {
   recordings: Recording[];
   browserFrame?: BrowserFrame;
   pendingRequests?: PendingAgentRequest[];
+  pendingExternalConnections?: Array<{ id: string; agent: { id: string; name: string }; requestedMode: import('./access').AccessMode; status: string; mode?: import('./access').AccessMode }>;
   share?: import('./share').ShareState;
 }
 export type AppEvent =
@@ -616,7 +629,8 @@ export type AppEvent =
   | { type: 'agent:event'; conversationId: string; messageId: string; event: AgentEvent }
   | { type: 'feishu:state'; state: FeishuState }
   | { type: 'conversation:updated'; conversation: Conversation }
-  | { type: 'notice'; message: string; level: 'info' | 'error' };
+  | { type: 'notice'; message: string; level: 'info' | 'error' }
+  | { type: 'mcp:connections'; connections: AppSnapshot['pendingExternalConnections'] };
 export interface WorkbenchBridge {
   invoke<T = unknown>(action: string, payload?: unknown): Promise<T>;
   onEvent(callback: (event: AppEvent) => void): () => void;

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { testImage } from './image-fixture';
 import test from 'node:test';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { PiSession } from '../src/main/pi-session';
@@ -16,6 +16,9 @@ async function fixture(mode = 'normal') {
     `
 const fs=require('node:fs'); const readline=require('node:readline');
 const mode=${JSON.stringify(mode)}; const log=${JSON.stringify(path.join(directory, 'commands.jsonl'))};
+const discoveryGate=${JSON.stringify(path.join(directory, 'discovery-gate'))};
+process.env.WORKBENCH_FIXTURE_SKILL_PATH=${JSON.stringify(path.join(directory, '.pi', 'skills', 'review', 'SKILL.md'))};
+
 const args=process.argv.slice(2);
 if(args.includes('--help')){console.log('--mode rpc --no-skills --no-prompt-templates');console.log(mode==='builtin-extensions'?'--no-extensions Disable extension discovery and built-in extensions':'--no-extensions --no-mcp');process.exit(0);}
 if(mode==='builtin-extensions'&&args.includes('--no-mcp')){process.stderr.write('Unknown option: --no-mcp');process.exit(2);}
@@ -30,6 +33,16 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
 const r=JSON.parse(line);fs.appendFileSync(log,JSON.stringify(r)+'\\n');
 if(r.type==='get_state'){if(mode==='browser-tools')out({type:'extension_ui_request',id:'browser-gate',method:'notify',message:'athena-browser-tools-v1'});if(mode!=='no-gate')out({type:'extension_ui_request',id:'gate',method:'notify',message:'athena-permissions-v1'});return response(r,{sessionId:sid,isStreaming:false,pendingMessageCount:0,model:{id:'test-model',provider:'fixture'}});}
 if(r.type==='get_available_models')return response(r,{models:[{id:'test-model',provider:'fixture',name:'Fixture'}]});
+if(r.type==='get_commands'){
+      const commands = mode === 'outside-skill-path'
+        ? [{ name: 'skill:review', description: 'Review', source: 'skill', sourceInfo: { path: '/etc/passwd' } }]
+        : mode === 'global-skill-path'
+          ? [{ name: 'skill:review', description: 'Review changes', source: 'skill', sourceInfo: { path: '/Users/example/.pi/agent/skills/review/SKILL.md' } }]
+          : [{ name: 'skill:review', description: 'Review changes', source: 'skill', sourceInfo: { path: process.env.WORKBENCH_FIXTURE_SKILL_PATH } }, { name: 'fix-tests', source: 'prompt', sourceInfo: { path: '/tmp/fix-tests.md' } }];
+ const answer=()=>response(r,{commands});
+ if(mode==='delayed-discovery'&&!fs.existsSync(discoveryGate)){fs.writeFileSync(discoveryGate,'requested');const wait=setInterval(()=>{if(fs.existsSync(discoveryGate+'.release')){clearInterval(wait);answer()}},5);return;}
+ return answer();
+}
 if(r.type==='get_available_thinking_levels')return response(r,{levels:['off','high']});
 if(r.type==='set_model'||r.type==='set_thinking_level'||r.type==='clear_queue')return response(r,{});
 if(r.type==='abort'){out({type:'agent_settled',aborted:true});return response(r,{});}
@@ -49,7 +62,7 @@ if(mode==='browser-tools') {
  });
  return;
 }
-if(r.message==='crash'){process.stderr.write('sk-secret-do-not-forward');process.exit(7);}
+if(r.message==='crash'){process.stderr.write('sk-secret-do-not-forward');process.exit(7);return;}
 if(r.message==='orphan'){
   require('node:child_process').spawn(process.execPath,['-e',"process.on('SIGTERM',()=>{});require('node:fs').writeFileSync('ready-child','yes');setTimeout(()=>require('node:fs').writeFileSync('orphan-leak','bad'),2500)"],{cwd:process.cwd(),stdio:'ignore'});
   const wait=setInterval(()=>{if(fs.existsSync('ready-child')){clearInterval(wait);process.exit(7);}},5);return;
@@ -102,44 +115,126 @@ out({type:'agent_end',willRetry:true});setTimeout(()=>end('a\\u2028b!'),20);
 async function until(check: () => boolean) {
   for (let i = 0; i < 2000; i++) {
     if (check()) return;
-    await new Promise((r) => setTimeout(r, 5));
+    await new Promise((resolve) => setTimeout(resolve, 5));
   }
   throw new Error('Fixture condition timed out');
 }
 
-test('Pi waits for settled, preserves Unicode framing and never emits thinking', async () => {
+test('Pi provider skill discovery passes optional identity metadata without host file reads', async () => {
+  const f = await fixture();
+  try {
+    await mkdir(path.join(f.directory, '.pi', 'skills', 'review'), { recursive: true });
+    const discovery = await f.session.discoverProviderSkills();
+    assert.equal(discovery.status, 'ready');
+    const skill = discovery.skills[0];
+    assert(skill);
+    assert.equal(skill.contentHash, undefined);
+    assert.equal(skill.providerPath, path.join(f.directory, '.pi', 'skills', 'review', 'SKILL.md'));
+    await assert.rejects(readFile(skill.providerPath));
+    await f.session.send('task', undefined, undefined, undefined, [skill]);
+    const commands = (await readFile(path.join(f.directory, 'commands.jsonl'), 'utf8'))
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line));
+    assert.deepEqual(
+      commands.filter((command) => command.type === 'prompt').map((command) => command.message),
+      ['/skill:review\n\ntask'],
+    );
+  } finally {
+    await f.cleanup();
+  }
+});
+
+test('Pi provider Skill discovery preserves provider-owned paths without reading them', async () => {
+  const f = await fixture('outside-skill-path');
+  try {
+    await f.session.prepare();
+    const discovery = await f.session.discoverProviderSkills();
+    assert.equal(discovery.status, 'ready');
+    assert.equal(discovery.skills[0]?.providerPath, '/etc/passwd');
+    assert.equal(discovery.skills[0]?.contentHash, undefined);
+  } finally {
+    await f.cleanup();
+  }
+});
+
+test('Pi provider Skill discovery accepts native global paths without reading them', async () => {
+  const f = await fixture('global-skill-path');
+  try {
+    await f.session.prepare();
+    const discovery = await f.session.discoverProviderSkills();
+    assert.equal(discovery.status, 'ready');
+    assert.equal(
+      discovery.skills[0]?.providerPath,
+      '/Users/example/.pi/agent/skills/review/SKILL.md',
+    );
+    assert.equal(discovery.skills[0]?.contentHash, undefined);
+    await assert.rejects(readFile(discovery.skills[0]!.providerPath!));
+  } finally {
+    await f.cleanup();
+  }
+});
+
+test('Pi discovery and send both complete without creating host-side skill contents', async () => {
   const f = await fixture();
   try {
     await f.session.prepare();
     const models = await f.session.listModels();
     assert.equal(models[0].model, 'fixture/test-model');
     assert.deepEqual(models[0].efforts, []);
-    await f.session.send('normal', undefined, undefined, {
-      model: 'fixture/test-model',
-      effort: 'high',
-    });
+    const skillDirectory = path.join(f.directory, '.pi/skills/review');
+    await mkdir(skillDirectory, { recursive: true });
+    const discovery = await f.session.discoverProviderSkills();
+    assert.equal(discovery.status, 'ready');
+    assert.deepEqual(
+      discovery.skills.map((skill) => skill.name),
+      ['review'],
+    );
+    assert.equal(
+      discovery.skills[0].providerPath,
+      path.join(f.directory, '.pi', 'skills', 'review', 'SKILL.md'),
+    );
+    assert.equal(discovery.skills[0].contentHash, undefined);
+    await f.session.send(
+      'normal',
+      undefined,
+      undefined,
+      {
+        model: 'fixture/test-model',
+        effort: 'high',
+      },
+      discovery.skills,
+    );
     assert.equal(
       f.events
-        .filter((e) => e.type === 'delta')
-        .map((e) => e.text)
+        .filter((event) => event.type === 'delta')
+        .map((event) => event.text)
         .join(''),
-      'a\u2028b!',
+      'a b!',
     );
     assert.equal(JSON.stringify(f.events).includes('HIDDEN_THINKING'), false);
-    assert.equal(f.events.filter((e) => e.type === 'complete').length, 1);
-    const usage = f.events.find((e) => e.type === 'usage');
+    assert.equal(f.events.filter((event) => event.type === 'complete').length, 1);
+    const usage = f.events.find((event) => event.type === 'usage');
     assert.equal(usage?.total.inputTokens, 13);
     assert.equal(usage?.total.reasoningOutputTokens, null);
     assert.ok(
       f.events.some(
-        (e) =>
-          e.type === 'model' &&
-          e.model.source === 'cli-message' &&
-          e.model.requested === 'fixture/test-model',
+        (event) =>
+          event.type === 'model' &&
+          event.model.source === 'cli-message' &&
+          event.model.requested === 'fixture/test-model',
       ),
     );
+    const commands = (await readFile(path.join(f.directory, 'commands.jsonl'), 'utf8'))
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line));
+    assert.deepEqual(
+      commands.filter((command) => command.type === 'prompt').map((command) => command.message),
+      ['/skill:review\n\nnormal'],
+    );
     await f.session.send('normal');
-    assert.equal(f.events.filter((e) => e.type === 'complete').length, 2);
+    assert.equal(f.events.filter((event) => event.type === 'complete').length, 2);
   } finally {
     await f.cleanup();
   }
@@ -152,6 +247,7 @@ test('Pi built-in extension isolation avoids removed flags and retains the host 
     const args = JSON.parse(await readFile(path.join(f.directory, 'arguments.json'), 'utf8'));
     assert.equal(args.includes('--no-mcp'), false);
     assert.ok(args.includes('--no-extensions'));
+    assert.equal(args.includes('--no-skills'), false, 'native Skill discovery must remain enabled');
     assert.ok(args.includes('--no-approve'));
     assert.equal(
       args[args.indexOf('--extension') + 1],
@@ -168,14 +264,14 @@ test('Pi host approval is correlated, denied explicitly and cannot be reused', a
   const f = await fixture();
   try {
     const done = f.session.send('approval');
-    await until(() => f.events.some((e) => e.type === 'approval'));
+    await until(() => f.events.some((event) => event.type === 'approval'));
     assert.throws(() => f.session.resolveApproval('foreign', true), /失效/);
     f.session.resolveApproval('confirm-1', false);
     await done;
     assert.equal(
       f.events
-        .filter((e) => e.type === 'delta')
-        .map((e) => e.text)
+        .filter((event) => event.type === 'delta')
+        .map((event) => event.text)
         .join(''),
       'denied',
     );
@@ -191,7 +287,7 @@ test('Pi cancellation clears queues before abort and rejects overlapping sends',
     const done = f.session.send('slow');
     const rejected = assert.rejects(done, /停止/);
     await assert.rejects(f.session.send('normal'), /等待/);
-    await until(() => f.events.some((e) => e.type === 'delta'));
+    await until(() => f.events.some((event) => event.type === 'delta'));
     await f.session.interrupt();
     await rejected;
     const commands = (await readFile(path.join(f.directory, 'commands.jsonl'), 'utf8'))
@@ -199,10 +295,10 @@ test('Pi cancellation clears queues before abort and rejects overlapping sends',
       .split('\n')
       .map((line) => JSON.parse(line));
     assert.ok(
-      commands.findIndex((c) => c.type === 'clear_queue') <
-        commands.findIndex((c) => c.type === 'abort'),
+      commands.findIndex((command) => command.type === 'clear_queue') <
+        commands.findIndex((command) => command.type === 'abort'),
     );
-    assert.equal(f.events.filter((e) => e.type === 'complete').length, 0);
+    assert.equal(f.events.filter((event) => event.type === 'complete').length, 0);
     await f.session.send('normal');
   } finally {
     await f.cleanup();
@@ -248,7 +344,7 @@ for (const [mode, prompt, pattern] of [
     try {
       await assert.rejects(prompt ? f.session.send(prompt) : f.session.prepare(), pattern);
       assert.equal(
-        f.events.some((e) => e.type === 'complete'),
+        f.events.some((event) => event.type === 'complete'),
         false,
       );
       assert.equal(JSON.stringify(f.events).includes('sk-secret'), false);
@@ -260,7 +356,7 @@ for (const [mode, prompt, pattern] of [
 test('Pi carries pasted images in its native prompt image array', async (t) => {
   const f = await fixture();
   t.after(f.cleanup);
-  await f.session.send('', undefined, undefined, undefined, [testImage]);
+  await f.session.send('', undefined, undefined, undefined, undefined, [testImage]);
   const records = (await readFile(path.join(f.directory, 'commands.jsonl'), 'utf8'))
     .trim()
     .split('\n')

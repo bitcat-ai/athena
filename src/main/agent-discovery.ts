@@ -74,7 +74,7 @@ export async function discoverExecutables(names: string[], directories: string[]
 }
 
 export function piIsolationArguments(help: string): string[] | undefined {
-  const flags = ['--no-extensions', '--no-skills', '--no-prompt-templates'];
+  const flags = ['--no-extensions', '--no-prompt-templates'];
   if (flags.some((flag) => !help.includes(flag))) return;
   if (help.includes('--no-mcp')) flags.push('--no-mcp');
   else if (
@@ -180,7 +180,7 @@ export async function detectAgents(
             version: versionText,
             detail:
               id === 'claude'
-                ? '支持文字、图片与 Neo 网页工具；本地文件和命令工具不可用'
+                ? '支持文字、图片、Skill 与 Neo；本地文件只读，命令工具不可用'
                 : id === 'gemini'
                   ? '支持文本任务；本地文件和命令工具不可用'
                   : id === 'cursor'

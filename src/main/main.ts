@@ -35,6 +35,7 @@ import { FeishuConnector } from './feishu';
 import { TurnNotifications } from './notifications';
 import { Store } from './store';
 import {
+  addPreparedConversation,
   assertOpenConversation,
   defaultConversation,
   deleteConversationRecord,
@@ -43,6 +44,10 @@ import {
 } from './conversation-records';
 import { UsageStore } from './usage';
 import { managedCodexPath, OnboardingRuntime } from './onboarding';
+import { discoverSkills } from './skill-registry';
+import type { WorkspaceSkill, SkillUsage } from '../shared/skills';
+import { buildSkillContext, selectProviderSkills, selectSkills } from './skill-injection';
+import { createAthenaMcpEndpoint, type AthenaMcpEndpoint } from './athena-mcp-endpoint';
 import type { ModelOption } from '../shared/usage';
 import {
   endedOutcome,
@@ -138,9 +143,22 @@ let active:
 /** Turn errors already shown inline on their message; they must not also raise a toast. */
 const inlineFailures = new WeakSet<object>();
 let startingTurn = false;
-let preparingTurn: { cancelled: boolean; conversationId: string } | undefined;
+let preparingTurn:
+  | { cancelled: boolean; conversationId: string; done: Promise<void>; resolve: () => void }
+  | undefined;
+let externalTurnQueue = Promise.resolve();
+
+function queueExternalTurn<T>(operation: () => Promise<T>): Promise<T> {
+  const result = externalTurnQueue.then(operation, operation);
+  externalTurnQueue = result.then(
+    () => undefined,
+    () => undefined,
+  );
+  return result;
+}
 let lastFrame: BrowserFrame | undefined;
 let demoServer: Server | undefined;
+let athenaMcp: AthenaMcpEndpoint | undefined;
 let demoUrl = '';
 const sessions = new Map<string, AgentSession>();
 const readOnlyBrowserTools = new Set([
@@ -233,7 +251,10 @@ function releaseConversation(id: string) {
   if (selectedConversationId === id) selectedConversationId = undefined;
   if (codexConnection.conversationId === id) connectionState({ status: 'idle' });
 }
-async function listModels(refresh = false, conversation?: Conversation) {
+async function listModels(
+  refresh = false,
+  conversation?: Pick<Conversation, 'agent' | 'workspace'>,
+) {
   assertTaskEnvironment();
   if (conversation?.workspace && conversation.workspace !== store.data.settings.workspace)
     throw new Error('此对话属于其他工作目录');
@@ -471,8 +492,8 @@ function getConversation(id: unknown): Conversation {
   if (!conversation) throw new Error('找不到这个对话');
   return conversation;
 }
-function createConversation(title = '新对话', agent = store.data.settings.agent) {
-  const conversation: Conversation = {
+function newConversation(title: string, agent: AgentId): Conversation {
+  return {
     id: randomUUID(),
     title,
     agent,
@@ -480,6 +501,9 @@ function createConversation(title = '新对话', agent = store.data.settings.age
     messages: [],
     workspace: store.data.settings.workspace,
   };
+}
+function createConversation(title = '新对话', agent = store.data.settings.agent) {
+  const conversation = newConversation(title, agent);
   store.data.conversations.unshift(conversation);
   store.schedule();
   emit({ type: 'conversation:updated', conversation });
@@ -701,14 +725,68 @@ async function runTurn(
   readonly = false,
   selectedElement?: ElementRef,
   mentions?: ElementMention[],
+  selectedSkillNames: string[] = [],
+  selectedSkillExpectations: Array<{
+    name: string;
+    providerId: string;
+    providerPath?: string;
+    contentHash?: string;
+  }> = [],
+  displayText?: string,
   images: ImageAttachment[] = [],
+  onAccepted?: () => void,
 ) {
   assertTaskEnvironment();
   if (active || startingTurn) throw new Error('当前任务还在进行，请先停止或等待完成');
   assertOpenConversation(store.data.conversations, conversation);
+  const info = selectableAgent(conversationAgent(conversation));
+  if (selectedSkillExpectations.some((item) => item.providerId !== info.id))
+    throw new Error('Skill provider 已改变，请刷新后重试');
+  const providerNames = selectedSkillExpectations.map((item) => item.name);
+  const localSkillNames = selectedSkillNames.filter((name) => !providerNames.includes(name));
+  const providerSkills = providerNames.length
+    ? await getSession(conversation, info.path, toolsFor(conversation)).discoverProviderSkills()
+    : undefined;
+  if (
+    providerSkills &&
+    (providerSkills.provider.id !== info.id || providerSkills.status !== 'ready')
+  )
+    throw new Error('Provider Skill 当前不可用，请刷新后重试');
+  const selectedProviderSkills = selectProviderSkills(
+    providerSkills?.skills ?? [],
+    providerNames,
+    info.id,
+    selectedSkillExpectations,
+  );
+  const rescannedSkills = localSkillNames.length
+    ? (await discoverSkills(store.data.settings.workspace)).skills
+    : [];
+  const selectedSkills = [
+    ...selectSkills(rescannedSkills, localSkillNames),
+    ...selectedProviderSkills,
+  ];
+  const skillContext = buildSkillContext(selectSkills(rescannedSkills, localSkillNames));
+  const skillUsage: SkillUsage[] = selectedSkills.map((skill) => ({
+    name: skill.name,
+    source: skill.source,
+    ...('provider' in skill
+      ? { provider: skill.provider, providerPath: skill.providerPath }
+      : { packagePath: skill.packagePath }),
+    contentHash: skill.contentHash,
+    injectionStatus: 'provider' in skill ? 'degraded' : 'injected',
+    ...('provider' in skill
+      ? { capabilityDegradation: 'CLI 未提供 Provider Skill 已应用确认。' }
+      : {}),
+  }));
+  if (selectedSkills.length) {
+    conversation.selectedSkills = selectedSkills.map((skill) => skill.name);
+    conversation.skillUsage = skillUsage;
+  }
+  // Skill discovery waits on the CLI; another task may have started meanwhile.
+  if (active || startingTurn) throw new Error('当前任务还在进行，请先停止或等待完成');
+  assertOpenConversation(store.data.conversations, conversation);
   if (conversation.workspace && conversation.workspace !== store.data.settings.workspace)
     throw new Error('这段对话属于另一个工作目录。请切换回原目录，或新建对话。');
-  const info = selectableAgent(conversationAgent(conversation));
   if (!supportsBrowser(info.id) && selectedElement)
     throw new Error('当前 CLI 尚未接通网页元素工具，请移除元素上下文后发送');
   if (images.length && !supportsImages(info.id))
@@ -724,6 +802,7 @@ async function runTurn(
     id: randomUUID(),
     role: 'user',
     text,
+    ...(displayText === undefined ? {} : { displayText }),
     createdAt: Date.now(),
     status: 'done',
     source,
@@ -743,14 +822,25 @@ async function runTurn(
   conversation.messages.push(user, assistant);
   conversation.updatedAt = Date.now();
   startingTurn = true;
-  const preparing = { cancelled: false, conversationId: conversation.id };
+  let resolvePreparation!: () => void;
+  const preparationDone = new Promise<void>((resolve) => {
+    resolvePreparation = resolve;
+  });
+  const preparing = {
+    cancelled: false,
+    conversationId: conversation.id,
+    done: preparationDone,
+    resolve: resolvePreparation,
+  };
   preparingTurn = preparing;
   await store.save().catch((error) => {
     startingTurn = false;
+    preparing.resolve();
     preparingTurn = undefined;
     throw error;
   });
   emit({ type: 'conversation:updated', conversation });
+  onAccepted?.();
   usage.start(assistant.id, info.id, modelSelection?.model);
   saveUsage();
   try {
@@ -764,6 +854,7 @@ async function runTurn(
   }
   if (preparing.cancelled) {
     startingTurn = false;
+    preparing.resolve();
     preparingTurn = undefined;
     assistant.status = 'error';
     assistant.text = '任务已停止';
@@ -779,6 +870,7 @@ async function runTurn(
     session = getSession(conversation, info.path, toolsFor(conversation), visibleHistory);
   } catch (error) {
     startingTurn = false;
+    preparing.resolve();
     preparingTurn = undefined;
     assistant.status = 'error';
     assistant.failure = error instanceof Error ? error.message : 'CLI 会话配置无效';
@@ -809,6 +901,7 @@ async function runTurn(
     nativeApprovals: new Map(),
   };
   startingTurn = false;
+  preparing.resolve();
   preparingTurn = undefined;
   try {
     if (!session.isReady) connectionState({ status: 'starting', conversationId: conversation.id });
@@ -831,9 +924,10 @@ async function runTurn(
     }
     await session.send(
       text,
-      [context, nativeContext].filter(Boolean).join('\n\n') || undefined,
+      [context, skillContext, nativeContext].filter(Boolean).join('\n\n') || undefined,
       selectedElement,
       modelSelection,
+      selectedProviderSkills,
       images,
     );
     const unresolved = neo.unresolvedResult(assistant.id);
@@ -889,7 +983,11 @@ async function runTurn(
   }
 }
 async function stopTurn() {
-  if (preparingTurn) preparingTurn.cancelled = true;
+  const preparing = preparingTurn;
+  if (preparing) {
+    preparing.cancelled = true;
+    await preparing.done;
+  }
   if (!active) return;
   active.cancelled = true;
   const turn = active;
@@ -985,18 +1083,32 @@ function requestNativeApproval(request: Omit<ApprovalRequest, 'id' | 'kind'>): P
     });
   });
 }
-function startTurn(
+async function startTurn(
   conversation: Conversation,
   text: string,
   context?: string,
   readonly = false,
   selectedElement?: ElementRef,
   mentions?: ElementMention[],
+  selectedSkillNames: string[] = [],
+  selectedSkillExpectations: Array<{
+    name: string;
+    providerId: string;
+    providerPath?: string;
+    contentHash?: string;
+  }> = [],
+  displayText?: string,
   images?: ImageAttachment[],
 ) {
   assertTaskEnvironment();
   if (active || startingTurn) throw new Error('当前任务还在进行，请先停止');
   assertOpenConversation(store.data.conversations, conversation);
+  let accepted = false;
+  let accept!: () => void, reject!: (error: unknown) => void;
+  const acceptance = new Promise<void>((resolve, fail) => {
+    accept = resolve;
+    reject = fail;
+  });
   void runTurn(
     conversation,
     text,
@@ -1005,12 +1117,24 @@ function startTurn(
     readonly,
     selectedElement,
     mentions,
+    selectedSkillNames,
+    selectedSkillExpectations,
+    displayText,
     images,
+    () => {
+      accepted = true;
+      accept();
+    },
   ).catch((error) => {
+    if (!accepted) {
+      reject(error);
+      return;
+    }
     // A failure that already sits on its message is not repeated as a toast.
     if (!(error && typeof error === 'object' && inlineFailures.has(error)))
       notice(error instanceof Error ? error.message : '任务失败', 'error');
   });
+  await acceptance;
   return { conversationId: conversation.id };
 }
 async function handleFeishuMessage(message: FeishuMessage) {
@@ -1134,11 +1258,37 @@ async function createBrowserRuntime(binaryPath?: string) {
   });
 }
 async function snapshot(): Promise<AppSnapshot> {
+  let providerSkillDiscovery: AppSnapshot['providerSkillDiscovery'];
+  try {
+    // Discovery starts the CLI: not before the environment it runs in is settled.
+    assertTaskEnvironment();
+    if (onboarding?.blocksTasks) throw new Error('运行环境尚未准备好');
+    const conversation = selectedConversation();
+    const info = selectableAgent(conversationAgent(conversation));
+    providerSkillDiscovery = await getSession(
+      conversation,
+      info.path,
+      toolsFor(conversation),
+    ).discoverProviderSkills();
+  } catch {
+    providerSkillDiscovery = {
+      status: 'unavailable',
+      source: 'provider',
+      provider: { id: store.data.settings.agent, name: store.data.settings.agent },
+      skills: [],
+      diagnostics: [
+        { code: 'capability-degraded', message: 'Provider Skill discovery is unavailable.' },
+      ],
+    };
+  }
   return {
     onboarding: onboarding?.getState(),
     localUser: { name: localUserName },
     settings: store.data.settings,
     agents,
+    skills: (await discoverSkills(store.data.settings.workspace)).skills,
+    providerSkills: providerSkillDiscovery.skills,
+    providerSkillDiscovery,
     codexConnection,
     browser: browser.getState(),
     neo: neo?.getState(),
@@ -1147,6 +1297,7 @@ async function snapshot(): Promise<AppSnapshot> {
     recordings: store.data.recordings,
     browserFrame: lastFrame,
     pendingRequests: active?.requests ?? [],
+    pendingExternalConnections: athenaMcp?.connections() ?? [],
     share: sharing?.getState(),
   };
 }
@@ -1194,6 +1345,18 @@ async function invoke(action: string, payload: unknown) {
       default:
         throw new Error('首次准备操作不受支持');
     }
+  }
+  if (action === 'mcp:connection') {
+    if (!athenaMcp) throw new Error('MCP endpoint unavailable');
+    const data = record(payload);
+    const id = string(data.id, 100);
+    const operation = data.operation;
+    if (operation === 'approve') await athenaMcp.approve(id);
+    else if (operation === 'reject') await athenaMcp.reject(id);
+    else if (operation === 'revoke') await athenaMcp.revoke(id);
+    else throw new Error('连接操作无效');
+    emit({ type: 'mcp:connections', connections: athenaMcp.connections() });
+    return athenaMcp.connections();
   }
   if (action.startsWith('browser:'))
     return sharing
@@ -1247,6 +1410,16 @@ async function invoke(action: string, payload: unknown) {
         void prepareConversation(selectedConversation()).catch(() => {});
       }
       return agents;
+    }
+    case 'skills:list': {
+      assertTaskEnvironment();
+      const data = payload === undefined ? {} : record(payload);
+      const conversation =
+        data.conversationId === undefined
+          ? selectedConversation()
+          : getConversation(data.conversationId);
+      const info = selectableAgent(conversationAgent(conversation));
+      return getSession(conversation, info.path!, toolsFor(conversation)).discoverProviderSkills();
     }
     case 'models:list': {
       const data = payload === undefined ? {} : record(payload);
@@ -1342,9 +1515,9 @@ async function invoke(action: string, payload: unknown) {
     case 'conversation:send': {
       assertTaskEnvironment();
       const data = record(payload);
-      const text = string(data.text);
+      const taskText = string(data.text);
       const images = parseImages(data.images);
-      if (!text.trim() && !images.length) throw new Error('请输入任务或粘贴图片');
+      if (!taskText.trim() && !images.length) throw new Error('请输入任务或粘贴图片');
       const existing = data.id ? getConversation(data.id) : undefined;
       const agent = existing ? conversationAgent(existing) : store.data.settings.agent;
       if (images.length && !supportsImages(agent))
@@ -1355,16 +1528,52 @@ async function invoke(action: string, payload: unknown) {
         if (decoded.isEmpty() || width * height > 40_000_000)
           throw new Error('图片无法读取或像素过多，请缩小图片后重试');
       }
+      if (data.selectedSkills !== undefined && !Array.isArray(data.selectedSkills))
+        throw new Error('Skill 选择格式不正确');
+      if (Array.isArray(data.selectedSkills) && data.selectedSkills.length > 3)
+        throw new Error('最多选择 3 个 Skill');
+      if (data.selectedSkillMetadata !== undefined && !Array.isArray(data.selectedSkillMetadata))
+        throw new Error('Skill 元数据格式不正确');
       const context = data.context === undefined ? undefined : string(data.context, 60_000);
+      const selectedSkillNames: string[] = Array.isArray(data.selectedSkills)
+        ? data.selectedSkills.map((name: unknown) => string(name, 100))
+        : [];
+      const selectedSkillExpectations = Array.isArray(data.selectedSkillMetadata)
+        ? data.selectedSkillMetadata.map((item: unknown) => {
+            const value = record(item);
+            return {
+              name: string(value.name, 100),
+              providerId: string(value.providerId, 100),
+              ...(value.providerPath === undefined
+                ? {}
+                : { providerPath: string(value.providerPath, 4000) }),
+              ...(value.contentHash === undefined
+                ? {}
+                : { contentHash: string(value.contentHash, 512) }),
+            };
+          })
+        : [];
+      const explicitSkills = selectedSkillNames;
+      if (explicitSkills.length > 3) throw new Error('最多选择 3 个 Skill');
+      if (
+        new Set(selectedSkillExpectations.map((item) => item.name)).size !==
+          selectedSkillExpectations.length ||
+        selectedSkillExpectations.some((item) => !explicitSkills.includes(item.name))
+      )
+        throw new Error('Skill 元数据与选择不匹配');
+      const displayText = data.displayText === undefined ? undefined : string(data.displayText);
       const { mentions, elementContext, first } = await resolveMentions(data.mentions);
       const conversation = existing ?? createConversation();
       return startTurn(
         conversation,
-        text,
+        taskText,
         [context, elementContext].filter(Boolean).join('\n\n') || undefined,
         false,
         first,
         mentions,
+        explicitSkills,
+        selectedSkillExpectations,
+        displayText,
         images,
       );
     }
@@ -1602,7 +1811,7 @@ async function invoke(action: string, payload: unknown) {
       return restored;
     }
     case 'feishu:disconnect':
-      await feishu.disconnect();
+      await feishu.disconnectUser();
       return feishu.getState();
     case 'app:copy':
       return copyText(clipboard, record(payload).text);
@@ -1781,6 +1990,91 @@ async function launch() {
     onState: (state) => emit({ type: 'onboarding:state', state }),
   });
   await onboarding.initialize();
+  athenaMcp = createAthenaMcpEndpoint({
+    getState: () => ({
+      workspace: {
+        path: store.data.settings.workspace,
+        mode: store.data.settings.workspaceMode === 'personal' ? 'personal' : 'project',
+      },
+      conversations: store.data.conversations.map((conversation) => ({
+        id: conversation.id,
+        title: conversation.title,
+        status: conversation.messages.some((message) => message.status === 'streaming')
+          ? 'running'
+          : 'idle',
+        agent: conversation.agent,
+        model: conversation.modelSelection?.model,
+      })),
+      providers: agents.map((agent) => ({ id: agent.id, available: agent.available })),
+      capabilities: [
+        'workspace.read',
+        'conversation.read',
+        'thread.read',
+        'thread.start',
+        'thread.send',
+        'thread.stop',
+      ],
+    }),
+    threads: {
+      start: async (input) => {
+        assertTaskEnvironment();
+        if (active || startingTurn) throw new Error('当前已有任务正在运行');
+        // The request is checked in full first: a refused one must not leave a conversation behind.
+        if (input.workspace && input.workspace !== store.data.settings.workspace)
+          throw new Error('工作目录不匹配');
+        const agent = selectableAgent(
+          (input.agent as AgentId | undefined) ?? store.data.settings.agent,
+        ).id;
+        const conversation = newConversation('外部线程', agent);
+        if (input.model !== undefined) {
+          const catalog = await listModels(false, conversation);
+          const option = catalog.find((item) => item.model === input.model);
+          if (!option) throw new Error('所选模型不在 CLI 可用列表中，请刷新后重试');
+          conversation.modelSelection = { model: option.model, effort: option.defaultEffort };
+        }
+        if (active || startingTurn) throw new Error('当前已有任务正在运行');
+        const previous = selectedConversationId;
+        try {
+          await addPreparedConversation(store, conversation, () =>
+            prepareConversation(conversation),
+          );
+        } catch (error) {
+          // The CLI could not be prepared: the conversation was never shown and is not kept.
+          releaseConversation(conversation.id);
+          selectedConversationId = previous;
+          throw error;
+        }
+        emit({ type: 'conversation:updated', conversation });
+        return {
+          conversationId: conversation.id,
+          agentSessionId: sessions.get(conversation.id)?.sessionId,
+        };
+      },
+      send: async (thread, text) => {
+        const conversation = getConversation(thread.conversationId);
+        await queueExternalTurn(() =>
+          runTurn(conversation, text, undefined, 'desktop', false, undefined),
+        );
+      },
+      stop: async (thread) => {
+        // A stop arrives while turns are running. Only this thread's own turn is interrupted.
+        if (runningConversationId() !== thread.conversationId) return;
+        await stopTurn();
+      },
+    },
+    onConnections: (connections) => emit({ type: 'mcp:connections', connections }),
+    configuration: {
+      read: async (kind) => {
+        if (kind === 'skills') return (await discoverSkills(store.data.settings.workspace)).skills;
+        if (kind === 'workspace') return store.data.settings;
+        return {};
+      },
+      write: async () => {
+        throw new Error('configuration_write_not_supported');
+      },
+    },
+  });
+  await athenaMcp.start();
   feishu = new FeishuConnector({
     storageDir: path.join(app.getPath('userData'), 'feishu'),
     deferRestore: true,
@@ -1826,7 +2120,7 @@ async function launch() {
   const restoreConnections = () => {
     if (restorationStarted) return;
     restorationStarted = true;
-    void feishu.retryRestore().catch(() => {});
+    void feishu.restoreConnection().catch(() => {});
   };
   // A visible, focused host gives macOS a place to present any Keychain authorization.
   window.once('focus', restoreConnections);
@@ -1856,6 +2150,7 @@ app.on('before-quit', (event) => {
   browser?.revokeAgentControl();
   demoServer?.close();
   void Promise.allSettled([
+    athenaMcp?.stop(),
     onboarding?.dispose(),
     sharing
       ?.stop()

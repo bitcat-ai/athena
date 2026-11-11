@@ -17,8 +17,9 @@ const directory = await mkdtemp(path.join(root, '.runtime/native-browser-interop
 const profile = path.join(directory, 'profile');
 const workspace = path.join(directory, 'workspace');
 const piDirectory = path.join(directory, 'pi');
+const claudeDirectory = path.join(directory, 'claude');
 const output = path.resolve('test-results/native-browser-interop');
-for (const value of [profile, workspace, piDirectory, output])
+for (const value of [profile, workspace, piDirectory, claudeDirectory, output])
   await mkdir(value, { recursive: true });
 const requests: Array<{ cli: string; step: number; tool?: string }> = [];
 const fixtureErrors: string[] = [];
@@ -276,6 +277,8 @@ Object.assign(env, {
   ANTHROPIC_API_KEY: 'fixture-only',
   ANTHROPIC_AUTH_TOKEN: 'fixture-only',
   PI_CODING_AGENT_DIR: piDirectory,
+  CLAUDE_CONFIG_DIR: claudeDirectory,
+  CLAUDE_CODE_PLUGIN_CACHE_DIR: path.join(claudeDirectory, 'plugins'),
   CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
   XDG_CONFIG_HOME: path.join(directory, 'opencode-config'),
   XDG_DATA_HOME: path.join(directory, 'opencode-data'),
@@ -303,6 +306,8 @@ for (const key of [
   'CLAUDE_CODE_USE_BEDROCK',
   'CLAUDE_CODE_USE_VERTEX',
   'CLAUDE_CODE_USE_FOUNDRY',
+  'CLAUDE_CODE_OAUTH_TOKEN',
+  'CLAUDE_CODE_SESSION_ACCESS_TOKEN',
 ])
   delete env[key];
 let app: ElectronApplication | undefined;

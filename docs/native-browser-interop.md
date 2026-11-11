@@ -15,14 +15,14 @@
 | 执行器 | 工具接入 | 约束 |
 | --- | --- | --- |
 | Codex | app-server 动态工具 | 沿用已有任务权限与恢复流程 |
-| Claude | 每轮私有 stdio MCP，转入认证的本机回环服务 | 仅载入 Athena 的固定工具清单；内置文件与命令工具关闭 |
+| Claude | 每轮私有 stdio MCP，转入认证的本机回环服务 | 只读 Read/Glob/Grep/Skill 与固定 Athena 工具清单；写入和命令工具关闭 |
 | Pi | 显式 Athena 扩展注册宿主工具 | 宿主工具使用 Neo 权限链，本地文件/命令继续逐项审批 |
 | OpenCode 1.x | ACP 的私有会话 MCP | 保留 CLI 原有拒绝规则，文件与命令逐次审批；宿主工具继续经过 Neo 权限链 |
 | Gemini / Cursor | 未接入宿主 Neo | 保持当前限制，不伪装成具备网页执行能力 |
 
 `src/main/agent-mcp.ts` 负责固定工具清单、认证、请求去重、结果转码和调用记录。CLI 不能替换宿主管理的 Neo 会话。临时凭据不进入提示词和项目配置；Claude 结束一轮即关闭连接、删除临时配置，Pi 的操作只在匹配的活动回合中接受。
 
-Claude 在没有就绪浏览器时保持原文本模式。Neo 模式使用 `--restricted --tools ""`、严格 MCP 配置和精确工具许可；原生 init 必须报告 Athena 已连接且工具完整。`alwaysLoad` 与 `ENABLE_TOOL_SEARCH=false` 保证工具在首轮可见。这一模式不加载用户/项目 settings 文件，认证及 Provider 依赖 CLI 身份和进程环境，应用明确选择的模型继续传入；额外的用户设置不能假定仍生效。
+Claude 保留新主线的只读 Read/Glob/Grep/Skill，并使用严格 MCP 配置接入 Neo。只读工具和精确 Athena 工具名合并在同一条 allowedTools 许可中；写入、命令、子任务和内联 shell 仍禁用。原生 init 必须报告 Athena 已连接且工具完整；`alwaysLoad` 与 `ENABLE_TOOL_SEARCH=false` 保证首轮可见。认证及 Provider 沿用 CLI 配置，原生联调使用独立 CLAUDE_CONFIG_DIR 和本地模型服务。
 
 Pi 的扩展握手和浏览器工具握手均需成功。扩展自行生成 RPC 序号，避免不同回合复用模型调用编号时被误判为重复传输。
 

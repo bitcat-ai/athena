@@ -4,6 +4,8 @@ import path from 'node:path';
 import { AgentMcpServer } from './agent-mcp';
 import { cliEnvironment, readCliOutput } from './agent-process';
 import { discoverOpenCodeModels } from './cli-models';
+import { unavailableProviderSkillDiscovery } from '../shared/provider-skills';
+import type { ProviderSkill } from '../shared/skills';
 import { browserToolsFingerprint } from './agents';
 import {
   selectedElementContext,
@@ -342,13 +344,21 @@ export class OpenCodeSession implements AgentSession {
       this.metadata.signal,
     );
   }
+  async discoverProviderSkills() {
+    return unavailableProviderSkillDiscovery(
+      { id: 'opencode', name: 'OpenCode' },
+      '当前 OpenCode 会话未启用原生 Skill，可使用工作区 Skill。',
+    );
+  }
   async send(
     prompt: string,
     context?: string,
     selected?: ElementRef,
     selection?: ModelSelection,
+    skills: ProviderSkill[] = [],
     images?: ImageAttachment[],
   ) {
+    if (skills.length) throw new Error('当前 OpenCode 会话未启用原生 Skill');
     if (this.active || this.bridge.pendingCalls) throw new Error('请等待当前 OpenCode 任务完成');
     const attachments = parseImages(images);
     if (

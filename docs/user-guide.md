@@ -60,7 +60,7 @@ Athena 会检查本机 Codex CLI 的官方稳定版。发现新版本时会显�
 
 点击当前运行时旁的「切换」可选择其他可用 CLI。尚未绑定 CLI 会话的空对话直接切换；有消息或已建立原生会话时新建对话，原记录保留，新对话默认配置不变。任务运行中不可切换。
 
-当前源码支持 Codex、Claude Code、Pi、OpenCode 使用右侧 Neo 的观察、导航、点击、填写、元素预览与撤销能力。Pi 的本地文件和命令工具仍逐项请求确认；Claude 的内置文件和命令工具保持关闭。Gemini、Cursor 尚未接通 Neo，Cursor 继续限只读任务；OpenCode 1.x 通过 ACP 接入，文件和命令操作需逐次确认。各 CLI 的真实模型验收及限制见 [本机 CLI 适配](mainstream-cli-support.md)。
+当前源码支持 Codex、Claude Code、Pi、OpenCode 使用右侧 Neo 的观察、导航、点击、填写、元素预览与撤销能力。Pi 的本地文件和命令工具仍逐项请求确认；Claude 保留原生只读文件与 Skill 工具，写入和命令工具关闭。Gemini、Cursor 尚未接通 Neo，Cursor 继续限只读任务；OpenCode 1.x 通过 ACP 接入，文件和命令操作需逐次确认。各 CLI 的真实模型验收及限制见 [本机 CLI 适配](mainstream-cli-support.md)。
 
 输入框的 Agent 按钮显示当前服务图标，悬停可查看名称。连接状态对应当前工作目录里的这段对话。同一对话就绪后会复用现有 CLI 会话；打开模型选择器无需重新登录。即使某段历史会话无法恢复，也可以单独刷新模型目录。
 

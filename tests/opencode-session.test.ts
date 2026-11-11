@@ -125,7 +125,9 @@ test('OpenCode native configuration, explicit model selection, image transport a
     assert.deepEqual(Object.keys(policy.agent.permission.read), ['*', '*.env', 'safe.env']);
     assert.ok(policy.args.includes('--pure'));
     assert.ok((await f.requests()).every((r) => r.method !== 'session/prompt'));
-    await f.session.send('task', undefined, undefined, { model: 'fixture/two' }, [testImage]);
+    await f.session.send('task', undefined, undefined, { model: 'fixture/two' }, undefined, [
+      testImage,
+    ]);
     assert.equal(f.session.sessionId, 'ses_fixture');
     assert.equal(
       f.events

@@ -43,6 +43,8 @@
   --danger-soft-foreground: #a62b2b;
   --warning: #8a6215;
   --warning-foreground: #fff;
+  --skill-reference-foreground: #2563eb;
+  --skill-reference-background: #eff6ff;
   --brand-blue: #2563eb;
   --brand-teal: #0d9488;
   --radius: 0.5rem;
@@ -82,6 +84,8 @@
 :root.dark,
 :root[data-theme='dark'] {
   color-scheme: dark;
+  --skill-reference-foreground: #93c5fd;
+  --skill-reference-background: #1e304c;
   --background: #111;
   --foreground: #f5f5f5;
   --surface: #1c1c1c;

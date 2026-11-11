@@ -208,7 +208,9 @@ try {
   );
   assert.ok(events.some((e) => e.type === 'complete' && e.text?.includes('BROWSER_OK')));
   phase = 'image';
-  await session.send('Check this attachment.', undefined, undefined, undefined, [testImage]);
+  await session.send('Check this attachment.', undefined, undefined, undefined, undefined, [
+    testImage,
+  ]);
   assert.ok(events.some((e) => e.type === 'complete' && e.text?.includes('IMAGE_OK')));
   phase = 'stop';
   const pending = assert.rejects(session.send('Keep responding.'), /停止/);

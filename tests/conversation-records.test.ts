@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { Store } from '../src/main/store';
 import {
+  addPreparedConversation,
   assertOpenConversation,
   defaultConversation,
   deleteConversationRecord,
@@ -153,6 +154,39 @@ test('a change that cannot be saved is undone and reported', async () => {
     await setConversationArchived(failing, 'one', false, undefined).catch(() => {});
     assert.equal(store.data.conversations[0].archivedAt, 42, 'a failed restore keeps the mark');
     assert.equal((await reload()).data.conversations[0].archivedAt, 42);
+  });
+});
+
+test('a new conversation is recorded once its preparation succeeds', async () => {
+  await withStore(async (store, reload) => {
+    const fresh = conversation('external', { messages: [] });
+    let seen: Conversation | undefined;
+    const added = await addPreparedConversation(store, fresh, async () => {
+      seen = store.data.conversations[0];
+    });
+    assert.equal(added, fresh);
+    assert.equal(seen, fresh, 'preparation runs against the recorded conversation');
+    assert.deepEqual(
+      (await reload()).data.conversations.map((item) => item.id),
+      ['external', 'one', 'two'],
+    );
+  });
+});
+
+test('a conversation whose preparation fails leaves no record behind', async () => {
+  await withStore(async (store, reload) => {
+    const before = structuredClone(store.data.conversations);
+    await assert.rejects(
+      () =>
+        addPreparedConversation(store, conversation('external', { messages: [] }), async () => {
+          // Other work may write the store to disk while the CLI is still starting.
+          await store.save();
+          throw new Error('CLI 无法启动');
+        }),
+      /CLI 无法启动/,
+    );
+    assert.deepEqual(store.data.conversations, before);
+    assert.deepEqual((await reload()).data.conversations, before, 'nothing is left on disk');
   });
 });
 

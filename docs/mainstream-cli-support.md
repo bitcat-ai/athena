@@ -15,7 +15,7 @@
 | CLI          | 当前执行模式                              | 最近验收结果                                                                                                                                                                  |
 | ------------ | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Codex        | app-server、本地审批和 Neo 网页工具       | 真实 Electron 的回复、重启续聊、停止、草稿保留、停止后续聊通过；另完成真实 Neo 本地表单填写与保存核对                                                                         |
-| Claude Code  | stream-json 文字/图片与宿主 Neo；内置工具关闭 | 适配器的真实回复、流式、原生续聊、停止通过；真实 Electron 四轮对话和重启/停止后续聊通过，取得消息模型和用量证据                                                               |
+| Claude Code  | stream-json；原生 Skill 与只读 Read/Glob/Grep，宿主 Neo | 适配器的真实回复、流式、原生续聊、停止通过；真实 Electron 四轮对话和重启/停止后续聊通过，取得消息模型和用量证据。新增 Skill 发现、原生 slash 分发、Read 成功/失败仅通过模拟 CLI 测试，尚未进行真实模型或跨 main/UI 的 Claude Skill 验收 |
 | Pi           | RPC 与宿主 Neo；本地工具逐项审批     | Pi 1.0.2 适配器通过独立 API 的真实 write/read、审批、流式、原生续聊、用量/模型证据和停止。此前远端 UI 检查遇到续聊发送禁用；2026-11-11 本地原生 Electron + Neo 连续两轮通过，未复现该现象，远端完整 UI 脚本尚未重验 |
 | Cursor Agent | Ask 只读；启动前逐次确认工作目录          | 2026.11.05-86047df 登录完成；真实服务返回周额度上限，回复/续聊/停止尚未验收。实际 Electron 的目录审批拒绝、等待审批时停止通过，未启动模型会话                                 |
 | Gemini CLI   | stream-json；admin deny 策略禁用原生工具  | 0.67.0 原生目录、经目录确认后的本地 API 回复、续聊与流式停止通过；Google 个人版登录此前被服务端拒绝，远端模型验收仍未完成                                                        |
@@ -55,13 +55,15 @@ OpenCode 1.18.15 的 ACP 配置目录也通过上述 Electron 检查，当前本
 
 `src/main/pi-session.ts` 按请求 ID 关联 JSONL 响应，仅按 LF 分帧，以 `agent_settled` 判断最终完成，而非 `prompt` 响应或 `agent_end`。不展示 thinking、原始 stderr 或凭据诊断。工具参数超过可完整审阅的审批长度时直接阻止，不允许只看截断命令就批准执行。
 
-启动前核对 CLI 支持的隔离参数。旧版使用 `--no-mcp`；Pi 1.x 在 help 明确说明 `--no-extensions` 禁用内置扩展时，通过该选项关闭内置 MCP。无法确认隔离方式时拒绝启动。只加载 Athena 的 `resources/cli/pi-permissions.mjs` 授权扩展，关闭扩展/MCP/技能/模板的自动加载，不改写用户配置；保留 CLI 原生 Provider、模型与登录配置。依赖额外 Pi 扩展注册的 Provider 不在当前受限加载模式的支持范围。启动时没有授权扩展握手则拒绝执行。打包后的扩展由宿主复制到应用私有 runtime 目录，外部 Pi 进程不直接读取 Electron asar。
+启动前核对 CLI 支持的隔离参数。旧版使用 `--no-mcp`；Pi 1.x 在 help 明确说明 `--no-extensions` 禁用内置扩展时，通过该选项关闭内置 MCP。无法确认隔离方式时拒绝启动。只加载 Athena 的 `resources/cli/pi-permissions.mjs` 授权扩展，关闭扩展/MCP/模板的自动加载，保留原生 Skill 发现与显式调用，不改写用户配置；保留 CLI 原生 Provider、模型与登录配置。依赖额外 Pi 扩展注册的 Provider 不在当前受限加载模式的支持范围。启动时没有授权扩展握手则拒绝执行。打包后的扩展由宿主复制到应用私有 runtime 目录，外部 Pi 进程不直接读取 Electron asar。
 
 恢复使用原始 Pi session ID。停止先清除队列再 abort；无法确认停止时终止当前进程组，即使 leader 先退出仍清理后代。没有通过给模型发送“请停止”来模拟停止。
 
 ### Claude / Gemini / Cursor
 
 协议依据、参数限制、事件与安全模式见 [CLI 协议依据](cli-protocol-evidence.md)。Gemini 和 Cursor 启动模型任务前均通过宿主逐次确认工作目录；只有批准后传入 Gemini 的 `--skip-trust` 或 Cursor 的 `--trust`。拒绝与等待时停止均不启动 CLI，迟到确认无效。Gemini 原生文件与命令仍由 admin deny 策略禁用。
+
+Claude 保留原生只读 Read/Glob/Grep/Skill，关闭 hooks 和 Skill 内联 shell；严格 MCP 配置仅允许 Athena 工具。
 
 这些适配器不是通用 MCP 接入，不是 OS 沙箱，也不提供未实现的原生审批或人工提问桥接。收到无法处理的原生工具审批请求会报错并停止。Cursor 的工作目录信任单独由宿主确认：只在用户批准本次任务后加 `--trust`，保持 `--mode ask`，不启用 `--force`、`--yolo` 或自动批准 MCP。拒绝或等待时停止均不启动 CLI，迟到审批失效。额度/认证错误仅显示固定分类，不转发原始 stderr。
 
@@ -79,7 +81,7 @@ OpenCode 1.18.15 的 ACP 配置目录也通过上述 Electron 检查，当前本
 
 `AgentMcpServer` 只绑定回环地址，使用随机凭据和固定工具清单，所有操作回到当前 `AgentSession` → `NeoBrowserRuntime` → `BrowserRuntime`。敏感操作仍由宿主审批；停止、会话切换、共享控制权和未知结果恢复不会由 CLI 绕过。
 
-- Claude：浏览器未就绪时保持原文本模式；加载 Neo 时使用 `--restricted --tools ""`，只允许临时配置中的 Athena MCP 工具，并核对原生 init 实际加载的工具清单。`alwaysLoad` 和关闭延迟工具搜索保证首轮可见。受限模式不加载用户/项目 settings 文件；认证及 Provider 依赖 CLI 身份和进程环境，应用明确选择的模型继续通过参数传入。不要假定用户 settings 中的额外配置仍然生效。
+- Claude：原生只读 Read/Glob/Grep/Skill 与精确 Athena MCP 工具共同可用；写入、命令、子任务、hooks 和 Skill 内联 shell 仍禁用。严格 MCP 配置、alwaysLoad 和关闭延迟工具搜索保证 Neo 清单完整且首轮可见。原生测试使用独立 CLI 配置目录，避免日常配置覆盖本地模型替身。
 - Pi：只通过已有的授权扩展注册这些精确工具名。Neo 操作交给宿主权限链；本地文件和命令仍逐次请求批准。授权扩展和浏览器工具均需握手就绪。
 - 对话链接在右侧新标签打开。元素编辑的 `insert` 支持受约束的嵌套 HTML、继续修改和撤销；新引用、页面观察与检查点同属当前任务。
 
