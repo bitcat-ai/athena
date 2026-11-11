@@ -229,6 +229,8 @@ export class FeishuConnector {
   private receiptQueue: Promise<void> = Promise.resolve();
   private commandQueue: Promise<void> = Promise.resolve();
   private tasks = new Set<Promise<void>>();
+  private connectionDesired = false;
+  private intentWrites = Promise.resolve();
 
   constructor(
     private options: FeishuConnectorOptions,
@@ -272,6 +274,7 @@ export class FeishuConnector {
         this.credentials = snapshot.credentials;
         this.inbox = snapshot.inbox;
         this.recoveryWarning = snapshot.recoveryWarning;
+        this.connectionDesired = snapshot.connectionDesired;
         this.restored = true;
         this.update({
           status: 'disconnected',
@@ -313,6 +316,57 @@ export class FeishuConnector {
     else if (this.restoreError) throw this.restoreError;
     else await this.retryRestore();
     this.assertActive();
+  }
+
+  /** 启动恢复只遵循已保存的连接意愿，不恢复授权、配对或历史待决任务。 */
+  async restoreConnection(): Promise<FeishuState> {
+    const generation = this.generation;
+    await this.ensureRestored();
+    if (generation === this.generation && this.connectionDesired && this.credentials?.binding)
+      return this.connect(false);
+    return this.getState();
+  }
+
+  /** 用户断开先立即撤销连接，再可靠保存意愿；退出清理不调用此方法。 */
+  async disconnectUser(): Promise<FeishuState> {
+    this.disconnect();
+    await this.ensureRestored();
+    if (this.credentials) await this.saveConnectionIntent(false, this.credentials.appId);
+    return this.getState();
+  }
+
+  private saveConnectionIntent(desired: boolean, appId: string) {
+    this.connectionDesired = desired;
+    const operation = this.intentWrites
+      .catch(() => {})
+      .then(async () => {
+        const filename = path.join(this.options.storageDir, 'connection-intent.json');
+        await mkdir(this.options.storageDir, { recursive: true, mode: 0o700 });
+        const temporary = `${filename}.${randomBytes(6).toString('hex')}.tmp`;
+        const file = await open(temporary, 'wx', 0o600);
+        try {
+          await file.writeFile(JSON.stringify({ version: 1, appId, desired }), 'utf8');
+          await file.sync();
+        } finally {
+          await file.close();
+        }
+        try {
+          await rename(temporary, filename);
+          const directory = await open(this.options.storageDir, 'r');
+          try {
+            await directory.sync();
+          } finally {
+            await directory.close();
+          }
+        } finally {
+          await unlink(temporary).catch(() => {});
+        }
+      });
+    this.intentWrites = operation;
+    return operation.catch(() => {
+      this.update({ error: '飞书连接意愿保存失败，请检查本地存储后重试。' });
+      throw new Error('飞书连接意愿保存失败');
+    });
   }
 
   async beginSetup(): Promise<FeishuState> {
@@ -449,6 +503,7 @@ export class FeishuConnector {
     await this.receiptQueue;
     await this.saveCredentials(credentials);
     this.credentials = credentials;
+    await this.saveConnectionIntent(false, credentials.appId);
     this.update({
       appId: credentials.appId,
       paired: false,
@@ -458,13 +513,25 @@ export class FeishuConnector {
     return this.getState();
   }
 
-  async connect(): Promise<FeishuState> {
+  async connect(remember = true): Promise<FeishuState> {
     await this.ensureRestored();
     this.assertActive();
-    if (this.transport && (this.state.status === 'connected' || this.state.status === 'connecting'))
-      return this.getState();
+    const connecting = () =>
+      this.transport && (this.state.status === 'connected' || this.state.status === 'connecting');
+    if (connecting()) return this.getState();
     if (!this.credentials) throw new Error('请先创建或配置 Athena 专用飞书机器人。');
     const credentials = this.credentials;
+    if (remember) {
+      // 意愿落盘前不接管现有连接：保存失败时原连接仍可自行重连；期间被断开或改配置则取消。
+      const requested = this.generation;
+      await this.saveConnectionIntent(true, credentials.appId);
+      if (this.disposed) throw new Error('飞书连接已取消');
+      if (requested !== this.generation) {
+        // 并发的连接请求已先行建立连接，共用其结果。
+        if (connecting() && this.credentials === credentials) return this.getState();
+        throw new Error('飞书连接已取消');
+      }
+    }
     const generation = ++this.generation;
     this.transport?.close();
     if (!credentials.binding) this.newPairingCode();
@@ -725,6 +792,7 @@ export class FeishuConnector {
     this.disconnect();
     this.disposed = true;
     await this.receiptQueue;
+    await this.intentWrites.catch(() => {});
     // Agent work belongs to the caller; do not keep app shutdown waiting on it.
   }
 
@@ -800,8 +868,8 @@ export class FeishuConnector {
         throw new Error('Invalid inbox item');
       const key = this.itemKey(entry.appId, entry.message.id);
       if (`${key}.enc` !== filename) throw new Error('Invalid inbox key');
-      if (entry.status === 'running') {
-        // Keep restore read-only: a crashed task stays failed in memory and is never replayed.
+      if (entry.status === 'running' || entry.status === 'pending') {
+        // 恢复保持只读：历史待决任务与配对回复均不在连接后重放。
         entry.status = 'failed';
         recoveryWarning =
           '有上次中断的飞书任务，未自动重试。请先检查执行结果，再决定是否重新发送。';
@@ -809,7 +877,17 @@ export class FeishuConnector {
       inbox.set(key, entry);
     }
     checkCurrent();
-    return { credentials, inbox, recoveryWarning };
+    // 连接意愿只是明文偏好：缺失、损坏或不可读时回到手动连接，不连带判定加密配置恢复失败。
+    const intent = await readFile(
+      path.join(this.options.storageDir, 'connection-intent.json'),
+      'utf8',
+    )
+      .then((text) => JSON.parse(text) as Record<string, unknown> | null)
+      .catch(() => null);
+    checkCurrent();
+    const connectionDesired =
+      intent?.version === 1 && intent.appId === credentials?.appId && intent.desired === true;
+    return { credentials, inbox, recoveryWarning, connectionDesired };
   }
 
   private async writeEncrypted(filename: string, value: unknown) {
