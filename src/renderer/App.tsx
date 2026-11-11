@@ -1,20 +1,34 @@
 import { TurnIcon } from './HoverIcons';
 import { ActionButton, Icon } from './ui';
-import { Button, Card, Dropdown, Label, Description, Input, Tabs, Tooltip } from '@heroui/react';
+import {
+  Button,
+  Card,
+  Dropdown,
+  Label,
+  Description,
+  Input,
+  Menu,
+  Tabs,
+  Tooltip,
+} from '@heroui/react';
 import {
   Sidebar,
   PromptInput,
   PromptSuggestion,
-  ChatAttachment,
   ChatMessage as ProChatMessage,
   ChatMessageActions,
+  TokenFieldValue,
+  usePromptInputTokens,
 } from '@heroui-pro/react';
 import athenaLogo from './assets/brand/athena-profile.png';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
+  Archive01Icon,
   ArrowDown01Icon,
+  ArrowLeft01Icon,
   ArrowUpRight01Icon,
   ChartNoAxesCombinedIcon,
   CircleIcon,
@@ -42,28 +56,46 @@ import {
 } from '@hugeicons-pro/core-stroke-rounded';
 import { BrowserPane } from './BrowserPane';
 import { ElementInspector } from './ElementInspector';
-import { ExecutionPanel } from './ExecutionPanel';
+import { AssistantTurn } from './AssistantTurn';
+import { PhaseGlyph } from './PhaseGlyph';
 import { ModelPicker } from './ModelPicker';
+import { SkillPicker } from './SkillPicker';
 import { UsagePanel } from './UsagePanel';
 import { AgentIcon } from './AgentIcon';
-import { RequestPanel } from './RequestPanel';
-import { flushSync } from 'react-dom';
-import { WorkbenchNotices, requestKey, useCodexUpdate } from './WorkbenchNotices';
+import { WorkbenchNotices, useCodexUpdate } from './WorkbenchNotices';
 import { ConversationSearch } from './ConversationSearch';
+import { ConversationMenu, DeleteConversationDialog } from './ConversationMenu';
 import { UserMenu, WebContextMenu, useAppearance } from './HomeMenus';
 import { Onboarding } from './Onboarding';
 import type { OnboardingState } from '../shared/onboarding';
+import {
+  copyableText,
+  displayPhase,
+  endedOutcome,
+  phaseGlyph,
+  phaseText,
+  replyText,
+  requestKey,
+  type GlyphKind,
+} from '../shared/phase';
 import {
   agentModelSelection,
   conversationAgent,
   conversationModelSelection,
   supportsBrowser,
 } from '../shared/agents';
-import type { ProviderSkill, WorkspaceSkill } from '../shared/skills';
-import { SkillComposer } from './SkillComposer';
-import type { JSONContent } from '@tiptap/core';
-import { emptySkillDocument, buildSkillSubmission, serializeSkillDocument, skillDocumentFromText } from './skill-composer-document';
+import type { ProviderSkill } from '../shared/skills';
+import {
+  MAX_SKILLS,
+  buildSkillSubmission,
+  isSkillToken,
+  referencedSkills,
+  slashSkillOptions,
+  type ComposerToken,
+} from './composer-skills';
+import { isArchived } from '../shared/types';
 import type {
+  ElementMention,
   AgentInfo,
   AppSnapshot,
   AppEvent,
@@ -83,89 +115,6 @@ import type {
   NativeNeoState,
 } from '../shared/types';
 
-function SkillPicker({
-  skills,
-  selected,
-  disabled,
-  onChange,
-}: {
-  skills: Array<WorkspaceSkill | ProviderSkill>;
-  selected: string[];
-  disabled: boolean;
-  onChange: (names: string[]) => void;
-}) {
-  return (
-    <div aria-label="选择任务 Skill" role="group" className="skill-picker">
-      {skills.filter((skill) => 'availability' in skill ? skill.availability === 'usable' : skill.userInvocable).map((skill) => {
-        const active = selected.includes(skill.name);
-        return (
-          <button
-            key={skill.name}
-            type="button"
-            aria-pressed={active}
-            disabled={disabled || (!active && selected.length >= 3)}
-            title={skill.description}
-            onClick={() => onChange(active ? selected.filter((name) => name !== skill.name) : [...selected, skill.name])}
-          >
-            {skill.name}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-export function SkillSlashMenu({
-  draft,
-  skills,
-  selected,
-  activeIndex,
-  onActiveChange,
-  onSelect,
-  discoveryStatus,
-}: {
-  draft: string;
-  skills: Array<WorkspaceSkill | ProviderSkill>;
-  selected: string[];
-  activeIndex: number;
-  onActiveChange: (index: number) => void;
-  onSelect: (skill: WorkspaceSkill | ProviderSkill) => void;
-  discoveryStatus?: AppSnapshot['providerSkillDiscovery'];
-}) {
-  const usable = skills.filter((skill) => ('availability' in skill ? skill.availability === 'usable' : skill.userInvocable));
-  const query = draft.slice(draft.lastIndexOf('/') + 1).toLowerCase();
-  const options = usable.filter((skill) => skill.name.toLowerCase().startsWith(query));
-  if (!draft.startsWith('/') || draft.includes('\n') || !draft.slice(draft.lastIndexOf(' ') + 1).startsWith('/')) return null;
-  const statusText = discoveryStatus && discoveryStatus.status !== 'ready'
-    ? discoveryStatus.diagnostics[0]?.message ?? (discoveryStatus.status === 'unsupported' ? '当前 Agent 不支持 Skill 发现' : '当前 Agent 暂无可用 Skill')
-    : '当前工作区没有可用 Skill';
-  return (
-    <div
-      id="skill-slash-menu"
-      className="skill-slash-menu"
-      role="listbox"
-      aria-label="可用 Skill"
-      aria-activedescendant={options[activeIndex] ? `skill-option-${options[activeIndex].name}` : undefined}
-    >
-      {options.length ? options.map((skill, index) => {
-        const duplicate = selected.includes(skill.name);
-        return (
-          <button
-            key={skill.name}
-            id={`skill-option-${skill.name}`}
-            type="button"
-            role="option"
-            aria-selected={index === activeIndex}
-            disabled={duplicate || selected.length >= 3}
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={() => onSelect(skill)}
-          ><strong>/{skill.name}</strong><span>{skill.description}</span></button>
-        );
-      }) : <p role="status">{usable.length ? '没有匹配的 Skill' : statusText}</p>}
-    </div>
-  );
-}
-
 const emptyBrowser: BrowserState = {
   status: 'starting',
   engine: 'browseros',
@@ -180,6 +129,13 @@ const emptyBrowser: BrowserState = {
 };
 const emptyFeishu: FeishuState = { status: 'disconnected', paired: false };
 type SettingsTab = 'agent' | 'browser' | 'feishu';
+/** A conversation's state as the sidebar repeats it. */
+interface Echo {
+  glyph: GlyphKind;
+  still?: boolean;
+  label: string;
+}
+const waitingEchoes = { approval: '等你批准', input: '等你回答', handoff: '等你操作' };
 function basename(value: string) {
   return value.split(/[\\/]/).filter(Boolean).pop() || '工作目录';
 }
@@ -200,11 +156,54 @@ function errorText(error: unknown) {
 
 function sessionLabel(info?: AgentInfo, connection?: CodexConnectionState) {
   if (!info?.available) return info?.path ? '启动异常' : '未检测到';
-  if (info.authentication === 'missing') return '需要登录';
   if (connection?.status === 'starting') return '初始化中';
   if (connection?.status === 'ready') return '已就绪';
   if (connection?.status === 'error') return '连接失败';
-  return info.authentication === 'ready' ? '已登录' : '登录待验证';
+  return '已检测';
+}
+
+interface DraftEntry {
+  text: string;
+  field?: TokenFieldValue<ComposerToken>;
+}
+const EMPTY_FIELD = new TokenFieldValue<ComposerToken>([]);
+const TOKEN_PATTERN = /^\[ele(\d+)\]$/;
+function fieldFromText(text: string) {
+  if (!text) return EMPTY_FIELD;
+  return new TokenFieldValue<ComposerToken>([{ type: 'text', text }]).withCaretPosition({
+    index: 0,
+    offset: text.length,
+  });
+}
+/** Next unused [eleN] label; numbers are never reused within a draft so the agent's replies stay unambiguous. */
+function nextToken(field: TokenFieldValue<ComposerToken>) {
+  const used = field.segments.map((segment) =>
+    segment.type === 'token' ? Number(TOKEN_PATTERN.exec(segment.text)?.[1] ?? 0) : 0,
+  );
+  return `[ele${Math.max(0, ...used) + 1}]`;
+}
+/** Renders a sent message with its [eleN] tokens shown as element chips. */
+function MentionText({ text, mentions }: { text: string; mentions?: ElementMention[] }) {
+  if (!mentions?.length) return <>{text}</>;
+  return (
+    <>
+      {text.split(/(\[ele\d+\])/g).map((part, index) => {
+        const mention = mentions.find((item) => item.token === part);
+        return mention ? (
+          <span
+            key={index}
+            className="element-chip"
+            title={`${mention.tag}${mention.role ? ` · ${mention.role}` : ''}`}
+          >
+            <Icon icon={Cursor01Icon} size={11} aria-hidden />
+            {mention.name}
+          </span>
+        ) : (
+          <Fragment key={index}>{part}</Fragment>
+        );
+      })}
+    </>
+  );
 }
 
 export default function App() {
@@ -237,11 +236,12 @@ export default function App() {
   const [feishu, setFeishu] = useState<FeishuState>(emptyFeishu);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedId, setConversationId] = useState<string>();
+  const [showArchived, setShowArchived] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Conversation>();
+  const [deleting, setDeleting] = useState(false);
   const [recordings, setRecordings] = useState<Recording[]>([]);
   const [liveSteps, setLiveSteps] = useState<RecordedStep[]>([]);
-  const [drafts, setDrafts] = useState<Record<string, { doc: JSONContent }>>({});
-  const [selected, setSelected] = useState<ElementRef>();
-  const [selectedEdit, setSelectedEdit] = useState<ElementEdit>();
+  const [drafts, setDrafts] = useState<Record<string, DraftEntry>>({});
   const [sidebar, setSidebar] = useState(true);
   const [browserVisible, setBrowserVisible] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
@@ -251,17 +251,13 @@ export default function App() {
   const [resizingBrowser, setResizingBrowser] = useState(false);
   const [settingsTab, setSettingsTab] = useState<SettingsTab | null>(null);
   const [agentMenu, setAgentMenu] = useState(false);
-  const [slashSkillMenuOpen, setSlashSkillMenuOpen] = useState(false);
-  const [statusLabel, setStatusLabel] = useState('已接收任务');
   const [pendingRequests, setPendingRequests] = useState<PendingAgentRequest[]>([]);
-  const [reviewKey, setReviewKey] = useState<string>();
   const [toast, setToast] = useState<{ text: string; error: boolean; copiedMessageId?: string }>();
   const [refreshing, setRefreshing] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [manualAppId, setManualAppId] = useState('');
   const [manualSecret, setManualSecret] = useState('');
   const composer = useRef<HTMLDivElement>(null);
-  const composerEditor = useRef<import('@tiptap/core').Editor | null>(null);
   const panels = useRef<HTMLDivElement>(null);
   const resizeStart = useRef<{ x: number; width: number } | undefined>(undefined);
   const revealBrowserOnTool = useRef(true);
@@ -273,37 +269,107 @@ export default function App() {
   const workspaceConversations = conversations.filter(
     (item) => !item.workspace || item.workspace === settings.workspace,
   );
+  const openConversations = workspaceConversations.filter((item) => !isArchived(item));
+  const archivedConversations = workspaceConversations.filter(isArchived);
+  // 没有已归档的对话时回到对话列表，之后再归档也不会被带进归档列表。
+  if (showArchived && !archivedConversations.length) setShowArchived(false);
   const conversation = workspaceConversations.find((item) => item.id === selectedId);
   const conversationId = conversation?.id;
+  const archived = Boolean(conversation && isArchived(conversation));
   const conversationRequests = pendingRequests.filter(
     (item) => item.conversationId === conversationId,
   );
-  const panelRequest =
-    conversationRequests.find((item) => requestKey(item) === reviewKey) ?? conversationRequests[0];
   const draftKey = JSON.stringify([settings.workspace, conversationId]);
   const draftEntry = drafts[draftKey];
-  const draftDocument = draftEntry?.doc ?? emptySkillDocument;
-  const draft = serializeSkillDocument(draftDocument).displayText;
+  const draft = draftEntry?.text ?? '';
   // Before the first send there is no host ID. Keep that draft reachable after navigation.
-  const unsentDocument = drafts[JSON.stringify([settings.workspace, null])]?.doc;
-  const sidebarConversations = unsentDocument && serializeSkillDocument(unsentDocument).displayText
-    ? [{ id: undefined, title: '未发送草稿', messages: [] }, ...workspaceConversations]
-    : workspaceConversations;
-  const setDraftDocument = (doc: JSONContent) => {
-    if (doc !== draftEntry?.doc) setDrafts((previous) => ({ ...previous, [draftKey]: { doc } }));
+  const sidebarConversations = showArchived
+    ? archivedConversations
+    : drafts[JSON.stringify([settings.workspace, null])]?.text
+      ? [{ id: undefined, title: '未发送草稿', messages: [] }, ...openConversations]
+      : openConversations;
+  const field = draftEntry?.field ?? EMPTY_FIELD;
+  const storeField = (next: TokenFieldValue<ComposerToken>) =>
+    setDrafts((previous) => ({ ...previous, [draftKey]: { text: next.toString(), field: next } }));
+  // Page elements live in the draft as inline [eleN] tokens and need no trigger character.
+  // A slash at the start of a word opens the Skills of the current CLI.
+  const tokens = usePromptInputTokens<ComposerToken>({
+    triggers: ['/'],
+    value: field,
+    onChange: storeField,
+  });
+  const skillMenuOpen = tokens.isOpen && tokens.trigger === '/';
+  const skillOptions = slashSkillOptions(providerSkills, providerSkillDiscovery, tokens.query);
+  const chosenSkills = new Set([...selectedSkills, ...referencedSkills(field.segments)]);
+  const skillMenuVisible = skillMenuOpen && skillOptions.length > 0;
+  const skillUnavailable = (name: string) =>
+    chosenSkills.has(name) || chosenSkills.size >= MAX_SKILLS;
+  const insertSkill = (name: string) =>
+    tokens.insertToken(`/${name}`, { value: { skill: name } });
+  const focusComposer = () => tokens.inputRef.current?.focus();
+  const setDraft = (text: string) => storeField(fieldFromText(text));
+  /** Elements referenced by tokens in the current draft, in order of appearance. */
+  const mentions = field.segments.flatMap((segment) =>
+    segment.type === 'token' && segment.value && !isSkillToken(segment.value)
+      ? [segment.value]
+      : [],
+  );
+  /**
+   * Embeds a page element in the draft as an inline token at the caret. Picking the same element
+   * again reuses its token, and an inspector edit attaches to that token instead of adding one.
+   */
+  const insertMention = (element: ElementRef, edit?: ElementEdit, surround?: [string, string]) => {
+    const existing = mentions.find((item) => item.ref === element.ref);
+    const index = field.segments.findIndex(
+      (segment) => segment.type === 'token' && segment.value === existing,
+    );
+    const current = existing ? field.segments[index] : undefined;
+    const previousEdit = existing?.edit;
+    const token = current?.text ?? nextToken(field);
+    const carried = edit ?? previousEdit;
+    const mention: ElementMention = {
+      token,
+      ref: element.ref,
+      tag: element.tag,
+      name: element.name || element.tag,
+      role: element.role,
+      ...(carried ? { edit: carried } : {}),
+    };
+    let next: TokenFieldValue<ComposerToken>;
+    if (current) {
+      next = field.replaceRangeWithSegments(
+        { index, offset: 0 },
+        { index, offset: current.text.length },
+        [{ type: 'token', text: token, value: mention }],
+        false,
+      );
+    } else if (surround && !field.toString().trim()) {
+      next = new TokenFieldValue<ComposerToken>([
+        { type: 'text', text: surround[0] },
+        { type: 'token', text: token, value: mention },
+        { type: 'text', text: surround[1] },
+      ]).withCaretPosition({ index: 2, offset: surround[1].length });
+    } else {
+      const at = field.caretPosition;
+      next = field.replaceRangeWithSegments(
+        at,
+        at,
+        [
+          { type: 'token', text: token, value: mention },
+          { type: 'text', text: ' ' },
+        ],
+        false,
+      );
+      const inserted = next.segments.findIndex(
+        (segment) => segment.type === 'token' && segment.value === mention,
+      );
+      if (inserted >= 0) next = next.withCaretPosition({ index: inserted + 1, offset: 1 });
+    }
+    storeField(next);
+    focusComposer();
   };
-  const setDraft = (text: string) => setDraftDocument(skillDocumentFromText(text,
-    providerSkills.filter((skill) => skill.userInvocable).map((skill) => skill.name)));
-  const currentSkillNames = serializeSkillDocument(draftDocument).names;
-  const selectedProviderSkillMetadata = [...new Set([...selectedSkills, ...currentSkillNames])]
-    .map((name) => providerSkills.find((skill) => skill.name === name))
-    .filter((skill): skill is ProviderSkill => Boolean(skill))
-    .map((skill) => ({
-      name: skill.name,
-      providerId: skill.provider.id,
-      ...(skill.providerPath === undefined ? {} : { providerPath: skill.providerPath }),
-      ...(skill.contentHash === undefined ? {} : { contentHash: skill.contentHash }),
-    }));
+  const insertMentionRef = useRef(insertMention);
+  insertMentionRef.current = insertMention;
   const currentView = {
     id: conversationId,
     workspace: settings.workspace,
@@ -321,6 +387,44 @@ export default function App() {
     item.messages.some((message) => message.status === 'streaming'),
   );
   const currentBusy = messages.some((message) => message.status === 'streaming');
+  /** Phase of the turn a conversation is on, read by every surface outside the message list. */
+  const turnPhase = (item: { id?: string; messages: ChatMessage[] }) => {
+    const requests = pendingRequests.filter((pending) => pending.conversationId === item.id);
+    // An open request points at its own turn; otherwise the latest turn speaks for the conversation.
+    const message =
+      item.messages.find((message) => message.id === requests[0]?.messageId) ??
+      item.messages.at(-1);
+    if (message?.role !== 'assistant') return undefined;
+    return displayPhase(
+      message,
+      requests.filter((pending) => pending.messageId === message.id),
+    );
+  };
+  const currentPhase = conversation && turnPhase(conversation);
+  const runningConversation = conversations.find((item) => {
+    const phase = turnPhase(item);
+    return phase && phase.kind !== 'ended';
+  });
+  const runningPhase = runningConversation && {
+    phase: turnPhase(runningConversation)!,
+    agent: conversationAgent(runningConversation),
+  };
+  /** What the sidebar says about a conversation: nothing unless it is running or needs a look. */
+  const conversationEcho = (item: {
+    id?: string;
+    messages: ChatMessage[];
+    agent?: Conversation['agent'];
+  }): Echo | undefined => {
+    const phase = turnPhase(item);
+    if (!phase) return undefined;
+    if (phase.kind === 'waiting')
+      return { glyph: 'wait', still: true, label: waitingEchoes[phase.request] };
+    if (phase.kind !== 'ended')
+      return { glyph: phaseGlyph(phase, conversationAgent(item)), label: '运行中' };
+    return phase.outcome === 'blocked'
+      ? { glyph: 'warn', still: true, label: '待核对' }
+      : undefined;
+  };
   const currentAgentId = conversation ? conversationAgent(conversation) : settings.agent;
   const currentAgent = agents.find((item) => item.id === currentAgentId);
   const defaultAgent = agents.find((item) => item.id === settings.agent);
@@ -375,6 +479,20 @@ export default function App() {
     },
     [showToast],
   );
+  /** 只复制消息正文；页面上下文、工具事件和执行记录不进入剪贴板。 */
+  const copyMessage = useCallback(
+    async (message: ChatMessage) => {
+      const label = message.role === 'user' ? '消息' : '回答';
+      try {
+        const copied = await window.workbench.invoke<boolean>('app:copy', { text: message.text });
+        if (copied !== true) throw new Error('没有收到复制结果，请重试');
+        showToast(`已复制${label}`, false, message.id);
+      } catch (error) {
+        showToast(`复制${label}失败：${errorText(error)}`, true);
+      }
+    },
+    [showToast],
+  );
   const upsert = useCallback((next: Conversation) => {
     setConversations((previous) =>
       [next, ...previous.filter((item) => item.id !== next.id)].sort(
@@ -383,7 +501,11 @@ export default function App() {
     );
     const view = viewedConversation.current;
     // A host-created conversation must not take over an unsent first draft.
-    if (!view.hasDraft && (!next.workspace || next.workspace === view.workspace))
+    if (
+      !isArchived(next) &&
+      !view.hasDraft &&
+      (!next.workspace || next.workspace === view.workspace)
+    )
       setConversationId((previous) => previous ?? next.id);
   }, []);
   useEffect(() => {
@@ -437,8 +559,8 @@ export default function App() {
             : previous.map((step) => (step.id === event.step.id ? event.step : step));
         });
       else if (event.type === 'browser:selected') {
-        setSelected(event.element);
-        setSelectedEdit(undefined);
+        // Picking embeds the element in the draft; edits and undos only re-report it.
+        if (event.reason !== 'edit') insertMentionRef.current(event.element);
       } else if (event.type === 'recording:saved')
         setRecordings((previous) => [
           event.recording,
@@ -463,17 +585,6 @@ export default function App() {
           setBrowserVisible(true);
           revealBrowserOnTool.current = false;
         }
-        if (agentEvent.type === 'status')
-          setStatusLabel(
-            agentEvent.label ||
-              {
-                starting: '正在连接本机 Agent',
-                thinking: '准备下一步',
-                working: '执行已安排的动作',
-                waiting: '等待你的确认',
-                idle: '',
-              }[agentEvent.status],
-          );
         if (agentEvent.type === 'approval' || agentEvent.type === 'user-input') {
           const pending: PendingAgentRequest =
             agentEvent.type === 'approval'
@@ -536,6 +647,9 @@ export default function App() {
               if (ti < 0) message.tools.push(agentEvent.call);
               else message.tools[ti] = agentEvent.call;
             }
+            if (agentEvent.type === 'status' && agentEvent.phase) message.phase = agentEvent.phase;
+            if (agentEvent.type === 'request-resolved' && agentEvent.resolved)
+              message.requests = [...(message.requests ?? []), agentEvent.resolved];
             if (agentEvent.type === 'complete') {
               message.status = 'done';
               if (!message.text && agentEvent.text) message.text = agentEvent.text;
@@ -544,6 +658,14 @@ export default function App() {
               message.status = 'error';
               message.failure = agentEvent.message;
               if (!message.text) message.text = agentEvent.message;
+            }
+            if (agentEvent.type === 'complete' || agentEvent.type === 'error') {
+              // The host settles the outcome; without one the turn is judged from its own record.
+              message.phase = agentEvent.phase ?? {
+                kind: 'ended',
+                outcome: endedOutcome(message, message.phase?.kind === 'stopping'),
+              };
+              message.endedAt = Date.now();
             }
             updated[index] = message;
             return { ...item, messages: updated };
@@ -582,7 +704,9 @@ export default function App() {
         setConversations(snapshot.conversations);
         setRecordings(snapshot.recordings);
         const scoped = snapshot.conversations.filter(
-          (item) => !item.workspace || item.workspace === snapshot.settings.workspace,
+          (item) =>
+            !isArchived(item) &&
+            (!item.workspace || item.workspace === snapshot.settings.workspace),
         );
         setConversationId(
           scoped.find((item) => item.id === snapshot.codexConnection?.conversationId)?.id ??
@@ -610,6 +734,7 @@ export default function App() {
       !workbenchMounted ||
       onboardingVisible ||
       !conversationId ||
+      archived ||
       !currentAgent?.supported
     )
       return;
@@ -631,12 +756,17 @@ export default function App() {
     workbenchMounted,
     onboardingVisible,
     conversationId,
+    archived,
     currentAgentId,
     currentAgent?.supported,
     settings.workspace,
     currentSelection?.model,
     currentSelection?.effort,
   ]);
+  useEffect(() => {
+    // 打开一段未归档的对话时，侧栏回到对话列表。
+    if (conversationId && !archived) setShowArchived(false);
+  }, [conversationId, archived]);
   useEffect(() => {
     if (!loaded || !workbenchMounted || onboardingVisible) return;
     // Match the existing effect cancellation pattern: old conversation responses
@@ -659,16 +789,12 @@ export default function App() {
         }
       });
     return () => { disposed = true; };
-  }, [loaded, workbenchMounted, onboardingVisible, conversationId, currentAgentId, settings.workspace, slashSkillMenuOpen]);
+  }, [loaded, workbenchMounted, onboardingVisible, conversationId, currentAgentId, settings.workspace, skillMenuOpen]);
   useEffect(() => {
     if (!onboardingVisible && !settingsTab && !showUsage && stickToBottom.current)
       scroll.current?.scrollTo({ top: scroll.current.scrollHeight, behavior: 'instant' });
   }, [messages, currentBusy, onboardingVisible, settingsTab, showUsage]);
 
-  useEffect(() => {
-    setSelected(undefined);
-    setSelectedEdit(undefined);
-  }, [browser.url, browser.activeTabId]);
   useEffect(() => {
     if (!browserVisible && browser.inspecting) void action('browser:inspect', { enabled: false });
   }, [browserVisible, browser.inspecting, action]);
@@ -681,11 +807,9 @@ export default function App() {
     return () => observer.disconnect();
   }, [workbenchMounted]);
 
+  // Picking an element keeps the conversation in front; the 元素 tab is opened on purpose.
   useEffect(() => {
-    if (browser.selectedElement?.ref) {
-      setInspectorOpen(true);
-      setBrowserVisible(true);
-    }
+    if (browser.selectedElement?.ref) setBrowserVisible(true);
   }, [browser.selectedElement?.ref]);
   useEffect(() => {
     if (browser.elementControls?.revision) {
@@ -693,20 +817,15 @@ export default function App() {
       setBrowserVisible(true);
     }
   }, [browser.elementControls?.revision]);
-  useEffect(() => {
-    if (editingElement && browser.selectedElement) setSelected(browser.selectedElement);
-  }, [editingElement, browser.selectedElement?.ref]);
   const requestSource = (element: ElementDetails, changes?: ElementEdit) => {
-    setSelected(element);
-    setSelectedEdit(changes);
     setInspectorOpen(false);
-    if (!draft.trim())
-      setDraft(
-        changes
-          ? '请将选中元素的页面预览改动应用到当前项目源码，并验证页面。'
-          : '请在当前项目源码中定位选中的元素，先说明对应组件和可修改的位置。',
-      );
-    composerEditor.current?.commands.focus();
+    insertMention(
+      element,
+      changes,
+      changes
+        ? ['请将 ', ' 的页面预览改动应用到当前项目源码，并验证页面。']
+        : ['请在当前项目源码中定位 ', ' ，先说明对应组件和可修改的位置。'],
+    );
   };
   const newConversation = useCallback(async () => {
     setShowUsage(false);
@@ -715,11 +834,9 @@ export default function App() {
     if (item) {
       upsert(item);
       setConversationId(item.id);
-      setSelected(undefined);
-      setSelectedEdit(undefined);
       setInspectorOpen(false);
       stickToBottom.current = true;
-      composerEditor.current?.commands.focus();
+      focusComposer();
     }
   }, [action, upsert]);
   useEffect(() => {
@@ -791,36 +908,30 @@ export default function App() {
       !loaded ||
       setupRequired ||
       !currentAgent?.available ||
-      !currentAgent.supported ||
-      currentAgent.authentication === 'missing'
+      !currentAgent.supported
     )
       return;
     setInspectorOpen(false);
-    const context = selected
-      ? `选中元素引用：${selected.ref}\n页面预览修改（仅当前DOM，不代表源码已保存）：${JSON.stringify(selectedEdit ?? null)}\n当前页面：${pageSource(browser.url)}\n页面效果调整直接使用元素编辑工具。仅当用户要求修改或保存到源码时，核实项目与页面的对应关系、定位真实组件并验证修改；不要把DOM预览当成源码修改。`
-      : undefined;
-    const submission = buildSkillSubmission(composerEditor.current?.getJSON() ?? draftDocument, selectedSkills);
-    if (submission.selectedSkills.some((name) => !providerSkills.some((skill) => skill.name === name && skill.userInvocable)) ||
-        (submission.selectedSkills.length > 0 && providerSkillDiscovery?.status !== 'ready')) {
-      setToast({ text: '引用的 Skill 当前不可用，请刷新或移除引用后重试。', error: true });
+    // Skills picked in the toolbar belong to the workspace and inline references to the CLI.
+    const submission = buildSkillSubmission({
+      segments: field.segments,
+      picked: selectedSkills,
+      localSkills: skills ?? [],
+      providerSkills,
+      discovery: providerSkillDiscovery,
+    });
+    if ('error' in submission) {
+      showToast(submission.error, true);
       return;
     }
+    // The host resolves each token against the live page and builds the element context.
     const result = await action<{ conversationId: string }>('conversation:send', {
       id: conversationId,
-      text: submission.text,
-      displayText: serializeSkillDocument(composerEditor.current?.getJSON() ?? draftDocument).displayText.trim(),
-      context,
-      selectedRef: selected?.ref,
-      selectedSkills: submission.selectedSkills,
-      selectedSkillMetadata: submission.selectedSkills
-        .map((name) => providerSkills.find((skill) => skill.name === name))
-        .filter((skill): skill is ProviderSkill => Boolean(skill))
-        .map((skill) => ({
-          name: skill.name,
-          providerId: skill.provider.id,
-          ...(skill.providerPath === undefined ? {} : { providerPath: skill.providerPath }),
-          ...(skill.contentHash === undefined ? {} : { contentHash: skill.contentHash }),
-        })),
+      ...submission,
+      context: mentions.length ? `当前页面：${pageSource(browser.url)}` : undefined,
+      mentions: mentions.length
+        ? mentions.map(({ token, ref, edit }) => ({ token, ref, ...(edit ? { edit } : {}) }))
+        : undefined,
     });
     if (!result?.conversationId) return;
     setDrafts((previous) => {
@@ -838,8 +949,6 @@ export default function App() {
     });
     if (viewedConversation.current.draftKey === draftKey) {
       setConversationId(result.conversationId);
-      setSelected((current) => (current === selected ? undefined : current));
-      setSelectedEdit((current) => (current === selectedEdit ? undefined : current));
       stickToBottom.current = true;
     }
   };
@@ -899,8 +1008,6 @@ export default function App() {
       setConversationId(result.id);
       setSelectedSkills([]);
       setProviderSkillDiscovery(undefined);
-      setSelected(undefined);
-      setSelectedEdit(undefined);
       setInspectorOpen(false);
     }
     setAgentMenu(false);
@@ -945,11 +1052,11 @@ export default function App() {
     }
     if (workspacePath !== settings.workspace) {
       setConversationId(
-        conversations.find((item) => !item.workspace || item.workspace === workspacePath)?.id,
+        conversations.find(
+          (item) => !isArchived(item) && (!item.workspace || item.workspace === workspacePath),
+        )?.id,
       );
       setDraft('');
-      setSelected(undefined);
-      setSelectedEdit(undefined);
       setInspectorOpen(false);
     }
     setWorkbenchMounted(true);
@@ -978,14 +1085,72 @@ export default function App() {
     setShowUsage(false);
     setSettingsTab(null);
     setConversationId(id);
-    setSelected(undefined);
-    setSelectedEdit(undefined);
     stickToBottom.current = true;
+  };
+  const rowKey = (item: { id?: string }) => item.id ?? 'unsent-draft';
+  /** 这一行离开列表后接手键盘焦点的相邻对话：优先下一行，其次上一行。 */
+  const neighborKey = (id: string) => {
+    const index = sidebarConversations.findIndex((item) => item.id === id);
+    const neighbor = sidebarConversations[index + 1] ?? sidebarConversations[index - 1];
+    return neighbor && rowKey(neighbor);
+  };
+  /** 被操作的那一行消失后焦点会落到页面之外：交给相邻的对话，没有就交给“新对话”。 */
+  const focusConversationRow = (key?: string) => {
+    if (document.activeElement !== document.body) return;
+    const nav = document.querySelector<HTMLElement>('.athena-sidebar');
+    const row = key
+      ? nav?.querySelector<HTMLElement>(
+          `.conversation-row[data-conversation="${CSS.escape(key)}"] .conversation-link`,
+        )
+      : undefined;
+    (
+      row ??
+      nav?.querySelector<HTMLElement>('.conversation-link') ??
+      nav?.querySelector<HTMLElement>('.new-conversation')
+    )?.focus();
+  };
+  /** 归档或恢复一段对话，以宿主保存后的结果为准。 */
+  const setArchived = async (item: Conversation, archive: boolean) => {
+    const next = neighborKey(item.id);
+    const result = await action<Conversation>('conversation:archive', {
+      conversationId: item.id,
+      archived: archive,
+    });
+    if (!result) return;
+    flushSync(() => {
+      upsert(result);
+      if (archive) setConversationId((previous) => (previous === item.id ? undefined : previous));
+      else {
+        setShowArchived(false);
+        selectConversation(result.id);
+      }
+    });
+    if (archive) focusConversationRow(next);
+    else focusComposer();
+    showToast(archive ? '已归档对话' : '已恢复对话');
+  };
+  /** 确认后才删除 Athena 保存的这段记录；宿主拒绝时这一行原样保留。 */
+  const confirmDelete = async () => {
+    if (!deleteTarget || deleting) return;
+    const { id } = deleteTarget;
+    const next = neighborKey(id);
+    setDeleting(true);
+    const deleted = await action<boolean>('conversation:delete', { conversationId: id });
+    flushSync(() => {
+      setDeleting(false);
+      setDeleteTarget(undefined);
+      if (!deleted) return;
+      setConversations((previous) => previous.filter((item) => item.id !== id));
+      setConversationId((previous) => (previous === id ? undefined : previous));
+    });
+    if (!deleted) return;
+    focusConversationRow(next);
+    showToast('已删除对话');
   };
   const showCurrentPage = () => {
     if (!draft.trim()) setDraft('检查当前页面的主要内容和可交互元素。');
     setBrowserVisible(true);
-    composerEditor.current?.commands.focus();
+    focusComposer();
   };
   const selectPageElement = () => {
     setBrowserVisible(true);
@@ -994,26 +1159,6 @@ export default function App() {
   const recordPage = () => {
     setBrowserVisible(true);
     void action('recording:start');
-  };
-  const reviewRequest = (pending: PendingAgentRequest) => {
-    flushSync(() => {
-      if (pending.conversationId !== conversationId) selectConversation(pending.conversationId);
-      else {
-        setSettingsTab(null);
-        setShowUsage(false);
-      }
-      setInspectorOpen(false);
-      setReviewKey(requestKey(pending));
-    });
-    const panel = composer.current?.parentElement?.querySelector<HTMLElement>('.request-panel');
-    if (!panel || panel.dataset.requestKey !== requestKey(pending)) return;
-    const target =
-      pending.kind === 'input'
-        ? (panel.querySelector<HTMLElement>('input:not(:disabled), textarea:not(:disabled)') ??
-          panel)
-        : panel;
-    target.focus({ preventScroll: true });
-    target.scrollIntoView({ block: 'nearest', container: 'nearest' } as ScrollIntoViewOptions);
   };
   const openLink = (url: string) => void action('shell:openExternal', { url });
 
@@ -1138,11 +1283,7 @@ export default function App() {
                       size="sm"
                       variant="secondary"
                       isDisabled={
-                        busy ||
-                        !agent.available ||
-                        !agent.supported ||
-                        agent.authentication === 'missing' ||
-                        agent.id === settings.agent
+                        busy || !agent.available || !agent.supported || agent.id === settings.agent
                       }
                       onPress={() => void selectDefaultAgent(agent.id)}
                     >
@@ -1153,11 +1294,7 @@ export default function App() {
                     >
                       {agent.available
                         ? agent.supported
-                          ? agent.authentication === 'missing'
-                            ? '需要登录'
-                            : agent.authentication === 'unknown'
-                              ? '登录待验证'
-                              : '可使用'
+                          ? '可使用'
                           : '已检测'
                         : agent.path
                           ? '启动异常'
@@ -1168,8 +1305,7 @@ export default function App() {
               </div>
               <div className="settings-note">
                 使用本机 CLI
-                已有的登录与模型服务配置。未安装或需要登录时，请在终端完成后刷新；不会自动改用其他
-                CLI。
+                已有的登录与模型服务配置。未安装时，请在终端安装后刷新；不会自动改用其他 CLI。
               </div>
               <Card className="settings-workspace-card">
                 <Card.Content>
@@ -1303,13 +1439,15 @@ export default function App() {
               ) : feishu.status === 'configuring' || feishu.setupQr ? (
                 <div className="feishu-setup">
                   {feishu.setupQr ? (
-                    <img src={feishu.setupQr} alt="飞书新应用授权二维码" />
+                    <img src={feishu.setupQr} alt="飞书应用授权二维码" />
                   ) : (
                     <Icon icon={Loading02Icon} size={32} className="spin" />
                   )}
                   <div>
                     <strong>使用飞书扫码</strong>
-                    <p>创建专用机器人，并确认接收私聊与回复消息的权限。</p>
+                    <p>
+                      选择已有机器人，并确认接收私聊与回复消息的权限。已有应用配置可能发生变化，请核对授权页后确认。
+                    </p>
                     <div className="button-row flex-wrap">
                       {feishu.setupUrl && (
                         <ActionButton
@@ -1324,7 +1462,7 @@ export default function App() {
                         className="text-button cancel-setup"
                         onPress={() => void action('feishu:disconnect')}
                       >
-                        取消创建
+                        取消授权
                       </ActionButton>
                     </div>
                   </div>
@@ -1342,7 +1480,7 @@ export default function App() {
                     </p>
                   ) : (
                     <>
-                      <p>向新机器人私聊发送下面这条消息：</p>
+                      <p>向已连接的机器人私聊发送下面这条消息：</p>
                       <ActionButton
                         className="pairing-code"
                         onPress={async () => {
@@ -1382,7 +1520,7 @@ export default function App() {
                   <p>
                     {feishu.appId
                       ? '连接已保存的机器人，继续从飞书发起任务。'
-                      : '创建一个属于这个工作区的机器人，从飞书发起网页任务。'}
+                      : '授权并选择已有机器人，从飞书发起网页任务。'}
                   </p>
                   <ActionButton
                     className="primary-button"
@@ -1396,11 +1534,11 @@ export default function App() {
                     ) : (
                       <Icon icon={PlusIcon} size={15} />
                     )}
-                    {feishu.appId ? '连接已保存的机器人' : '创建专用机器人'}
+                    {feishu.appId ? '连接已保存的机器人' : '授权并选择机器人'}
                   </ActionButton>
                   {feishu.appId && (
                     <ActionButton className="text-button" onPress={() => void setupFeishu()}>
-                      新建另一个机器人
+                      授权其他机器人
                     </ActionButton>
                   )}
                 </div>
@@ -1560,29 +1698,55 @@ export default function App() {
                 <span>{workspaceLabel}</span>
                 <Icon icon={ArrowDown01Icon} size={13} />
               </ActionButton>
-              <div className="sidebar-section-label">对话</div>
-              <Sidebar.Content className="conversation-list" aria-label="对话列表">
+              <div className="sidebar-section-row">
+                <div className="sidebar-section-label">{showArchived ? '已归档' : '对话'}</div>
+                {archivedConversations.length > 0 && (
+                  <ActionButton
+                    className="archived-toggle"
+                    onPress={() => setShowArchived((value) => !value)}
+                  >
+                    <Icon icon={showArchived ? ArrowLeft01Icon : Archive01Icon} size={14} />
+                    <span>{showArchived ? '返回对话列表' : '已归档'}</span>
+                  </ActionButton>
+                )}
+              </div>
+              <Sidebar.Content
+                className="conversation-list"
+                aria-label={showArchived ? '已归档的对话' : '对话列表'}
+              >
                 {sidebarConversations.length ? (
-                  sidebarConversations.map((item) => (
-                    <ActionButton
-                      key={item.id ?? 'unsent-draft'}
-                      className={`conversation-link ${item.id === conversationId && !showUsage && !settingsTab ? 'active' : ''}`}
-                      aria-current={
-                        item.id === conversationId && !showUsage && !settingsTab
-                          ? 'page'
-                          : undefined
-                      }
-                      onPress={() => selectConversation(item.id)}
-                      title={item.title}
-                    >
-                      {item.messages.some((message) => message.status === 'streaming') ? (
-                        <Icon icon={Loading02Icon} size={14} className="spin" />
-                      ) : (
-                        <Icon icon={MessageSquareIcon} size={14} />
-                      )}
-                      <span>{item.title}</span>
-                    </ActionButton>
-                  ))
+                  sidebarConversations.map((item) => {
+                    const current = item.id === conversationId && !showUsage && !settingsTab;
+                    const running = item.messages.some((message) => message.status === 'streaming');
+                    const echo = conversationEcho(item);
+                    return (
+                      <div
+                        key={rowKey(item)}
+                        className={`conversation-row ${current ? 'is-current' : ''}`}
+                        data-conversation={rowKey(item)}
+                      >
+                        <ActionButton
+                          className={`conversation-link ${current ? 'active' : ''}`}
+                          aria-current={current ? 'page' : undefined}
+                          onPress={() => selectConversation(item.id)}
+                          title={item.title}
+                        >
+                          {echo && <PhaseGlyph kind={echo.glyph} still={echo.still} />}
+                          <span>{item.title}</span>
+                          {echo && <em>{echo.label}</em>}
+                        </ActionButton>
+                        {item.id && (
+                          <ConversationMenu
+                            title={item.title}
+                            archived={isArchived(item)}
+                            running={running}
+                            onArchive={() => void setArchived(item, !isArchived(item))}
+                            onDelete={() => setDeleteTarget(item)}
+                          />
+                        )}
+                      </div>
+                    );
+                  })
                 ) : (
                   <p className="sidebar-empty">新的对话会保存在这里</p>
                 )}
@@ -1674,8 +1838,7 @@ export default function App() {
                           onPress={() => {
                             setShowUsage(false);
                             setBrowserVisible((value) => !value);
-                            if (browserVisible)
-                              composerEditor.current?.commands.focus();
+                            if (browserVisible) focusComposer();
                           }}
                         >
                           <Icon icon={PanelRightOpenIcon} size={16} />
@@ -1685,252 +1848,294 @@ export default function App() {
                     )}
                   </div>
                 </header>
-                <WorkbenchNotices
-                  requests={pendingRequests}
-                  conversations={conversations}
-                  update={codexUpdate}
-                  onReview={reviewRequest}
-                  onShowRelease={openLink}
-                />
+                <WorkbenchNotices update={codexUpdate} onShowRelease={openLink} />
                 {settingsWorkspace}
                 {showUsage && !settingsTab && <UsagePanel />}
                 <div className="conversation-column" hidden={showUsage || Boolean(settingsTab)}>
-                  <Tabs
-                    variant="primary"
-                    selectedKey={editingElement ? 'element' : 'conversation'}
-                    onSelectionChange={(key) => {
-                      setInspectorOpen(key === 'element');
-                      if (key === 'element') setBrowserVisible(true);
-                    }}
+                  <div
                     className={`chat-panel ${editingElement ? 'is-editing' : ''} ${isHome ? 'is-home' : ''}`}
-                    aria-label="AI 工作区"
                   >
-                    <Tabs.ListContainer className="workspace-view-tabs">
-                      <Tabs.List aria-label="工作区视图">
-                        <Tabs.Tab id="conversation">
-                          <Icon icon={MessageSquareIcon} size={14} />
-                          对话
-                          <Tabs.Indicator />
-                        </Tabs.Tab>
-                        <Tabs.Tab id="element" isDisabled={browser.status !== 'ready'}>
-                          <Icon icon={Settings02Icon} size={14} />
-                          元素
-                          <Tabs.Indicator />
-                        </Tabs.Tab>
-                      </Tabs.List>
-                    </Tabs.ListContainer>
-                    <Tabs.Panel
-                      id="conversation"
-                      shouldForceMount
-                      hidden={editingElement}
-                      className="chat-scroll"
-                      ref={scroll}
-                      onScroll={() => {
-                        const node = scroll.current;
-                        if (node)
-                          stickToBottom.current =
-                            node.scrollHeight - node.scrollTop - node.clientHeight < 120;
+                    {/* Tabs renders its children a second time to collect its tabs. The composer
+                        stays outside it, so its Skill menu is not collected as well. */}
+                    <Tabs
+                      variant="primary"
+                      selectedKey={editingElement ? 'element' : 'conversation'}
+                      onSelectionChange={(key) => {
+                        setInspectorOpen(key === 'element');
+                        if (key === 'element') setBrowserVisible(true);
                       }}
+                      className="chat-tabs"
+                      aria-label="AI 工作区"
                     >
-                      {!messages.length ? (
-                        <div className="welcome">
-                          <img className="welcome-symbol" src={athenaLogo} alt="Athena" />
-                          <h1>今天想完成什么？</h1>
-                          <p>打开网页、调整界面，或把任务交给 Athena。</p>
-                        </div>
-                      ) : (
-                        <div className="messages">
-                          {messages.map((message) => (
-                            <article
-                              key={message.id}
-                              className={`message ${message.role} ${message.status === 'error' ? 'message-error' : ''}`}
-                            >
-                              {message.role === 'user' ? (
-                                <ProChatMessage.User>
-                                  <ProChatMessage.Bubble className="user-message-text">
-                                    {message.displayText ?? message.text}
-                                  </ProChatMessage.Bubble>
-                                  {message.source === 'feishu' && (
-                                    <div className="message-source">
-                                      <Icon icon={Link02Icon} size={11} />
-                                      来自飞书
-                                    </div>
-                                  )}
-                                  {message.context && message.source !== 'feishu' && (
-                                    <div className="message-context">
-                                      <Icon icon={Cursor01Icon} size={11} />
-                                      已附加页面上下文
-                                    </div>
-                                  )}
-                                </ProChatMessage.User>
-                              ) : (
-                                <ProChatMessage.Assistant>
-                                  <ProChatMessage.Body>
-                                    <div className="assistant-label">
-                                      <ProChatMessage.Avatar src={athenaLogo} alt="" />
-                                      <span>Athena</span>
-                                    </div>
-                                    <ExecutionPanel
-                                      message={message}
-                                      conversationId={conversationId!}
-                                      agent={currentAgentId}
-                                      pending={conversationRequests.find(
-                                        (pending) => pending.messageId === message.id,
-                                      )}
-                                      statusLabel={statusLabel}
-                                      onAction={action}
-                                      onShowBrowser={() => setBrowserVisible(true)}
-                                      onReviewRequest={reviewRequest}
-                                      onContinue={() => {
-                                        setDraft(
-                                          '请先核对当前任务的实际结果，再继续未完成的步骤。不要重复已生效的操作。',
-                                        );
-                                        composerEditor.current?.commands.focus();
-                                      }}
-                                    />
+                      <Tabs.ListContainer className="workspace-view-tabs">
+                        <Tabs.List aria-label="工作区视图">
+                          <Tabs.Tab id="conversation">
+                            <Icon icon={MessageSquareIcon} size={14} />
+                            对话
+                            <Tabs.Indicator />
+                          </Tabs.Tab>
+                          <Tabs.Tab id="element" isDisabled={browser.status !== 'ready'}>
+                            <Icon icon={Settings02Icon} size={14} />
+                            元素
+                            <Tabs.Indicator />
+                          </Tabs.Tab>
+                        </Tabs.List>
+                      </Tabs.ListContainer>
+                      <Tabs.Panel
+                        id="conversation"
+                        shouldForceMount
+                        hidden={editingElement}
+                        className="chat-scroll"
+                        ref={scroll}
+                        onScroll={() => {
+                          const node = scroll.current;
+                          if (node)
+                            stickToBottom.current =
+                              node.scrollHeight - node.scrollTop - node.clientHeight < 120;
+                        }}
+                      >
+                        {!messages.length ? (
+                          <div className="welcome">
+                            <img className="welcome-symbol" src={athenaLogo} alt="Athena" />
+                            <h1>今天想完成什么？</h1>
+                            <p>打开网页、调整界面，或把任务交给 Athena。</p>
+                          </div>
+                        ) : (
+                          <div className="messages">
+                            {messages.map((message) => (
+                              <article
+                                key={message.id}
+                                className={`message ${message.role} ${message.status === 'error' ? 'message-error' : ''}`}
+                              >
+                                {message.role === 'user' ? (
+                                  <ProChatMessage.User>
+                                    <ProChatMessage.Bubble className="user-message-text">
+                                      <MentionText text={message.displayText ?? message.text} mentions={message.mentions} />
+                                    </ProChatMessage.Bubble>
+                                    {message.source === 'feishu' && (
+                                      <div className="message-source">
+                                        <Icon icon={Link02Icon} size={11} />
+                                        来自飞书
+                                      </div>
+                                    )}
+                                    {message.context && message.source !== 'feishu' && (
+                                      <div className="message-context">
+                                        <Icon icon={Cursor01Icon} size={11} />
+                                        已附加页面上下文
+                                      </div>
+                                    )}
                                     {message.text && (
-                                      <ProChatMessage.Content className="markdown">
-                                        <Markdown
-                                          remarkPlugins={[remarkGfm]}
-                                          components={{
-                                            img: () => null,
-                                            a: ({ href, children }) => (
-                                              <a
-                                                href={href}
-                                                onClick={(event) => {
-                                                  event.preventDefault();
-                                                  if (href) openLink(href);
-                                                }}
-                                              >
-                                                {children}
-                                              </a>
-                                            ),
-                                          }}
-                                        >
-                                          {message.text}
-                                        </Markdown>
-                                      </ProChatMessage.Content>
-                                    )}
-                                    {message.status === 'error' && (
-                                      <span className="message-failure">这次任务未完成</span>
-                                    )}
-                                    {message.status !== 'streaming' && message.text && (
                                       <ChatMessageActions>
                                         <Tooltip delay={500}>
                                           <ChatMessageActions.Copy
-                                            aria-label="复制回答"
+                                            aria-label="复制消息"
                                             isCopied={toast?.copiedMessageId === message.id}
-                                            onPress={async () => {
-                                              const copied = await action<boolean>('app:copy', {
-                                                text: message.text,
-                                              });
-                                              if (copied)
-                                                showToast('已复制回答', false, message.id);
-                                            }}
+                                            onPress={() => copyMessage(message)}
                                           />
-                                          <Tooltip.Content>复制回答</Tooltip.Content>
+                                          <Tooltip.Content>复制消息</Tooltip.Content>
                                         </Tooltip>
-                                        {message.neoSessionId && (
-                                          <ProChatMessage.Action
-                                            isIconOnly={false}
-                                            onPress={() => {
-                                              setNativeRecordId(message.neoSessionId);
-                                              setBrowserVisible(true);
-                                            }}
-                                          >
-                                            查看网页执行过程
-                                          </ProChatMessage.Action>
-                                        )}
                                       </ChatMessageActions>
                                     )}
-                                  </ProChatMessage.Body>
-                                </ProChatMessage.Assistant>
-                              )}
-                            </article>
-                          ))}
-                        </div>
-                      )}
-                    </Tabs.Panel>
-                    <Tabs.Panel
-                      id="element"
-                      shouldForceMount
-                      className="element-workspace"
-                      hidden={!editingElement}
-                    >
-                      <ElementInspector
+                                  </ProChatMessage.User>
+                                ) : (
+                                  <ProChatMessage.Assistant>
+                                    <ProChatMessage.Body>
+                                      <div className="assistant-label">
+                                        <ProChatMessage.Avatar src={athenaLogo} alt="" />
+                                        <span>Athena</span>
+                                      </div>
+                                      <AssistantTurn
+                                        message={message}
+                                        conversationId={conversationId!}
+                                        agent={currentAgentId}
+                                        requests={conversationRequests.filter(
+                                          (pending) => pending.messageId === message.id,
+                                        )}
+                                        last={message === messages.at(-1)}
+                                        readOnly={archived}
+                                        busy={busy}
+                                        onAction={action}
+                                        onShowBrowser={() => setBrowserVisible(true)}
+                                        actions={
+                                          message.status !== 'streaming' &&
+                                          (copyableText(message, message === messages.at(-1)) ||
+                                            message.neoSessionId) && (
+                                            <ChatMessageActions>
+                                              {copyableText(message, message === messages.at(-1)) && (
+                                                <Tooltip delay={500}>
+                                                  <ChatMessageActions.Copy
+                                                    aria-label="复制回答"
+                                                    isCopied={toast?.copiedMessageId === message.id}
+                                                    onPress={() => copyMessage(message)}
+                                                  />
+                                                  <Tooltip.Content>复制回答</Tooltip.Content>
+                                                </Tooltip>
+                                              )}
+                                              {message.neoSessionId && (
+                                                <ProChatMessage.Action
+                                                  isIconOnly={false}
+                                                  onPress={() => {
+                                                    setNativeRecordId(message.neoSessionId);
+                                                    setBrowserVisible(true);
+                                                  }}
+                                                >
+                                                  查看网页执行过程
+                                                </ProChatMessage.Action>
+                                              )}
+                                            </ChatMessageActions>
+                                          )
+                                        }
+                                      >
+                                        {replyText(message) && (
+                                          <ProChatMessage.Content className="markdown">
+                                            <Markdown
+                                              remarkPlugins={[remarkGfm]}
+                                              components={{
+                                                img: () => null,
+                                                a: ({ href, children }) => (
+                                                  <a
+                                                    href={href}
+                                                    onClick={(event) => {
+                                                      event.preventDefault();
+                                                      if (href) openLink(href);
+                                                    }}
+                                                  >
+                                                    {children}
+                                                  </a>
+                                                ),
+                                              }}
+                                            >
+                                              {replyText(message)}
+                                            </Markdown>
+                                          </ProChatMessage.Content>
+                                        )}
+                                      </AssistantTurn>
+                                    </ProChatMessage.Body>
+                                  </ProChatMessage.Assistant>
+                                )}
+                              </article>
+                            ))}
+                          </div>
+                        )}
+                      </Tabs.Panel>
+                      <Tabs.Panel
+                        id="element"
+                        shouldForceMount
+                        className="element-workspace"
                         hidden={!editingElement}
-                        selected={browser.selectedElement}
-                        tabId={browser.activeTabId}
-                        previews={browser.previewEdits ?? []}
-                        controlSurface={browser.elementControls}
-                        onAction={action}
-                        onClose={() => {
-                          setInspectorOpen(false);
-                          composerEditor.current?.commands.focus();
-                        }}
-                        onSourceRequest={requestSource}
-                      />
-                    </Tabs.Panel>
-                    <div className="composer-area">
-                      {panelRequest && (
-                        <RequestPanel
-                          key={requestKey(panelRequest)}
-                          requestKey={requestKey(panelRequest)}
-                          pending={panelRequest}
-                          taskTitle={
-                            conversations.find((item) => item.id === panelRequest.conversationId)
-                              ?.title || '当前任务'
-                          }
-                          onRespond={action}
-                          onStop={() => void action('conversation:stop')}
-                          onShowTask={() => selectConversation(panelRequest.conversationId)}
+                      >
+                        <ElementInspector
+                          hidden={!editingElement}
+                          selected={browser.selectedElement}
+                          tabId={browser.activeTabId}
+                          previews={browser.previewEdits ?? []}
+                          controlSurface={browser.elementControls}
+                          onAction={action}
+                          onClose={() => {
+                            setInspectorOpen(false);
+                            focusComposer();
+                          }}
+                          onSourceRequest={requestSource}
                         />
+                      </Tabs.Panel>
+                    </Tabs>
+                    <div className="composer-area">
+                      {archived && conversation && (
+                        <div className="archived-notice">
+                          <Icon icon={Archive01Icon} size={16} />
+                          <span>这段对话已归档，恢复后可以继续。</span>
+                          <ActionButton
+                            variant="secondary"
+                            onPress={() => void setArchived(conversation, false)}
+                          >
+                            恢复对话
+                          </ActionButton>
+                        </div>
                       )}
                       <PromptInput
                         ref={composer}
+                        hidden={archived}
                         className={`composer ${busy ? 'is-busy' : ''}`}
-                        value={draft}
-                        onValueChange={setDraft}
                         status={busy ? 'streaming' : 'ready'}
                         lockInputOnRun={false}
-                        maxHeight={panelRequest ? 72 : 160}
-                        onSubmit={() => void send()}
+                        maxHeight={160}
+                        onSubmit={() => {
+                          // Skills can arrive after the slash was typed, so the menu shows with
+                          // nothing highlighted. Enter then takes its first Skill, not the query.
+                          const first = skillMenuVisible
+                            ? skillOptions.find((skill) => !skillUnavailable(skill.name))
+                            : undefined;
+                          if (first) insertSkill(first.name);
+                          else void send();
+                        }}
                         onStop={() => void action('conversation:stop')}
                       >
                         <PromptInput.Shell>
-                          {selected && (
-                            <PromptInput.Attachments className="selected-context">
-                              <ChatAttachment name={selected.name || selected.tag}>
-                                <ChatAttachment.Icon>
-                                  <Icon icon={Cursor01Icon} size={16} />
-                                </ChatAttachment.Icon>
-                                <ChatAttachment.Info>
-                                  <ChatAttachment.Name title={selected.name || selected.tag} />
-                                  <code className="text-xs text-muted">
-                                    {selected.role || selected.tag}
-                                  </code>
-                                </ChatAttachment.Info>
-                                <ChatAttachment.Remove
-                                  aria-label="移除选中元素"
-                                  onPress={() => setSelected(undefined)}
-                                />
-                              </ChatAttachment>
-                            </PromptInput.Attachments>
-                          )}
-                          <PromptInput.Content>
-                            <SkillComposer
-                              key={draftKey}
-                              value={draftDocument}
-                              skills={providerSkills}
-                              selectedSkills={selectedSkills}
-                              editorRef={composerEditor}
-                              discovery={providerSkillDiscovery}
-                              placeholder={selected ? '对这个元素有什么想法？' : '描述任务，或选中页面中的元素…'}
-                              onValueChange={setDraftDocument}
-                              onMenuOpenChange={setSlashSkillMenuOpen}
-                              onSubmit={() => void send()}
-                            />
-                          </PromptInput.Content>
+                          {/* Only the field and its Skill menu sit in Tokens: a toolbar menu
+                              inside it would join the suggestions. */}
+                          <PromptInput.Tokens>
+                            <PromptInput.Content>
+                              <PromptInput.TokenInput
+                                tokens={tokens}
+                                aria-label="发送给 Agent 的任务"
+                                placeholder={
+                                  mentions.length
+                                    ? '想对这些元素做什么？'
+                                    : '描述任务，或在页面中选取元素…'
+                                }
+                              >
+                                {(segment) => {
+                                  const value = segment.value;
+                                  if (isSkillToken(value))
+                                    return (
+                                      <PromptInput.Token className="composer-skill-reference">
+                                        {segment.text}
+                                      </PromptInput.Token>
+                                    );
+                                  return (
+                                    <PromptInput.Token className="element-token">
+                                      <span
+                                        className="element-token-body"
+                                        title={
+                                          value
+                                            ? `${value.tag}${value.role ? ` · ${value.role}` : ''}`
+                                            : undefined
+                                        }
+                                      >
+                                        <Icon icon={Cursor01Icon} size={11} aria-hidden />
+                                        <span>{value?.name ?? segment.text}</span>
+                                        <small>{segment.text.slice(1, -1)}</small>
+                                      </span>
+                                    </PromptInput.Token>
+                                  );
+                                }}
+                              </PromptInput.TokenInput>
+                            </PromptInput.Content>
+                            <PromptInput.TokenSuggestions
+                              tokens={tokens}
+                              isOpen={skillMenuVisible}
+                              placement="top start"
+                              className="skill-slash-menu"
+                              maxHeight={320}
+                            >
+                              <Menu aria-label="可用 Skill">
+                                {skillOptions.map((skill) => (
+                                  <Menu.Item
+                                    key={skill.name}
+                                    id={skill.name}
+                                    textValue={skill.name}
+                                    isDisabled={skillUnavailable(skill.name)}
+                                    onAction={() => insertSkill(skill.name)}
+                                  >
+                                    <div className="skill-option-copy">
+                                      <Label>/{skill.name}</Label>
+                                      <Description>{skill.description}</Description>
+                                    </div>
+                                  </Menu.Item>
+                                ))}
+                              </Menu>
+                            </PromptInput.TokenSuggestions>
+                          </PromptInput.Tokens>
                           <PromptInput.Toolbar className="composer-controls">
                             <PromptInput.ToolbarStart>
                               <WebContextMenu
@@ -2011,6 +2216,7 @@ export default function App() {
                               <SkillPicker
                                 skills={skills ?? []}
                                 selected={selectedSkills}
+                                full={chosenSkills.size >= MAX_SKILLS}
                                 disabled={busy}
                                 onChange={setSelectedSkills}
                               />
@@ -2023,9 +2229,16 @@ export default function App() {
                               />
                             </PromptInput.ToolbarStart>
                             <PromptInput.ToolbarEnd className="composer-right">
-                              <span className="composer-hint">
-                                {busy && !currentBusy ? '另一任务进行中' : '↵ 发送'}
-                              </span>
+                              {currentPhase?.kind === 'waiting' ? (
+                                <span className="composer-hint is-waiting">
+                                  <PhaseGlyph kind="wait" still />
+                                  Athena 在等你处理上面的请求
+                                </span>
+                              ) : (
+                                <span className="composer-hint">
+                                  {busy && !currentBusy ? '另一任务进行中' : '↵ 发送'}
+                                </span>
+                              )}
                               <PromptInput.Send
                                 aria-label={busy ? '停止任务' : '发送任务'}
                                 isDisabled={
@@ -2034,15 +2247,14 @@ export default function App() {
                                     setupRequired ||
                                     !draft.trim() ||
                                     !currentAgent?.available ||
-                                    !currentAgent.supported ||
-                                    currentAgent.authentication === 'missing')
+                                    !currentAgent.supported)
                                 }
                               />
                             </PromptInput.ToolbarEnd>
                           </PromptInput.Toolbar>
                         </PromptInput.Shell>
                       </PromptInput>
-                      {!loaded ? (
+                      {archived ? null : !loaded ? (
                         <p className="composer-availability" role="status">
                           <Icon icon={Loading02Icon} size={14} className="spin" />
                           正在读取本机配置…
@@ -2059,13 +2271,9 @@ export default function App() {
                           </ActionButton>
                         </div>
                       ) : (
-                        (!currentAgent?.available || currentAgent.authentication === 'missing') && (
+                        !currentAgent?.available && (
                           <div className="composer-availability" role="status">
-                            <span>
-                              {currentAgent?.authentication === 'missing'
-                                ? `请先在终端登录 ${currentAgent.name}，再刷新连接。`
-                                : '当前 Agent 尚不可用。'}
-                            </span>
+                            <span>当前 Agent 尚不可用。</span>
                             <ActionButton
                               className="text-button"
                               onPress={() => openSettings('agent')}
@@ -2075,9 +2283,9 @@ export default function App() {
                           </div>
                         )
                       )}
-                      {loaded &&
+                      {!archived &&
+                        loaded &&
                         currentAgent?.available &&
-                        currentAgent.authentication !== 'missing' &&
                         currentConnection?.status === 'error' && (
                           <div className="composer-availability" role="alert">
                             <span>
@@ -2092,7 +2300,7 @@ export default function App() {
                             </ActionButton>
                           </div>
                         )}
-                      {isHome && (
+                      {isHome && !archived && (
                         <PromptSuggestion className="mt-7">
                           <PromptSuggestion.Items className="welcome-suggestions">
                             <PromptSuggestion.Item onPress={showCurrentPage}>
@@ -2149,7 +2357,7 @@ export default function App() {
                         </span>
                       )}
                     </div>
-                  </Tabs>
+                  </div>
                 </div>
               </div>
               <aside
@@ -2206,13 +2414,18 @@ export default function App() {
                   recordings={recordings}
                   liveSteps={liveSteps}
                   initialFrame={lastFrame.current}
-                  agentStatus={busy ? statusLabel || '正在处理' : undefined}
+                  agentStatus={
+                    runningPhase && {
+                      text: phaseText(runningPhase.phase, runningPhase.agent),
+                      glyph: phaseGlyph(runningPhase.phase, runningPhase.agent),
+                    }
+                  }
                   onAction={action}
                   onOpenSettings={() => openSettings('browser')}
                   onAnalyze={(id) => void analyze(id)}
                   onClose={() => {
                     setBrowserVisible(false);
-                    composerEditor.current?.commands.focus();
+                    focusComposer();
                   }}
                   inspectorOpen={editingElement}
                   onToggleInspector={() => setInspectorOpen((value) => !value)}
@@ -2228,6 +2441,14 @@ export default function App() {
               onSelect={selectConversation}
               onNew={() => void newConversation()}
             />
+            {deleteTarget && (
+              <DeleteConversationDialog
+                title={deleteTarget.title}
+                pending={deleting}
+                onCancel={() => setDeleteTarget(undefined)}
+                onConfirm={() => void confirmDelete()}
+              />
+            )}
             {toast && (
               <div
                 className={`app-toast ${toast.error ? 'error' : ''}`}

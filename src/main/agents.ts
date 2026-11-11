@@ -168,6 +168,8 @@ export function browserToolsFingerprint(tools: BrowserTool[]): string {
     .digest('hex');
 }
 
+/** A Skill is invoked as a `$name` mention inside the message text. */
+const codexSkillName = /^[a-z0-9]+(?:-[a-z0-9]+)*$/i;
 const isObject = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
 const isText = (value: unknown, maximum: number): value is string =>
@@ -385,7 +387,7 @@ export class CodexSession implements AgentSession {
     selection?: ModelSelection,
     skills: ProviderSkill[] = [],
   ): Promise<void> {
-    if (skills.length > 3 || skills.some(skill => skill.provider.id !== 'codex' || !skill.userInvocable || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/i.test(skill.name)))
+    if (skills.length > 3 || skills.some(skill => skill.provider.id !== 'codex' || !skill.userInvocable || !codexSkillName.test(skill.name)))
       throw new Error('Codex Skill 选择无效');
     const skillMentions = skills.map(skill => `$${skill.name}`).join(' ');
     if (this.closed) throw new Error('Codex 会话已关闭');
@@ -829,7 +831,8 @@ export class CodexSession implements AgentSession {
       return normalizeProviderSkillDiscovery({
         provider,
         capability: 'supported',
-        skills: Array.isArray(entry?.skills) ? entry.skills.map((skill: any) => ({
+        // A name that cannot be sent as a `$name` mention is not offered.
+        skills: Array.isArray(entry?.skills) ? entry.skills.filter((skill: any) => typeof skill?.name !== 'string' || codexSkillName.test(skill.name.trim())).map((skill: any) => ({
           name: skill?.name,
           path: skill?.path,
           description: skill?.description,

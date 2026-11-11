@@ -1,25 +1,9 @@
-.skill-composer {
-  min-width: 0;
-  flex: 1;
-  position: relative;
+.composer .composer-skill-reference {
+  padding: 0 4px;
+  border-radius: 4px;
+  color: var(--skill-reference-foreground);
+  background: var(--skill-reference-background);
 }
-.skill-composer [contenteditable='true'] {
-  min-height: 70px;
-  padding: 16px 16px 8px;
-  outline: none;
-  border-radius: 12px;
-  font-size: 14px;
-  line-height: 24px;
-}
-.composer [data-slot='prompt-input-shell']:has(.skill-composer [contenteditable='true']:focus-visible) { outline: 2px solid var(--accent); }
-.skill-composer [contenteditable='true'] p { margin: 0; }
-.composer-skill-reference { display: inline-block; padding: 0 4px; border-radius: 4px; color: var(--skill-reference-foreground); background: var(--skill-reference-background); }
-.skill-composer [contenteditable='true'] { max-height: 160px; overflow-y: auto; overflow-wrap: anywhere; }
-.skill-composer [contenteditable='true'] p:only-child:has(> br:only-child)::before { content: '描述任务，或选中页面中的元素…'; color: var(--muted); pointer-events: none; float: left; height: 0; }
-.skill-composer .skill-slash-menu [aria-disabled='true'] { opacity: .5; }
-.composer-skill-reference.is-unavailable { color: var(--danger); }
-.skill-composer .skill-slash-menu { inset: auto 12px calc(100% - 8px); max-width: calc(100% - 24px); }
-.skill-composer .skill-slash-menu[hidden] { display: none; }
 
 .sidebar-usage {
   justify-content: flex-start;

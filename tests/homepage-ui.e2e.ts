@@ -338,15 +338,17 @@ try {
   // Mount the production App; the initial snapshot has no skills, so this menu
   // can only populate through the real refresh IPC wiring.
   await composer.fill('/');
-  await expect(page.getByRole('option', { name: /review/ })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: /review/ })).toBeVisible();
   assert.ok((await calls('skills:list')).some((call: any) => call.payload.conversationId === 'a'));
   await composer.press('Enter');
-  await expect(composer).toHaveValue('/review ');
-  await composer.fill('/review Check the changes');
+  await expect(composer.locator('.composer-skill-reference')).toHaveText('/review');
+  await page.keyboard.insertText('Check the changes');
   await composer.press('Enter');
   await expect.poll(async () => (await calls('conversation:send')).at(-1)?.payload.selectedSkills).toEqual(['review']);
   const skillSend = (await calls('conversation:send')).at(-1)!.payload;
-  assert.equal(skillSend.text, '/review Check the changes');
+  // The reference is shown in the bubble; the CLI receives the task without it.
+  assert.equal(skillSend.text, 'Check the changes');
+  assert.equal(skillSend.displayText, '/review Check the changes');
   assert.deepEqual(skillSend.selectedSkillMetadata, [{name:'review',providerId:'codex',providerPath:'/opt/codex/review/SKILL.md'}]);
   assert.deepEqual(skillSend.selectedSkills, ['review']);
   await page.getByRole('button', { name: '停止任务', exact: true }).click();

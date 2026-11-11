@@ -1,6 +1,0 @@
-allowBuilds:
-  '@heroui-pro/react': set this to true or false
-  '@zowe/secrets-for-zowe-sdk': set this to true or false
-  electron-winstaller: set this to true or false
-  esbuild: set this to true or false
-  protobufjs: set this to true or false

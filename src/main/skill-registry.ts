@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { readdir, readFile, realpath, stat } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { parseDocument } from 'yaml';
 import type { SkillDiagnostic, SkillDiscovery, SkillSource, SkillSourceStatus, WorkspaceSkill } from '../shared/skills';
 
 const MAX_ENTRY_BYTES = 12 * 1024;
@@ -11,16 +12,25 @@ function diagnostic(code: SkillDiagnostic['code'], message: string): SkillDiagno
   return { code, message };
 }
 
-function metadata(header: string): { name: string; description: string } | undefined {
-  const values = new Map<string, string>();
+// YAML first: a description is often quoted or folded over several lines (`description: >`).
+// A header YAML rejects, such as an unquoted description with a colon in it, is still read line by line.
+function fields(header: string): Record<string, unknown> {
+  const document = parseDocument(header, { uniqueKeys: true });
+  const value: unknown = document.errors.length ? undefined : document.toJS({ maxAliasCount: 0 });
+  if (value && typeof value === 'object' && !Array.isArray(value)) return value as Record<string, unknown>;
+  const values: Record<string, unknown> = {};
   for (const line of header.split(/\r?\n/)) {
     const match = line.match(/^([a-zA-Z][\w-]*):\s*(.*)$/);
-    if (match) values.set(match[1].toLowerCase(), match[2].trim());
+    if (match) values[match[1]] = match[2].trim();
   }
-  const name = values.get('name');
-  const description = values.get('description');
-  if (!name || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(name) || !description) return undefined;
-  return { name, description };
+  return values;
+}
+
+function metadata(header: string): { name: string; description: string } | undefined {
+  const { name, description } = fields(header);
+  if (typeof name !== 'string' || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(name)) return undefined;
+  if (typeof description !== 'string' || !description.trim()) return undefined;
+  return { name, description: description.trim() };
 }
 
 function inside(child: string, parent: string): boolean {

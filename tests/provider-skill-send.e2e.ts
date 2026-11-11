@@ -13,12 +13,18 @@ const workspace = path.join(profile, 'workspace');
 const bin = path.join(profile, 'bin');
 const log = path.join(profile, 'calls');
 const skillPath = path.join(workspace, '.pi', 'skills', 'review', 'SKILL.md');
+const localSkillPath = path.join(workspace, '.agents', 'skills', 'athena-fixture-notes', 'SKILL.md');
 const body = '---\nname: review\ndescription: Provider review\n---\nPrivate provider instructions';
 let application: ElectronApplication | undefined;
 try {
   await mkdir(bin);
   await mkdir(path.dirname(skillPath), { recursive: true });
   await writeFile(skillPath, body);
+  await mkdir(path.dirname(localSkillPath), { recursive: true });
+  await writeFile(
+    localSkillPath,
+    '---\nname: athena-fixture-notes\ndescription: Workspace notes\n---\nPrivate workspace instructions',
+  );
   await writeFile(log, '');
   // Block discovery of other real CLIs even if the host has them installed.
   for (const name of ['codex', 'claude', 'gemini', 'cursor-agent', 'agent', 'opencode']) {
@@ -128,11 +134,26 @@ require('node:readline').createInterface({input:process.stdin}).on('line', line 
   const prompts = async () => (await calls()).filter((item) => item.type === 'prompt');
   const composer = page.getByRole('textbox', { name: '发送给 Agent 的任务', exact: true });
   await expect(page.locator('#composer-agent-name')).toHaveText('Pi');
+  const option = page.getByRole('menuitem', { name: /review/ });
+  // A slash inside a URL or a path is not a Skill reference.
+  for (const text of ['https://example.com/re', '/tmp/file']) {
+    await composer.fill(text);
+    await expect(composer).toHaveText(text);
+    await expect(option).toHaveCount(0);
+  }
   await composer.fill('/');
-  await expect(page.getByRole('option', { name: /review/ })).toBeVisible();
+  await expect(option).toBeVisible();
+  await composer.press('Escape');
+  await expect(option).toHaveCount(0);
+  await composer.fill('Check /rev');
+  await expect(option).toBeVisible();
   await composer.press('Enter');
-  await expect(composer).toContainText('/review');
-  await composer.press('End');
+  await expect(composer.locator('.composer-skill-reference')).toHaveText('/review');
+  await expect(option).toHaveCount(0);
+  assert.equal((await prompts()).length, 0, 'choosing a Skill must not send the task');
+  await composer.fill('/');
+  await composer.press('Enter');
+  await expect(composer.locator('.composer-skill-reference')).toHaveText('/review');
   await page.keyboard.insertText('Inspect changes');
   await composer.press('Enter');
   await expect.poll(async () => (await prompts()).length).toBe(1);
@@ -183,8 +204,26 @@ require('node:readline').createInterface({input:process.stdin}).on('line', line 
     // This direct IPC check preserves an unrelated draft; it does not prove UI-submit failure retention.
     await expect(composer).toContainText(draft);
   }
+
+  // A workspace Skill is picked in the toolbar. It is sent by name, without provider metadata.
+  assert.ok((await snapshot()).skills?.some((item) => item.name === 'athena-fixture-notes'));
+  await composer.fill('');
+  await page.getByRole('button', { name: '选择任务 Skill', exact: true }).click();
+  await page.getByRole('menuitemcheckbox', { name: /^athena-fixture-notes/ }).click();
+  await page.keyboard.press('Escape');
+  await expect(
+    page.getByRole('button', { name: '任务 Skill：athena-fixture-notes', exact: true }),
+  ).toBeVisible();
+  await composer.fill('Draft the notes');
+  await composer.press('Enter');
+  await expect.poll(async () => (await prompts()).length).toBe(2);
+  await expect.poll(async () => (await conversation()).messages.at(-1)?.status).toBe('done');
+  const localPrompt = (await prompts())[1].message ?? '';
+  assert.match(localPrompt, /Skill: athena-fixture-notes（来源：workspace/);
+  assert.match(localPrompt, /Draft the notes/);
+  assert.equal((await conversation()).messages.at(-2)?.text, 'Draft the notes');
   console.log(
-    'PASS: actual renderer skill selection/send -> preload IPC -> production Pi adapter -> scripted CLI; native prompt, degraded usage, stale provider/path notices with no turn mutation, and unrelated draft preservation. No model calls. Pi RPC provides no content hash; no content-change validation claimed. Async stale-send ACK does not prove UI-submit draft retention.',
+    'PASS: actual renderer skill selection/send (CLI reference and workspace pick) -> preload IPC -> production Pi adapter -> scripted CLI; native prompt, degraded usage, stale provider/path notices with no turn mutation, and unrelated draft preservation. No model calls. Pi RPC provides no content hash; no content-change validation claimed. Async stale-send ACK does not prove UI-submit draft retention.',
   );
 } finally {
   await application?.close();

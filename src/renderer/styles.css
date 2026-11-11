@@ -353,6 +353,10 @@ select {
   gap: 0;
   min-height: 0;
 }
+/* The view tabs and their panels are laid out by the chat panel itself. */
+.chat-tabs {
+  display: contents;
+}
 .workspace-view-tabs {
   padding: 0 24px;
   flex-shrink: 0;
@@ -2220,38 +2224,38 @@ select {
   border-radius: 12px;
   box-shadow: 0 1px 3px rgb(0 0 0 / 5%);
 }
-.composer [data-slot='prompt-input-shell'],
-.composer [data-slot='prompt-input-content'] {
-  position: relative;
-  overflow: visible;
+.composer-area {
+  padding-bottom: 0;
 }
-
+/* Skills of the current CLI, offered at the caret after a slash. */
 .skill-slash-menu {
-  position: absolute;
-  inset: auto 12px calc(100% - 8px);
-  z-index: 1000;
-  max-width: calc(100% - 24px);
-  max-height: 220px;
-  overflow: auto;
-  padding: 6px;
-  border-radius: 14px;
-  background: var(--surface);
-  box-shadow: var(--overlay-shadow);
+  max-width: 360px;
 }
-.skill-slash-menu button {
-  display: grid;
-  width: 100%;
-  gap: 2px;
-  padding: 8px 10px;
-  border: 0;
-  border-radius: 9px;
-  background: transparent;
-  text-align: left;
+.composer-controls .skill-picker {
+  flex: none;
+  gap: 4px;
 }
-.skill-slash-menu button[aria-selected='true'] { background: var(--surface-secondary); }
-.skill-slash-menu button:disabled { opacity: .45; }
-.skill-slash-menu span, .skill-slash-menu p { color: var(--secondary); font-size: 12px; }
-
+.skill-picker-count {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+}
+.skill-menu {
+  width: 320px;
+}
+.skill-menu .skill-option-copy {
+  flex: 1;
+}
+.skill-option-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+.skill-option-copy .description {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .composer [data-slot='prompt-input-shell'] {
   border: 0;
   border-radius: 24px;

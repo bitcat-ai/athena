@@ -45,13 +45,19 @@ export function selectProviderSkills(
   return selected;
 }
 
+// A description is written by the Skill's author and sits next to Athena's own instructions: it stays one bounded line.
+function oneLine(value: string): string {
+  const line = value.replace(/\s+/g, ' ').trim().replace(/</g, '＜');
+  return line.length > 300 ? `${line.slice(0, 300)}…` : line;
+}
+
 /** Metadata and a bounded path are injected; the CLI reads the entry progressively. */
 export function buildSkillContext(skills: SelectableSkill[]): string | undefined {
   if (!skills.length) return undefined;
   return [
     'Athena 已为本轮选择以下 Skill。请按需读取对应 SKILL.md，不要假设未读取的正文内容；Skill 不会改变 CLI 原有沙箱、工具或审批边界。',
     ...skills.map((skill) => 'provider' in skill
-      ? `- Skill: ${skill.name}（来源：provider，提供方：${skill.provider.id}，内容哈希：${skill.contentHash ?? 'unknown'}）\n  入口：${skill.providerPath ?? 'provider-managed'}\n  描述：${skill.description}\n  使用时请先读取入口文件。`
-      : `- Skill: ${skill.name}（来源：${skill.source}，内容哈希：${skill.contentHash ?? 'unknown'}）\n  入口：${skill.entryPath}\n  描述：${skill.description ?? '未提供'}\n  使用时请先读取入口文件.`),
+      ? `- Skill: ${skill.name}（来源：provider，提供方：${skill.provider.id}，内容哈希：${skill.contentHash ?? 'unknown'}）\n  入口：${skill.providerPath ?? 'provider-managed'}\n  描述：${oneLine(skill.description)}\n  使用时请先读取入口文件。`
+      : `- Skill: ${skill.name}（来源：${skill.source}，内容哈希：${skill.contentHash ?? 'unknown'}）\n  入口：${skill.entryPath}\n  描述：${oneLine(skill.description ?? '未提供')}\n  使用时请先读取入口文件.`),
   ].join('\n');
 }

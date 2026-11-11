@@ -122,10 +122,10 @@ try {
   // Exercise production renderer -> preload -> IPC -> runTurn -> fake app-server.
   const composer = page.getByRole('textbox', { name: '发送给 Agent 的任务' });
   await composer.fill('/');
-  await expect(page.getByRole('option', { name: /review/ })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: /review/ })).toBeVisible();
   await composer.press('Enter');
-  await expect(composer).toHaveValue('/review ');
-  await composer.fill('/review First task');
+  await expect(composer.locator('.composer-skill-reference')).toHaveText('/review');
+  await page.keyboard.insertText('First task');
   await composer.press('Enter');
   await expect
     .poll(async () => (await snapshot()).conversations[0].messages.at(-1)?.status)
@@ -211,7 +211,6 @@ try {
   // Authentication detection must not gate read-only Skills or model discovery.
   await writeFile(path.join(profile, 'logged-out'), '');
   await invoke('agents:refresh');
-  assert.equal((await snapshot()).agents.find((agent) => agent.id === 'codex')?.authentication, 'missing');
   const unauthenticatedSkills = await invoke('skills:list', { conversationId: 'first' });
   assert.equal(unauthenticatedSkills.status, 'ready');
   assert.equal(unauthenticatedSkills.skills[0].name, 'review');

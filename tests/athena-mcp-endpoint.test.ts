@@ -5,7 +5,7 @@ import { createAthenaMcpEndpoint, type AthenaMcpState } from '../src/main/athena
 const state: AthenaMcpState = {
   workspace: { path: '/Users/test/project', mode: 'project' },
   conversations: [{ id: 'conversation-1', title: 'Review', status: 'idle', agent: 'codex', model: 'gpt-5' }],
-  providers: [{ id: 'codex', available: true, authenticated: true }],
+  providers: [{ id: 'codex', available: true }],
   capabilities: ['workspace.read', 'thread.read'],
 };
 
@@ -222,7 +222,11 @@ test('serializes external thread operations so starts cannot overlap', async (t)
   assert.equal(maxInFlight, 1);
 });
 
-test('stopping an in-flight external thread discards its queued messages', async (t) => {
+const hung = Symbol('hung');
+const settled = <T>(promise: Promise<T>) =>
+  Promise.race([promise, new Promise<typeof hung>((resolve) => setTimeout(() => resolve(hung), 500))]);
+
+test('stopping an in-flight external thread interrupts the turn instead of waiting for it', async (t) => {
   const calls: string[] = [];
   let releaseSend!: () => void;
   let resolveSendStarted!: () => void;
@@ -234,11 +238,12 @@ test('stopping an in-flight external thread discards its queued messages', async
     threads: {
       start: async (input) => { calls.push(`start:${input.text}`); return { conversationId: 'conversation-1', agentSessionId: 'session-1' }; },
       send: async (_thread, text) => { calls.push(`send:${text}`); if (text === 'second') { resolveSendStarted(); await new Promise<void>((resolve) => { releaseSend = resolve; }); } },
-      stop: async () => { calls.push('stop'); },
+      // The turn only ends because it is interrupted, as a hung task would.
+      stop: async () => { calls.push('stop'); releaseSend(); },
     },
   });
   await server.start();
-  t.after(() => server.stop());
+  t.after(() => { releaseSend?.(); return server.stop(); });
   const pending = await request(server.url, '/api/v1/connections', { method: 'POST', body: JSON.stringify({ agent: { name: 'Runner', id: 'runner-1' }, requestedMode: 'supervised' }) });
   const connection = await pending.json();
   await server.approve(connection.id);
@@ -249,12 +254,167 @@ test('stopping an in-flight external thread discards its queued messages', async
   assert.equal(thread.conversationId, 'conversation-1');
   const queued = await request(server.url, `/api/v1/threads/${thread.id}/messages`, { method: 'POST', headers: auth, body: JSON.stringify({ text: 'second' }) });
   assert.equal(queued.status, 202);
-  const stopped = request(server.url, `/api/v1/threads/${thread.id}/stop`, { method: 'POST', headers: auth });
   await sendStarted;
-  releaseSend();
-  assert.equal((await stopped).status, 200);
+  const third = await request(server.url, `/api/v1/threads/${thread.id}/messages`, { method: 'POST', headers: auth, body: JSON.stringify({ text: 'third' }) });
+  assert.equal(third.status, 202);
+  const stopped = await settled(request(server.url, `/api/v1/threads/${thread.id}/stop`, { method: 'POST', headers: auth }));
+  assert.notEqual(stopped, hung, 'stop must not wait behind the running turn');
+  assert.equal((stopped as Response).status, 200);
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.deepEqual(calls, ['start:first', 'send:first', 'send:second', 'stop']);
   const threadState = await request(server.url, `/api/v1/threads/${thread.id}`, { headers: auth });
   assert.equal((await threadState.json()).status, 'stopped');
+});
+
+test('a thread stopped while it waits behind another thread never starts its turn', async (t) => {
+  const calls: string[] = [];
+  let releaseSend!: () => void;
+  let resolveSendStarted!: () => void;
+  const sendStarted = new Promise<void>((resolve) => {
+    resolveSendStarted = resolve;
+  });
+  const server = createAthenaMcpEndpoint({
+    getState: () => state,
+    threads: {
+      start: async (input) => ({ conversationId: input.text }),
+      send: async (thread, text) => { calls.push(`send:${thread.conversationId}:${text}`); if (text === 'long') { resolveSendStarted(); await new Promise<void>((resolve) => { releaseSend = resolve; }); } },
+      stop: async (thread) => { calls.push(`stop:${thread.conversationId}`); },
+    },
+  });
+  await server.start();
+  t.after(() => { releaseSend?.(); return server.stop(); });
+  const pending = await request(server.url, '/api/v1/connections', { method: 'POST', body: JSON.stringify({ agent: { name: 'Runner', id: 'runner-1' }, requestedMode: 'supervised' }) });
+  const connection = await pending.json();
+  await server.approve(connection.id);
+  const auth = { authorization: `Bearer ${connection.token}` };
+  const start = async (text: string) =>
+    (await request(server.url, '/api/v1/threads', { method: 'POST', headers: auth, body: JSON.stringify({ text }) })).json();
+  const message = (id: string, text: string) =>
+    request(server.url, `/api/v1/threads/${id}/messages`, { method: 'POST', headers: auth, body: JSON.stringify({ text }) });
+  const a = await start('a');
+  const b = await start('b');
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await message(a.id, 'long');
+  await sendStarted;
+  await message(b.id, 'waiting');
+  const stopped = await settled(request(server.url, `/api/v1/threads/${b.id}/stop`, { method: 'POST', headers: auth }));
+  assert.notEqual(stopped, hung, 'stop must not wait behind another thread');
+  assert.equal((stopped as Response).status, 200);
+  releaseSend();
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.deepEqual(calls, ['send:a:a', 'send:b:b', 'send:a:long', 'stop:b']);
+  const running = await request(server.url, `/api/v1/threads/${a.id}`, { headers: auth });
+  assert.equal((await running.json()).status, 'idle');
+});
+
+const connect = async (server: { url: string; approve(id: string): Promise<unknown> }, requestedMode = 'supervised') => {
+  const response = await request(server.url, '/api/v1/connections', { method: 'POST', body: JSON.stringify({ agent: { name: 'Runner', id: 'runner-1' }, requestedMode }) });
+  const connection = await response.json();
+  await server.approve(connection.id);
+  return { id: connection.id as string, auth: { authorization: `Bearer ${connection.token}` } };
+};
+
+test('refuses requests a web page could send', async (t) => {
+  const server = await endpoint();
+  t.after(() => server.stop());
+  const payload = JSON.stringify({ agent: { name: 'Page', id: 'page-1' }, requestedMode: 'full' });
+  // A cross-site form or no-cors fetch cannot set a JSON content type without a preflight.
+  const simple = await fetch(`${server.url}/api/v1/connections`, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: payload });
+  assert.equal(simple.status, 415);
+  const crossSite = await request(server.url, '/api/v1/connections', { method: 'POST', headers: { origin: 'https://example.com' }, body: payload });
+  assert.equal(crossSite.status, 403);
+  // A rebound DNS name reaches the loopback address with its own Host.
+  const { port } = new URL(server.url);
+  const { request: raw } = await import('node:http');
+  const rebound = await new Promise<number>((resolve, reject) => {
+    const call = raw({ host: '127.0.0.1', port, path: '/api/v1/state', headers: { host: `attacker.example:${port}` } }, (response) => { response.resume(); resolve(response.statusCode ?? 0); });
+    call.on('error', reject);
+    call.end();
+  });
+  assert.equal(rebound, 403);
+  assert.deepEqual(server.connections(), []);
+});
+
+test('bounds connection requests, names and request bodies', async (t) => {
+  const notified: number[] = [];
+  const server = createAthenaMcpEndpoint({ getState: () => state, onConnections: (connections) => notified.push(connections.length) });
+  await server.start();
+  t.after(() => server.stop());
+  const ask = (agent: unknown) => request(server.url, '/api/v1/connections', { method: 'POST', body: JSON.stringify({ agent, requestedMode: 'read-only' }) });
+  assert.equal((await ask({ id: 'a', name: 'x'.repeat(81) })).status, 400);
+  assert.equal((await ask({ id: 'a', name: '   ' })).status, 400);
+  const named = await (await ask({ id: 'a', name: 'Build\nbot\u0007' })).json();
+  assert.equal(named.request.agent.name, 'Build bot');
+  for (let index = 1; index < 8; index += 1) assert.equal((await ask({ id: `a${index}`, name: 'Agent' })).status, 202);
+  const refused = await ask({ id: 'late', name: 'Agent' });
+  assert.equal(refused.status, 429);
+  assert.deepEqual(await refused.json(), { error: 'too_many_pending_connections' });
+  // A decided request leaves the list and frees its place.
+  await server.reject(named.id);
+  assert.equal(server.connections().length, 7);
+  assert.equal((await ask({ id: 'late', name: 'Agent' })).status, 202);
+  assert.deepEqual(notified, [1, 2, 3, 4, 5, 6, 7, 8, 7, 8]);
+  const large = await request(server.url, '/api/v1/connections', { method: 'POST', body: JSON.stringify({ agent: { id: 'a', name: 'Agent' }, requestedMode: 'read-only', padding: 'x'.repeat(70 * 1024) }) });
+  assert.equal(large.status, 413);
+});
+
+test('a stop is final for messages that arrive while it is still in progress', async (t) => {
+  const calls: string[] = [];
+  let releaseStop!: () => void;
+  let resolveStopStarted!: () => void;
+  const stopStarted = new Promise<void>((resolve) => { resolveStopStarted = resolve; });
+  const server = createAthenaMcpEndpoint({
+    getState: () => state,
+    threads: {
+      start: async () => ({ conversationId: 'conversation-1' }),
+      send: async (_thread, text) => { calls.push(`send:${text}`); },
+      stop: async () => { calls.push('stop'); resolveStopStarted(); await new Promise<void>((resolve) => { releaseStop = resolve; }); },
+    },
+  });
+  await server.start();
+  t.after(() => { releaseStop?.(); return server.stop(); });
+  const { auth } = await connect(server);
+  const thread = await (await request(server.url, '/api/v1/threads', { method: 'POST', headers: auth, body: JSON.stringify({ text: 'first' }) })).json();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const stopping = request(server.url, `/api/v1/threads/${thread.id}/stop`, { method: 'POST', headers: auth });
+  await stopStarted;
+  const late = await request(server.url, `/api/v1/threads/${thread.id}/messages`, { method: 'POST', headers: auth, body: JSON.stringify({ text: 'late' }) });
+  assert.equal(late.status, 410);
+  releaseStop();
+  assert.equal((await stopping).status, 200);
+  assert.deepEqual(calls, ['send:first', 'stop']);
+});
+
+test('revoking a connection stops the work it started', async (t) => {
+  const calls: string[] = [];
+  let releaseSend!: () => void;
+  let resolveSendStarted!: () => void;
+  const sendStarted = new Promise<void>((resolve) => { resolveSendStarted = resolve; });
+  const server = createAthenaMcpEndpoint({
+    getState: () => state,
+    threads: {
+      start: async () => ({ conversationId: 'conversation-1' }),
+      send: async (_thread, text) => { calls.push(`send:${text}`); if (text === 'long') { resolveSendStarted(); await new Promise<void>((resolve) => { releaseSend = resolve; }); } },
+      stop: async () => { calls.push('stop'); releaseSend(); },
+    },
+  });
+  await server.start();
+  t.after(() => { releaseSend?.(); return server.stop(); });
+  const { id, auth } = await connect(server);
+  const thread = await (await request(server.url, '/api/v1/threads', { method: 'POST', headers: auth, body: JSON.stringify({ text: 'long' }) })).json();
+  await sendStarted;
+  await request(server.url, `/api/v1/threads/${thread.id}/messages`, { method: 'POST', headers: auth, body: JSON.stringify({ text: 'queued' }) });
+  await server.revoke(id);
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.deepEqual(calls, ['send:long', 'stop']);
+  assert.equal((await request(server.url, `/api/v1/threads/${thread.id}`, { headers: auth })).status, 401);
+});
+
+test('refuses messages longer than an agent accepts', async (t) => {
+  const server = createAthenaMcpEndpoint({ getState: () => state, threads: { start: async () => ({ conversationId: 'conversation-1' }), send: async () => {}, stop: async () => {} } });
+  await server.start();
+  t.after(() => server.stop());
+  const { auth } = await connect(server);
+  const started = await request(server.url, '/api/v1/threads', { method: 'POST', headers: auth, body: JSON.stringify({ text: 'x'.repeat(20_001) }) });
+  assert.equal(started.status, 400);
 });

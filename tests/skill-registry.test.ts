@@ -29,6 +29,22 @@ async function skill(root: string, name: string, content: string) {
   assert.deepEqual(found.diagnostics, []);
 });
 
+test('reads quoted, folded and colon-bearing descriptions', async () => {
+  const root = await workspace();
+  await skill(root, 'folded', '---\nname: folded\ndescription: >\n  Review code\n  before merging.\n---\n');
+  await skill(root, 'quoted', '---\nname: quoted\ndescription: "Use when: reviewing"\n---\n');
+  await skill(root, 'plain', '---\nname: plain\ndescription: Use when: reviewing\n---\n');
+  const found = await discoverWorkspaceSkills(root);
+  assert.deepEqual(
+    found.map((item) => [item.name, item.description, item.availability]),
+    [
+      ['folded', 'Review code before merging.', 'usable'],
+      ['plain', 'Use when: reviewing', 'usable'],
+      ['quoted', 'Use when: reviewing', 'usable'],
+    ],
+  );
+});
+
 test('isolates malformed and oversized packages from valid packages', async () => {
   const root = await workspace();
   await skill(root, 'valid', '---\nname: valid\ndescription: Valid\n---\n');
