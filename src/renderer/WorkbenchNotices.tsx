@@ -62,24 +62,23 @@ export function WorkbenchNotices({
       return null;
     }
   });
+  if (!update || update.latestVersion === dismissedRelease) return null;
   return (
     <div aria-live="polite" aria-relevant="additions text" className="workbench-notices">
-      {update && update.latestVersion !== dismissedRelease && (
-        <AppNotice
-          title="Codex CLI 有新版本"
-          description={`${update.installedVersion} → ${update.latestVersion}`}
-          actionLabel="查看更新说明"
-          onAction={() => onShowRelease(update.releaseUrl)}
-          onDismiss={() => {
-            setDismissedRelease(update.latestVersion);
-            try {
-              localStorage.setItem(dismissedReleaseKey, update.latestVersion);
-            } catch {
-              /* Session dismissal still applies. */
-            }
-          }}
-        />
-      )}
+      <AppNotice
+        title="Codex CLI 有新版本"
+        description={`${update.installedVersion} → ${update.latestVersion}`}
+        actionLabel="查看更新说明"
+        onAction={() => onShowRelease(update.releaseUrl)}
+        onDismiss={() => {
+          setDismissedRelease(update.latestVersion);
+          try {
+            localStorage.setItem(dismissedReleaseKey, update.latestVersion);
+          } catch {
+            /* Session dismissal still applies. */
+          }
+        }}
+      />
     </div>
   );
 }

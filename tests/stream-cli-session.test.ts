@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
+import { testImage } from './image-fixture';
 import test from 'node:test';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { StreamCliSession, type StreamCliId } from '../src/main/stream-cli-session';
-import type { AgentEvent } from '../src/shared/types';
+import type { AgentEvent, BrowserTool } from '../src/shared/types';
 
 const cliIds: StreamCliId[] = ['claude', 'gemini', 'cursor'];
 async function fixture(
@@ -12,6 +13,7 @@ async function fixture(
   mode = 'normal',
   sessionId?: string,
   approveWorkspace = true,
+  tools: BrowserTool[] = [],
 ) {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'athena-stream-cli-test-'));
   const script = path.join(directory, 'fixture.cjs');
@@ -36,8 +38,28 @@ process.stdin.setEncoding('utf8'); process.stdin.on('data',s=>input+=s); process
  if(mode==='missing-session'){process.exitCode=1;return;}
  if(mode==='invalid-json'){process.stdout.write('not json\\n');return;}
  if(mode==='no-init'){result();return;}
- out(cli==='gemini'?{type:'init',session_id:id,model:'auto'}:{type:'system',subtype:'init',session_id:id,model:'configured-alias'});
+ out(cli==='gemini'?{type:'init',session_id:id,model:'auto'}:{type:'system',subtype:'init',session_id:id,model:'configured-alias',...(mode==='browser-tools'?{mcp_servers:[{name:'athena',status:'connected'}],tools:['mcp__athena__neo_status']}:{} )});
  if(mode==='wrong-session') return;
+ if(mode==='browser-tools') {
+  void (async()=>{
+   const configPath=args[args.indexOf('--mcp-config')+1];
+   const definition=JSON.parse(fs.readFileSync(configPath,'utf8')).mcpServers.athena;
+   fs.writeFileSync(dir+'/bridge.json',JSON.stringify({url:definition.env.ATHENA_MCP_URL,mode:fs.statSync(configPath).mode&511}));
+   const child=cp.spawn(definition.command,definition.args,{env:{...process.env,...definition.env},stdio:'pipe'});
+   child.stderr.resume();
+   const pending=new Map(); require('node:readline').createInterface({input:child.stdout}).on('line',line=>{const r=JSON.parse(line);pending.get(r.id)?.(r);pending.delete(r.id);});
+   const request=(id,method,params)=>new Promise(resolve=>{pending.set(id,resolve);child.stdin.write(JSON.stringify({jsonrpc:'2.0',id,method,params})+'\\n');});
+   await request('init','initialize',{}); await request('list','tools/list');
+   out({type:'assistant',message:{role:'assistant',content:[{type:'tool_use',id:'call-1',name:'mcp__athena__neo_status',input:{}}]}});
+   const response=await request('action','tools/call',{name:'neo_status',arguments:{}});
+   child.stdin.end();
+   if(response.error || response.result.isError) throw new Error('browser call rejected');
+   out({type:'assistant',message:message('browser done')});
+   out({type:'result',subtype:'success',is_error:false,result:'browser done',session_id:id});
+  })().catch(()=>{process.exitCode=1;});
+  return;
+ }
+
  if(mode==='approval'){out({type:'control_request',request_id:'approve',request:{subtype:'can_use_tool'}});setInterval(()=>{},1000);return;}
  if(mode==='native-error'){out({type:'error',message:'sk-secret-native-error'});return;}
  if(mode==='aborted-result'){out(cli==='gemini'?{type:'result',status:'success',aborted:true}:{type:'result',subtype:'success',is_error:false,stop_reason:'aborted',aborted:true,result:'bad'});return;}
@@ -97,9 +119,10 @@ process.stdin.setEncoding('utf8'); process.stdin.on('data',s=>input+=s); process
     workspace: directory,
     executablePath,
     sessionId,
-    tools: [],
+    tools,
     callTool: async () => {
       hostCalls++;
+      if (tools.length) return { text: 'native page ready' };
       throw new Error('Host tools must not be invoked');
     },
     onEvent: (event) => {
@@ -107,7 +130,7 @@ process.stdin.setEncoding('utf8'); process.stdin.on('data',s=>input+=s); process
       if (
         approveWorkspace &&
         event.type === 'approval' &&
-        event.request.id.startsWith('cursor-workspace:')
+        event.request.id.startsWith(`${cli}-workspace:`)
       )
         session.resolveApproval(event.request.id, true);
     },
@@ -195,6 +218,31 @@ test('Cursor asks the host before trusting a workspace and keeps Ask restriction
   }
 });
 
+for (const decision of ['allow', 'deny', 'stop'] as const)
+  test(`Gemini workspace ${decision} gates startup and retains the admin tool restriction`, async () => {
+    const f = await fixture('gemini', 'normal', undefined, false);
+    try {
+      const pending = f.session.send('task');
+      const done = decision === 'allow' ? pending : assert.rejects(pending, /拒绝|停止/);
+      await until(() => f.events.some((event) => event.type === 'approval'));
+      await assert.rejects(readFile(path.join(f.directory, 'args.jsonl')));
+      const event = f.events.find((event) => event.type === 'approval');
+      assert.ok(event?.type === 'approval');
+      if (decision === 'stop') await f.session.interrupt();
+      else f.session.resolveApproval(event.request.id, decision === 'allow');
+      await done;
+      if (decision === 'allow') {
+        const [call] = await f.logs();
+        assert.ok(call.args.includes('--skip-trust'));
+        assert.ok(call.args.includes('--admin-policy'));
+        assert.equal(call.args[call.args.indexOf('--approval-mode') + 1], 'plan');
+      } else await assert.rejects(readFile(path.join(f.directory, 'args.jsonl')));
+      assert.throws(() => f.session.resolveApproval(event.request.id, true), /失效/);
+    } finally {
+      await f.cleanup();
+    }
+  });
+
 for (const decision of ['deny', 'stop'] as const) {
   test(`Cursor workspace ${decision} never starts a CLI process or accepts late approval`, async () => {
     const f = await fixture('cursor', 'normal', undefined, false);
@@ -218,7 +266,7 @@ for (const cli of cliIds) {
   test(`${cli}: native stream, Unicode, hidden data filtering, evidence-only usage and native resume`, async () => {
     const f = await fixture(cli);
     try {
-      assert.deepEqual(await f.session.listModels(), []);
+      await f.session.prepare();
       await assert.rejects(readFile(path.join(f.directory, 'args.jsonl'))); // preparation never calls a model
       await f.session.send('first', 'context', undefined, { model: 'chosen-model' });
       assert.equal(text(f.events), '你\u2028好!');
@@ -290,7 +338,7 @@ for (const cli of cliIds) {
           throw new Error('unavailable');
         },
         onEvent: (event) => {
-          if (event.type === 'approval' && event.request.id.startsWith('cursor-workspace:'))
+          if (event.type === 'approval' && event.request.id.startsWith(`${cli}-workspace:`))
             resumed.resolveApproval(event.request.id, true);
         },
       });
@@ -508,7 +556,7 @@ test('stream-cli-session: startup failure, input guards and model effort support
     await f.cleanup();
   }
 });
-test('stream-cli-session: rejects host browser tools rather than silently enabling an unbridged capability', async () => {
+test('stream-cli-session: rejects invalid browser tool definitions', async () => {
   const f = await fixture('claude');
   try {
     const session = new StreamCliSession({
@@ -522,7 +570,7 @@ test('stream-cli-session: rejects host browser tools rather than silently enabli
       },
     });
     try {
-      await assert.rejects(session.prepare(), /禁用浏览器/);
+      await assert.rejects(session.prepare(), /工具定义无效/);
     } finally {
       session.close();
     }
@@ -626,4 +674,60 @@ test('stream-cli-session: interrupt during prepare prevents a late launch', asyn
   } finally {
     await f.cleanup();
   }
+});
+
+test('Claude uses streaming image content while unsupported CLIs reject before launch', async (t) => {
+  const f = await fixture('claude');
+  t.after(f.cleanup);
+  await f.session.send('', undefined, undefined, undefined, [testImage]);
+  const [record] = await f.logs();
+  assert.ok(record.args.includes('--input-format'));
+  const input = JSON.parse(record.input);
+  assert.equal(input.type, 'user');
+  assert.deepEqual(input.message.content, [
+    { type: 'image', source: { type: 'base64', media_type: 'image/png', data: testImage.data } },
+  ]);
+  for (const cli of ['cursor', 'gemini'] as const) {
+    const unsupported = await fixture(cli);
+    t.after(unsupported.cleanup);
+    await assert.rejects(
+      unsupported.session.send('look', undefined, undefined, undefined, [testImage]),
+      /不支持图片/,
+    );
+    await assert.rejects(unsupported.logs(), { code: 'ENOENT' });
+  }
+});
+
+test('Claude native MCP configuration routes browser calls and is revoked after each turn', async (t) => {
+  const tool = {
+    name: 'neo_status',
+    description: 'Browser status',
+    inputSchema: { type: 'object', properties: {} },
+  };
+  const f = await fixture('claude', 'browser-tools', undefined, true, [tool]);
+  t.after(f.cleanup);
+  await f.session.send('read the browser');
+  assert.equal(f.hostCalls(), 1);
+  const events = f.events.filter((event) => event.type === 'tool');
+  assert.deepEqual(
+    events.map((event) => event.call.status),
+    ['running', 'done'],
+  );
+  assert.equal(events[0].call.name, 'neo_status');
+  const [call] = await f.logs();
+  assert.ok(call.args.includes('--restricted'));
+  assert.ok(call.args.includes('mcp__athena__neo_status'));
+  assert.equal(call.args[call.args.indexOf('--tools') + 1], '');
+  assert.ok(!call.args.includes('--safe-mode'));
+  const bridge = JSON.parse(await readFile(path.join(f.directory, 'bridge.json'), 'utf8'));
+  assert.equal(bridge.mode, 0o600);
+  await assert.rejects(fetch(bridge.url));
+  await until(async () =>
+    readFile(call.args[call.args.indexOf('--mcp-config') + 1]).then(
+      () => false,
+      () => true,
+    ),
+  );
+  assert.equal(f.session.matchesConfiguration(f.directory, f.executablePath, [tool]), true);
+  assert.equal(f.session.matchesConfiguration(f.directory, f.executablePath, []), false);
 });

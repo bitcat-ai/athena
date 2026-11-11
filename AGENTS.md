@@ -61,7 +61,7 @@ npm run package
 
 ## 执行与共享边界
 
-- CLI 能力与验收层级见 [本机 CLI 适配](docs/mainstream-cli-support.md)。默认 CLI 只影响新对话，旧对话缺少 agent 字段时按 Codex 处理，不迁移原始会话或静默切换。安装检测不等于登录或真实执行已验证；浏览器工具目前仅向 Codex 开放。通用 MCP 管理、多 Agent 调度和账户/订阅服务尚未实现。
+- CLI 能力与验收层级见 [本机 CLI 适配](docs/mainstream-cli-support.md)。默认 CLI 只影响新对话，旧对话缺少 agent 字段时按 Codex 处理，不迁移原始会话或静默切换。安装检测不等于登录或真实执行已验证；源码版浏览器工具向 Codex、Claude、Pi 和 OpenCode 开放，沿用同一套 Neo 授权、停止与恢复边界。Gemini、Cursor 尚未接通该链路。通用 MCP 管理、多 Agent 调度和账户/订阅服务尚未实现。
 - 内部 Neo MCP 网页工具链不等于任意第三方 MCP 接入，也不代表 Mac 桌面控制能力。
 - 模型选择与实际本轮配置分别验证；不能用上一轮记录或模型自述证明当前模型。
 - 网页操作遵循观察、执行、读取结果、核对；失败或结果未知时先重新观察和核对，不能盲目重放。
@@ -82,7 +82,7 @@ npm run package
 <claude-mem-context>
 # Memory Context
 
-# [athena] recent context, 2026-11-02 2:47pm GMT+8
+# [athena] recent context, 2026-11-05 7:35pm GMT+8
 
 No previous sessions found.
 </claude-mem-context>

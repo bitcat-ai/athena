@@ -180,7 +180,12 @@ export function ModelPicker({
                   textValue={model.name}
                   isDisabled={disabled}
                 >
-                  <span>{model.name}</span>
+                  <span>
+                    {model.name}
+                    {models.some(
+                      (other) => other.model !== model.model && other.name === model.name,
+                    ) && <small className="model-option-id">{model.model}</small>}
+                  </span>
                   <ListBox.ItemIndicator />
                 </ListBox.Item>
               ))}
@@ -208,7 +213,7 @@ export function ModelPicker({
                 : loading
                   ? '正在读取可用模型…'
                   : catalogStatus === 'ready' && !models.length
-                    ? '此 CLI 未提供模型目录，沿用本机默认配置'
+                    ? '当前没有可选模型，沿用 CLI 默认配置'
                     : !selection
                       ? '使用本机 CLI 默认配置'
                       : '用于下一次任务'}

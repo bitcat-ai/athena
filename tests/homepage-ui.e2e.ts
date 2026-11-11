@@ -6,6 +6,7 @@ import { uiBrowserExecutable } from './ui-browser';
 import { chromium, expect } from '@playwright/test';
 import { checkTaskPanels } from './task-panel-checks';
 import { checkAppNotices } from './app-notice-checks';
+import { checkRuntimeSettings } from './runtime-settings-checks';
 import { createServer, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
@@ -107,9 +108,17 @@ window.workbench={
   fixture.calls.push({action,payload});
   if(action==='app:snapshot')return fixture.ready?structuredClone(fixture.snapshot):new Promise(resolve=>fixture.pendingSnapshots.push(resolve));
   if(action==='codex:update-status')return fixture.updateStatus || {status:'unknown'};
-  if(action==='models:list')return [{model:'fixture-model',name:${JSON.stringify(longModelName)},efforts:[{id:'low',description:'Low'},{id:'high',description:'High'}],defaultEffort:'low'}];
+  if(action==='models:list')return fixture.runtimeModels?.[payload.agent] ?? [{model:'fixture-model',name:${JSON.stringify(longModelName)},efforts:[{id:'low',description:'Low'},{id:'high',description:'High'}],defaultEffort:'low'}];
   if(action==='conversation:prepare')return {status:'ready',conversationId:payload.conversationId};
-  if(action==='conversation:new'){const item={id:'new-'+fixture.calls.length,title:'新对话',updatedAt:Date.now(),workspace:fixture.snapshot.settings.workspace,agent:payload?.agent||fixture.snapshot.settings.agent,messages:[]};fixture.snapshot.conversations.unshift(item);return item;}
+  if(action==='conversation:new'){if(fixture.failRuntimeSwitch)throw Error('无法切换运行时');const item={id:'new-'+fixture.calls.length,title:'新对话',updatedAt:Date.now(),workspace:fixture.snapshot.settings.workspace,agent:payload?.agent||fixture.snapshot.settings.agent,messages:[]};fixture.snapshot.conversations.unshift(item);return item;}
+  if(action==='conversation:agent'){
+    if(fixture.failRuntimeSwitch)throw Error('无法切换运行时');
+    const item=fixture.snapshot.conversations.find(c=>c.id===payload.conversationId);
+    if(!item||item.messages.length||item.agentSessionId)throw Error('此对话已绑定 CLI');
+    item.agent=payload.agent;delete item.modelSelection;
+    fixture.emit({type:'conversation:updated',conversation:structuredClone(item)});
+    return structuredClone(item);
+  }
   if(action==='conversation:send'){
    if(fixture.failSend)throw new Error('测试发送失败，请稍后重试。');
    const item=fixture.snapshot.conversations.find(c=>c.id===payload.id);
@@ -120,7 +129,7 @@ window.workbench={
   }
   if(action==='conversation:stop'){for(const item of fixture.snapshot.conversations){for(const message of item.messages)if(message.status==='streaming')message.status='done';fixture.emit({type:'conversation:updated',conversation:structuredClone(item)})}return true;}
   if(action==='settings:workspace'){if(!fixture.folderChoice)return null;fixture.snapshot.settings.workspace=fixture.folderChoice;return structuredClone(fixture.snapshot.settings);}
-  if(action==='settings:agent'){fixture.snapshot.settings.agent=payload.id;return structuredClone(fixture.snapshot.settings);}
+  if(action==='settings:agent'){if(fixture.failAgentSave)throw Error('无法保存默认运行时');fixture.snapshot.settings.agent=payload.id;return structuredClone(fixture.snapshot.settings);}
   if(action==='settings:model'){
     const selection={model:payload.model,effort:payload.effort};
     if(payload.conversationId!==undefined){
@@ -462,7 +471,7 @@ try {
 
   await page.locator('.sidebar-settings').click();
   await expect(page.locator('.settings-workspace')).toBeVisible();
-  await expect(page.getByRole('heading', { name: '使用你已有的 Agent' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '运行时配置' })).toBeVisible();
   await expect(page.locator('.settings-workspace')).toContainText('/fixture/bin/codex');
   await expect(page.locator('.settings-workspace')).toContainText('Claude Code');
   const statusBadge = page.locator('.agent-connection-card .small-badge');
@@ -828,6 +837,10 @@ try {
   await checkAppNotices(page);
   checks.push(
     'App notices prioritize pending requests, preserve focus and reopen official update notes through the host',
+  );
+  await checkRuntimeSettings(page);
+  checks.push(
+    'Runtime settings follow the current conversation; default CLI and scoped model changes remain separate, including legacy, unknown, busy and failed-save states',
   );
   assert.deepEqual(errors, []);
   await writeFile(

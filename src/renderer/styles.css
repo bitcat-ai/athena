@@ -1943,37 +1943,69 @@ select {
 .manual-connection .input {
   width: 100%;
 }
-.app-toast {
+.app-notifications {
   position: fixed;
-  left: 50%;
-  bottom: 28px;
-  transform: translateX(-50%);
+  top: 64px;
+  right: 16px;
   z-index: 100;
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  gap: 8px;
+  width: min(384px, calc(100vw - 32px));
+  pointer-events: none;
+  -webkit-app-region: no-drag;
+}
+.app-notifications:empty {
+  display: none;
+}
+.app-notifications > * {
+  pointer-events: auto;
+}
+.app-toast {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
   gap: 9px;
-  padding: 10px 10px 10px 15px;
-  max-width: min(590px, 85vw);
+  padding: 12px;
+  max-height: min(360px, calc(100dvh - 80px));
+  overflow: auto;
+  overscroll-behavior: contain;
   background: var(--surface);
   color: var(--foreground);
-  border-radius: 14px;
-  font-size: 12px;
+  border-radius: var(--radius-control);
+  font-size: 13px;
   line-height: 1.6;
-  box-shadow: var(--shadow-overlay);
+  box-shadow: var(--overlay-shadow);
   animation: reveal 180ms ease;
+}
+.app-toast:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.app-toast-message {
+  min-width: 0;
+  padding-block: 5px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 .app-toast .button {
   color: var(--foreground);
-  width: 26px;
-  min-width: 26px;
-  height: 26px;
-  min-height: 26px;
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  min-height: 32px;
   padding: 0;
+}
+.app-toast-dismiss {
+  align-self: start;
+  position: sticky;
+  top: 0;
 }
 .app-toast.error {
   background: var(--surface);
 }
 .app-toast > svg {
+  margin-top: 8px;
   color: var(--success);
 }
 .app-toast.error > svg {
@@ -2735,6 +2767,14 @@ select {
   min-height: 44px;
   font-size: 14px;
 }
+.settings-value-row > :last-child {
+  min-width: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+.settings-value-row > span:first-child {
+  flex-shrink: 0;
+}
 .settings-value-row > span:first-child {
   color: var(--secondary);
 }
@@ -2744,11 +2784,63 @@ select {
 .settings-value-row .model-picker {
   min-width: 0;
 }
-.settings-agent-path {
-  font: 12px/20px var(--font-mono);
+.runtime-scope {
+  margin: 0 0 10px;
+  color: var(--secondary);
+  font-size: 12px;
+}
+.runtime-conversation {
+  margin: -2px 0 16px;
   color: var(--muted);
+  font-size: 13px;
   overflow-wrap: anywhere;
-  margin: 10px 0;
+}
+.runtime-switch-hint {
+  margin: -6px 0 14px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.runtime-effort {
+  margin-left: 8px;
+  color: var(--secondary);
+  font-size: 12px;
+}
+.runtime-path {
+  display: grid;
+  gap: 6px;
+  margin: 12px 0 0;
+  color: var(--secondary);
+  font-size: 12px;
+}
+.runtime-path code {
+  font: 12px/20px var(--font-mono);
+  color: var(--secondary);
+  overflow-wrap: anywhere;
+}
+.runtime-defaults {
+  margin: 28px 0 20px;
+}
+.runtime-defaults .settings-card-caption {
+  margin: -4px 0 14px;
+}
+.runtime-defaults .choice-select {
+  width: 220px;
+  max-width: 60%;
+}
+.runtime-installations {
+  margin: 0 0 24px;
+  border-bottom: 1px solid var(--line);
+}
+.runtime-installations summary {
+  width: fit-content;
+  padding: 10px 0;
+  color: var(--secondary);
+  font-size: 13px;
+  cursor: pointer;
+}
+.runtime-installations summary:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 4px;
 }
 .settings-agent-detail,
 .settings-card-caption {
@@ -2901,4 +2993,26 @@ html[data-theme='dark'] .composer [data-slot='prompt-input-shell'] {
   font-size: 12px;
   line-height: 18px;
   vertical-align: baseline;
+}
+
+.image-attachments {
+  flex-wrap: wrap;
+}
+.image-attachments [data-slot='chat-attachment'] {
+  width: 80px;
+  height: 80px;
+  flex: none;
+}
+.image-attachments [data-slot='chat-attachment-preview-image'] {
+  object-fit: contain;
+}
+.image-reading {
+  padding: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.composer-image-error {
+  margin: 0 12px 8px;
+  color: var(--danger);
+  font-size: 12px;
 }

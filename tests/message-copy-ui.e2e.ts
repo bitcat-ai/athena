@@ -147,6 +147,11 @@ window.workbench={
  async invoke(action,payload){
   fixture.calls.push({action,payload});
   if(action==='app:snapshot')return structuredClone(fixture.snapshot);
+  if(action==='browser:start'){fixture.snapshot.browser.status='ready';return structuredClone(fixture.snapshot.browser);}
+  if(action==='browser:new-tab'){
+   if(fixture.failBrowser)throw new Error('请先停止共享再新建标签页');
+   return {id:'linked-page',url:payload.url,title:'发布说明'};
+  }
   if(action==='app:copy'){
    if(fixture.failCopy)throw new Error("Error invoking remote method 'workbench:invoke': Error: ${hostFailure}");
    return true;
@@ -424,6 +429,122 @@ try {
   await expect(userCopy).toBeVisible();
   await page.screenshot({ path: path.join(output, 'user-copy-dark.png') });
   checks.push('The entry renders with theme tokens in dark mode');
+
+  await page.clock.install();
+  const draft = page.getByRole('textbox', { name: '发送给 Agent 的任务' });
+  await draft.fill('提醒出现时保留这份草稿');
+  const emitNotice = (message: string, level: 'info' | 'error' = 'info') =>
+    page.evaluate(
+      ({ message, level }) => {
+        for (const listener of (window as any).__copyFixture.listeners)
+          listener({ type: 'notice', message, level });
+      },
+      { message, level },
+    );
+  await emitNotice('连接状态已更新');
+  await expect(toast).toBeVisible();
+  await expect(draft).toBeFocused();
+  const corner = await toast.boundingBox();
+  assert.ok(corner && Math.abs(corner.y - 64) <= 1);
+  assert.ok(corner && Math.abs(corner.x + corner.width - (page.viewportSize()!.width - 16)) <= 1);
+  await page.screenshot({
+    path: path.join(output, 'notification-top-right.png'),
+    animations: 'disabled',
+  });
+  await page.clock.fastForward(2000);
+  await emitNotice('连接状态已更新');
+  await expect(toast).toHaveCount(1);
+  await page.clock.fastForward(1500);
+  await expect(toast).toHaveCount(0);
+  const longError = '连接未成功，请检查当前网络后重试。'.repeat(60);
+  await emitNotice(longError, 'error');
+  await expect(toast).toHaveAttribute('role', 'alert');
+  assert.ok(await toast.evaluate((node) => node.scrollWidth <= node.clientWidth + 1));
+  assert.ok(await toast.evaluate((node) => node.scrollHeight > node.clientHeight));
+  await expect(toast.getByRole('button', { name: '关闭提示' })).toBeInViewport();
+  await toast.hover();
+  await page.clock.fastForward(8000);
+  await expect(toast).toBeVisible();
+  await toast.focus();
+  await page.mouse.move(8, 8);
+  await page.clock.fastForward(8000);
+  await expect(toast).toBeVisible();
+  await page.screenshot({
+    path: path.join(output, 'notification-long-error.png'),
+    animations: 'disabled',
+  });
+  await toast.press('Escape');
+  await expect(toast).toHaveCount(0);
+  await expect(draft).toBeFocused();
+  await expect(draft).toHaveText('提醒出现时保留这份草稿');
+  assert.equal(
+    await page.evaluate(
+      () =>
+        (window as any).__copyFixture.calls.filter(
+          (call: any) => call.action === 'conversation:stop',
+        ).length,
+    ),
+    0,
+  );
+  checks.push(
+    'App reminders sit at the top right, preserve typing, merge repeats, pause for hover/focus, contain long errors and close with Escape without stopping the Agent',
+  );
+
+  const pageLink = page.getByRole('link', { name: '发布说明', exact: true });
+  await pageLink.click();
+  await expect(page.locator('.browser-drawer')).toHaveClass(/is-open/);
+  let linkCalls = await page.evaluate(() =>
+    (window as any).__copyFixture.calls.filter((call: any) =>
+      ['browser:start', 'browser:new-tab', 'shell:openExternal'].includes(call.action),
+    ),
+  );
+  assert.deepEqual(linkCalls, [
+    { action: 'browser:new-tab', payload: { url: 'https://example.com/release?tab=notes#top' } },
+  ]);
+  await page.evaluate(() => {
+    const fixture = (window as any).__copyFixture;
+    fixture.calls = [];
+    fixture.snapshot.browser.status = 'stopped';
+    for (const listener of fixture.listeners)
+      listener({ type: 'browser:state', state: structuredClone(fixture.snapshot.browser) });
+  });
+  await pageLink.click();
+  await expect
+    .poll(async () =>
+      page.evaluate(
+        () =>
+          (window as any).__copyFixture.calls.filter(
+            (call: any) => call.action === 'browser:new-tab',
+          ).length,
+      ),
+    )
+    .toBe(1);
+  linkCalls = await page.evaluate(() =>
+    (window as any).__copyFixture.calls.filter((call: any) =>
+      ['browser:start', 'browser:new-tab', 'shell:openExternal'].includes(call.action),
+    ),
+  );
+  assert.deepEqual(
+    linkCalls.map((call: any) => call.action),
+    ['browser:start', 'browser:new-tab'],
+  );
+  await page.evaluate(() => {
+    (window as any).__copyFixture.failBrowser = true;
+  });
+  await pageLink.click();
+  await expect(toast).toContainText('请先停止共享再新建标签页');
+  assert.equal(
+    await page.evaluate(
+      () =>
+        (window as any).__copyFixture.calls.filter(
+          (call: any) => call.action === 'shell:openExternal',
+        ).length,
+    ),
+    0,
+  );
+  checks.push(
+    'Reply links open the Neo drawer and a new tab; a stopped browser starts first, and sharing rejection never falls back to the system browser',
+  );
 
   assert.deepEqual(errors, []);
   await writeFile(

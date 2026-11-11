@@ -97,21 +97,21 @@ try {
   evidence.checks.push('New conversation inherits the application default');
 
   await page.locator('.sidebar-settings').click();
-  const claudeRow = page
-    .locator('.agent-setting-row')
-    .filter({ has: page.getByText('Claude Code', { exact: true }) });
-  await claudeRow.getByRole('button', { name: '设为默认', exact: true }).click();
+  const defaultRuntime = page.locator('[data-choice-label="新对话默认运行时"]');
+  await defaultRuntime.click();
+  await page.getByRole('option', { name: 'Claude Code', exact: true }).click();
   await expect.poll(async () => (await snapshot()).settings.agent).toBe('claude');
   state = await snapshot();
   assert.equal(state.conversations.find((item) => item.id === piId)?.agent, 'pi');
   assert.equal(state.conversations.find((item) => item.id === legacy.id)?.agent, undefined);
-  for (const info of state.agents.filter((item) => !item.available || !item.supported)) {
-    const row = page
-      .locator('.agent-setting-row')
-      .filter({ has: page.getByText(info.name, { exact: true }) });
-    await expect(row.getByRole('button')).toBeDisabled();
-  }
-  await expect(page.locator('.agent-connection-card .small-badge')).toHaveText('已检测');
+  await defaultRuntime.click();
+  for (const info of state.agents.filter((item) => !item.available || !item.supported))
+    await expect(page.getByRole('option', { name: new RegExp(`^${info.name}`) })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.agent-connection-heading h4')).toHaveText('Pi');
   await page.getByRole('button', { name: '返回对话', exact: true }).click();
   await expect(page.locator('#composer-agent-name')).toHaveText('Pi');
   evidence.checks.push(

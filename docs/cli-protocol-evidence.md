@@ -1,6 +1,6 @@
 # Claude Code / Gemini CLI / Cursor Agent 协议依据
 
-本文记录隔离适配阶段的协议依据。后续宿主集成与真实调用状态见 [本机 CLI 适配](mainstream-cli-support.md)：Codex/Claude 已通过真实 Electron 对话验证，Cursor 的模型调用受账户额度限制，Gemini 已安装但真实验收暂缓；不能把下文的协议或模拟结果当作全部实测通过。
+本文记录隔离适配阶段的协议依据。当前源码新增了 Claude 的宿主 Neo MCP 接入，纯文本模式和 Gemini/Cursor 仍保留原限制。宿主集成与验证层级见 [本机 CLI 适配](mainstream-cli-support.md)；不能把协议或模拟结果当作全部远端模型实测通过。
 
 ## 范围与验证层级
 
@@ -19,6 +19,8 @@
 
 - [官方 headless 文档](https://code.claude.com/docs/en/headless)：`--print --output-format stream-json --verbose --include-partial-messages`；`stream_event.event.delta.type=text_delta` 的 `text`；最终 `result`；通过 `--resume <session-id>` 恢复明确会话。文档明确要求检查退出码，失败可能在 stdout result 中报告。
 - [官方 CLI 参数](https://code.claude.com/docs/en/cli-reference) 与本机 help：`--tools ""` 禁用全部内置工具；`--strict-mcp-config --mcp-config '{"mcpServers":{}}'` 不载入用户 MCP；`--safe-mode` 禁用 hooks/skills/plugins 等自定义行为，但保留认证与模型选择；不使用会跳过 OAuth/keychain 的 `--bare`。
+- Neo 模式改用官方 `--restricted`：`--safe-mode` 的本机初始化结果不加载显式 MCP，`--restricted` 则能加载本轮临时配置。仍使用 `--tools ""`、严格 MCP 配置和精确 `--allowedTools` 清单；检查 init 的连接状态与工具名，不把配置文件存在当作连接成功。受限模式只加载 managed/显式 settings，不承诺继承用户/项目 settings。
+- [官方 MCP 说明](https://code.claude.com/docs/en/mcp#exempt-a-server-from-deferral)：临时服务器设置 `alwaysLoad: true`，本轮设置 `ENABLE_TOOL_SEARCH=false`，避免工具未就绪或仅以延迟占位项出现。配置只写入私有临时目录，结束即移除，不修改用户 MCP 文件。
 - 本机 help / headless 文档：`--permission-mode dontAsk --permission-prompts none`，无人审批时拒绝请求而非等待。`--disable-slash-commands --no-chrome` 不开放命令/浏览器旁路。
 - [官方 SDK 类型](https://platform.claude.com/docs/en/agent-sdk/typescript)：`SDKAssistantMessage.message.model`、`SDKResultMessage.usage` / `permission_denials` / `stop_reason`。只显示 text block，不显示 thinking，也不把 subagent 消息拼进主回复。
 
@@ -50,9 +52,11 @@ Cursor 文档只提供 init 的模型显示名称，没有当前 assistant 的�
 ## 宿主集成注意
 
 - 父任务负责 main/UI/store/discovery/onboarding；本文件不改这些入口。按对话固定 CLI，只有同 CLI 的原生 session ID 可以恢复；不能从 Codex/Pi/其他 CLI ID 或拼接历史创建“恢复”。
-- `prepare()` 只校验配置，不启动模型；`isReady` 不代表已登录或恢复成功。`listModels()` 返回空目录，而不是用模型调用发现目录或捏造可选项。已知外部模型标识可通过 `selection.model` 传入，CLI 最终决定是否支持；effort 仅接受本机 Claude help 中明确的值。
+- `prepare()` 只校验配置，不启动模型；`isReady` 不代表已登录或恢复成功。模型发现由 `src/main/cli-models.ts` 分协议读取，不发送用户 prompt。Claude 使用 `initialize` 控制响应中的 `models`，Cursor 使用 `--list-models`，Gemini 使用 `--list-models --output-format json`。不识别的响应、启动失败和超时均报错，不用空目录掩盖失败。
+- Claude 的模型标识与 `supportedEffortLevels` 来自原生响应，参考 [官方 SDK 的初始化结果与 ModelInfo](https://code.claude.com/docs/en/agent-sdk/typescript#sdkcontrolinitializeresponse)。Cursor 的原生模型变体保持完整 ID，不从名称推测独立推理档位，参考[官方 CLI 参数](https://cursor.com/docs/cli/reference/parameters)。Gemini 的 JSON 格式按本机 `0.67.0` 包中 `packages/cli/src/commands/models/list.ts` 核对；它提供 CLI 可选项，不证明该账号能完成付费推理。
+- 模型发现进程不保存 Claude 会话、不传入浏览器工具，最多运行 20 秒并限制输出大小。关闭/刷新失效时撤销读取并终止进程组；只返回模型字段，丢弃账户信息和原始诊断。旧版 CLI 不支持查询 flag 时显式失败，不把命令文本降级为模型 prompt。
 - 首次 `send()` 等待原生 init 才发 run-started；恢复 ID 不同立即失败，缺失 session 不重试建新。失败/停止后 adapter 关闭，宿主可显式新建 adapter 并使用已保存的原生 ID 再恢复，不自动重放消息。
-- 必须传 `tools: []`，隐藏/禁用浏览器与元素能力；非空 tools 和 selectedElement 明确报错。`callTool` 不调用。Cursor 的宿主目录信任请求需逐次批准；其余原生工具审批/提问仍不支持，收到未桥接请求会停止。目录信任不等同于任意命令或文件写入授权。
+- Claude 可接收宿主浏览器工具和精确元素上下文，工具经私有 MCP 回到宿主校验；Gemini/Cursor 仍要求 `tools: []` 并拒绝元素上下文。Gemini 与 Cursor 的目录信任仍需逐次批准；未桥接的原生审批/提问会停止，不自动批准。目录信任不等于任意命令或文件写入授权。
 - prompt/context 走 stdin 并 EOF，不经过 shell，不修改凭据。stderr 排空但不展示；协议错误使用固定错误文案。stdout 仅解析已知公开文本/元数据，不发 thinking 或完整协议记录。
 - 每回合都必须具备匹配的 init、成功原生 result、正常退出码，才发 complete。只见 delta、只见退出码 0、权限拒绝、错误 result、无 result、中止和非零退出都不会成功。
 - POSIX detached 进程组 TERM 后 1.5 秒 KILL；即使 leader 先退出也保留组清理。停止不以杀进程假装模型已完成。Claude/Gemini 初始化超时为 30 秒，Cursor 为 60 秒；目录确认等待及整回合各有 15 分钟上限；不无限等待原生交互。Windows 没有 POSIX 进程组能力，仅直接终止子进程，进程树停止能力**未验证**。

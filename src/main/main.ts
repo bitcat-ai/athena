@@ -6,6 +6,7 @@ import {
   ipcMain,
   Menu,
   net,
+  nativeImage,
   safeStorage,
   shell,
 } from 'electron';
@@ -21,7 +22,13 @@ import { dispatchBrowserAction } from './browser-actions';
 import { createCodexUpdateChecker, detectAgents } from './agents';
 import { createAgentSession } from './agent-factory';
 import type { AgentSession } from './agent-session';
-import { conversationAgent, conversationModelSelection, supportsBrowser } from '../shared/agents';
+import {
+  conversationAgent,
+  conversationModelSelection,
+  supportsBrowser,
+  supportsImages,
+} from '../shared/agents';
+import { imageSource, parseImages, type ImageAttachment } from '../shared/images';
 import { NeoBrowserRuntime } from './neo-browser';
 import { copyText } from './clipboard';
 import { FeishuConnector } from './feishu';
@@ -192,8 +199,11 @@ function nativeSessionOptions() {
     ),
   };
 }
-function toolsFor(conversation: Conversation) {
-  return supportsBrowser(conversationAgent(conversation)) ? neo.getTools() : [];
+function toolsFor(conversation: Pick<Conversation, 'agent'>) {
+  const agent = conversationAgent(conversation);
+  if (!supportsBrowser(agent)) return [];
+  if (agent !== 'codex' && browser.getState().status !== 'ready') return [];
+  return neo.getTools();
 }
 function assertTaskEnvironment() {
   if (onboarding?.getState().requiresSetup && onboarding.getState().workspace.status !== 'ready')
@@ -250,11 +260,7 @@ async function listModels(refresh = false, conversation?: Conversation) {
     const reusable =
       current?.isReady &&
       !preDiscoverySessions.has(current) &&
-      current.matchesConfiguration(
-        workspace,
-        executablePath,
-        supportsBrowser(id) ? neo.getTools() : [],
-      );
+      current.matchesConfiguration(workspace, executablePath, toolsFor({ agent: id }));
     const client = reusable
       ? current
       : (catalog.probe = createAgentSession(id, {
@@ -337,7 +343,11 @@ function prepareConversation(conversation: Conversation): Promise<void> {
   const request = (async () => {
     const info = selectableAgent(conversationAgent(conversation));
     try {
-      if (supportsBrowser(info.id) && onboarding?.allowsBrowserStartup !== false) await neo.start();
+      if (
+        supportsBrowser(info.id) &&
+        (onboarding?.allowsBrowserStartup !== false || browser.getState().status === 'ready')
+      )
+        await neo.start();
     } catch {
       /* Local CLI work does not require Neo. */
     }
@@ -435,6 +445,7 @@ async function resolveMentions(value: unknown) {
     '页面效果调整直接使用元素编辑工具。仅当用户要求修改或保存到源码时，核实项目与页面的对应关系、定位真实组件并验证修改；不要把 DOM 预览当成源码修改。',
     '</page_elements>',
   ].join('\n');
+  if (elementContext.length > 60_000) throw new Error('元素上下文过长，请减少引用或缩小预览改动');
   return { mentions, elementContext, first };
 }
 
@@ -637,7 +648,12 @@ function getSession(
       callTool: async (name: string, args: unknown) => {
         if (!supportsBrowser(conversationAgent(conversation)))
           return { text: '当前 CLI 未接通网页工具，不能执行此操作。', isError: true };
-        if (!active || active.conversationId !== conversation.id)
+        if (
+          !active ||
+          active.conversationId !== conversation.id ||
+          active.session !== session ||
+          active.cancelled
+        )
           return { text: '任务已经停止，不能再执行浏览器操作。', isError: true };
         if (
           active.readonly &&
@@ -685,6 +701,7 @@ async function runTurn(
   readonly = false,
   selectedElement?: ElementRef,
   mentions?: ElementMention[],
+  images: ImageAttachment[] = [],
 ) {
   assertTaskEnvironment();
   if (active || startingTurn) throw new Error('当前任务还在进行，请先停止或等待完成');
@@ -694,11 +711,14 @@ async function runTurn(
   const info = selectableAgent(conversationAgent(conversation));
   if (!supportsBrowser(info.id) && selectedElement)
     throw new Error('当前 CLI 尚未接通网页元素工具，请移除元素上下文后发送');
-  if (!text.trim()) throw new Error('请输入任务');
+  if (images.length && !supportsImages(info.id))
+    throw new Error('当前 CLI 不支持图片，请选择 Codex、Claude、Pi 或 OpenCode');
+  if (!text.trim() && !images.length) throw new Error('请输入任务或粘贴图片');
   if (resetAfterTurn) resetConnections();
   const selectedModel = conversationModelSelection(store.data.settings, conversation);
   const modelSelection = selectedModel ? { ...selectedModel } : undefined;
-  if (!conversation.messages.length) conversation.title = text.trim().split('\n')[0].slice(0, 32);
+  if (!conversation.messages.length)
+    conversation.title = text.trim().split('\n')[0].slice(0, 32) || '图片对话';
   const visibleHistory = conversation.messages.slice();
   const user: ChatMessage = {
     id: randomUUID(),
@@ -709,6 +729,7 @@ async function runTurn(
     source,
     context,
     ...(mentions?.length ? { mentions } : {}),
+    ...(images.length ? { images } : {}),
   };
   const assistant: ChatMessage = {
     id: randomUUID(),
@@ -733,7 +754,11 @@ async function runTurn(
   usage.start(assistant.id, info.id, modelSelection?.model);
   saveUsage();
   try {
-    if (supportsBrowser(info.id) && onboarding?.allowsBrowserStartup !== false) await neo.start();
+    if (
+      supportsBrowser(info.id) &&
+      (onboarding?.allowsBrowserStartup !== false || browser.getState().status === 'ready')
+    )
+      await neo.start();
   } catch {
     /* Local CLI tasks remain available; Neo reports its own connection state. */
   }
@@ -809,6 +834,7 @@ async function runTurn(
       [context, nativeContext].filter(Boolean).join('\n\n') || undefined,
       selectedElement,
       modelSelection,
+      images,
     );
     const unresolved = neo.unresolvedResult(assistant.id);
     if (unresolved) throw new Error(unresolved);
@@ -966,17 +992,25 @@ function startTurn(
   readonly = false,
   selectedElement?: ElementRef,
   mentions?: ElementMention[],
+  images?: ImageAttachment[],
 ) {
   assertTaskEnvironment();
   if (active || startingTurn) throw new Error('当前任务还在进行，请先停止');
   assertOpenConversation(store.data.conversations, conversation);
-  void runTurn(conversation, text, context, 'desktop', readonly, selectedElement, mentions).catch(
-    (error) => {
-      // A failure that already sits on its message is not repeated as a toast.
-      if (!(error && typeof error === 'object' && inlineFailures.has(error)))
-        notice(error instanceof Error ? error.message : '任务失败', 'error');
-    },
-  );
+  void runTurn(
+    conversation,
+    text,
+    context,
+    'desktop',
+    readonly,
+    selectedElement,
+    mentions,
+    images,
+  ).catch((error) => {
+    // A failure that already sits on its message is not repeated as a toast.
+    if (!(error && typeof error === 'object' && inlineFailures.has(error)))
+      notice(error instanceof Error ? error.message : '任务失败', 'error');
+  });
   return { conversationId: conversation.id };
 }
 async function handleFeishuMessage(message: FeishuMessage) {
@@ -1308,16 +1342,30 @@ async function invoke(action: string, payload: unknown) {
     case 'conversation:send': {
       assertTaskEnvironment();
       const data = record(payload);
+      const text = string(data.text);
+      const images = parseImages(data.images);
+      if (!text.trim() && !images.length) throw new Error('请输入任务或粘贴图片');
+      const existing = data.id ? getConversation(data.id) : undefined;
+      const agent = existing ? conversationAgent(existing) : store.data.settings.agent;
+      if (images.length && !supportsImages(agent))
+        throw new Error('当前 CLI 不支持图片，请选择 Codex、Claude、Pi 或 OpenCode');
+      for (const image of images) {
+        const decoded = nativeImage.createFromDataURL(imageSource(image));
+        const { width, height } = decoded.getSize();
+        if (decoded.isEmpty() || width * height > 40_000_000)
+          throw new Error('图片无法读取或像素过多，请缩小图片后重试');
+      }
       const context = data.context === undefined ? undefined : string(data.context, 60_000);
       const { mentions, elementContext, first } = await resolveMentions(data.mentions);
-      const conversation = data.id ? getConversation(data.id) : createConversation();
+      const conversation = existing ?? createConversation();
       return startTurn(
         conversation,
-        string(data.text),
+        text,
         [context, elementContext].filter(Boolean).join('\n\n') || undefined,
         false,
         first,
         mentions,
+        images,
       );
     }
     case 'conversation:stop':

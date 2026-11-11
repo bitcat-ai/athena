@@ -35,9 +35,11 @@ test('default changes never rebind existing or legacy conversations or leak mode
   assert.equal(conversationAgent(pi), 'pi');
   assert.equal(pi.agentSessionId, 'pi-native-id');
   assert.equal(conversationAgent(legacy), 'codex');
-  assert.equal(supportsBrowser('pi'), false);
+  assert.equal(supportsBrowser('pi'), true);
+  assert.equal(supportsBrowser('claude'), true);
   assert.equal(supportsBrowser('cursor'), false);
   assert.equal(supportsBrowser('codex'), true);
+  assert.equal(supportsBrowser('opencode'), true);
 });
 
 async function executable(file: string, body: string) {
@@ -54,7 +56,7 @@ test('discovery deduplicates real installations and finds a healthy CLI after a 
     await executable(path.join(first, 'claude'), 'exit 1');
     await executable(
       path.join(second, 'claude'),
-      'if [ "$1" = "--version" ]; then echo "Claude fixture"; else echo "--safe-mode --permission-prompts --tools"; fi',
+      'if [ "$1" = "--version" ]; then echo "Claude fixture"; else echo "--safe-mode --restricted --mcp-config --permission-prompts --tools"; fi',
     );
     await executable(
       path.join(first, 'cursor-agent'),
@@ -173,5 +175,28 @@ test('Pi setup is not blocked by absent Codex; changing the default does not mak
   } finally {
     await runtime.dispose();
     await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('OpenCode requires the verified 1.x ACP and plugin isolation flags', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'athena-opencode-find-'));
+  try {
+    for (const [version, help, supported] of [
+      ['1.18.15', 'opencode acp --pure', true],
+      ['2.0.0', 'opencode acp --pure', false],
+      ['1.3.0', 'opencode acp', false],
+    ] as const) {
+      await executable(
+        path.join(root, 'opencode'),
+        `if [ "$1" = "--version" ]; then echo "${version}"; else echo "${help}" >&2; fi`,
+      );
+      const found = (await detectAgents(undefined, [root])).find(
+        (agent) => agent.id === 'opencode',
+      );
+      assert.equal(found?.available, true);
+      assert.equal(found?.supported, supported);
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
   }
 });

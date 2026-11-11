@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { testImage } from './image-fixture';
 import test from 'node:test';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
@@ -27,7 +28,7 @@ const end=(word='done')=>{out({type:'message_end',message:{role:'assistant',mode
 const start=()=>{out({type:'agent_start'});out({type:'message_start',message:{role:'assistant',model:'test-model',provider:'fixture'}});};
 readline.createInterface({input:process.stdin}).on('line',line=>{
 const r=JSON.parse(line);fs.appendFileSync(log,JSON.stringify(r)+'\\n');
-if(r.type==='get_state'){if(mode!=='no-gate')out({type:'extension_ui_request',id:'gate',method:'notify',message:'athena-permissions-v1'});return response(r,{sessionId:sid,isStreaming:false,pendingMessageCount:0,model:{id:'test-model',provider:'fixture'}});}
+if(r.type==='get_state'){if(mode==='browser-tools')out({type:'extension_ui_request',id:'browser-gate',method:'notify',message:'athena-browser-tools-v1'});if(mode!=='no-gate')out({type:'extension_ui_request',id:'gate',method:'notify',message:'athena-permissions-v1'});return response(r,{sessionId:sid,isStreaming:false,pendingMessageCount:0,model:{id:'test-model',provider:'fixture'}});}
 if(r.type==='get_available_models')return response(r,{models:[{id:'test-model',provider:'fixture',name:'Fixture'}]});
 if(r.type==='get_available_thinking_levels')return response(r,{levels:['off','high']});
 if(r.type==='set_model'||r.type==='set_thinking_level'||r.type==='clear_queue')return response(r,{});
@@ -36,6 +37,18 @@ if(r.type==='extension_ui_response'){end(r.confirmed?'approved':'denied');return
 if(r.type!=='prompt')return;
 if(r.message==='handled')return response(r,{disposition:'handled'});
 response(r,{disposition:'started'});start();
+if(mode==='browser-tools') {
+ const headers={authorization:'Bearer '+process.env.ATHENA_MCP_TOKEN,'x-athena-client':'pi-fixture','content-type':'application/json'};
+ const request=(id,method,params)=>fetch(process.env.ATHENA_MCP_URL,{method:'POST',headers,body:JSON.stringify({jsonrpc:'2.0',id,method,params})}).then(r=>r.json());
+ void request('list','tools/list').then(()=>{
+   out({type:'tool_execution_start',toolCallId:'native-1',toolName:'neo_status',args:{}});
+   return request('call','tools/call',{name:'neo_status',arguments:{}});
+ }).then(result=>{
+   out({type:'tool_execution_end',toolCallId:'native-1',isError:!!result.error});
+   end(result.error?'rejected':'browser done');
+ });
+ return;
+}
 if(r.message==='crash'){process.stderr.write('sk-secret-do-not-forward');process.exit(7);}
 if(r.message==='orphan'){
   require('node:child_process').spawn(process.execPath,['-e',"process.on('SIGTERM',()=>{});require('node:fs').writeFileSync('ready-child','yes');setTimeout(()=>require('node:fs').writeFileSync('orphan-leak','bad'),2500)"],{cwd:process.cwd(),stdio:'ignore'});
@@ -64,8 +77,20 @@ out({type:'agent_end',willRetry:true});setTimeout(()=>end('a\\u2028b!'),20);
     executablePath,
     sessionId: mode === 'wrong-session' ? 'original' : undefined,
     permissionsExtensionPath: path.resolve('resources/cli/pi-permissions.mjs'),
-    tools: [],
-    callTool: async () => ({ isError: true, text: 'not available' }),
+    tools:
+      mode === 'browser-tools'
+        ? [
+            {
+              name: 'neo_status',
+              description: 'Browser status',
+              inputSchema: { type: 'object', properties: {} },
+            },
+          ]
+        : [],
+    callTool: async () =>
+      mode === 'browser-tools'
+        ? { text: 'native page ready' }
+        : { isError: true, text: 'not available' },
     onEvent: (event) => events.push(event),
   });
   const cleanup = async () => {
@@ -231,3 +256,35 @@ for (const [mode, prompt, pattern] of [
       await f.cleanup();
     }
   });
+
+test('Pi carries pasted images in its native prompt image array', async (t) => {
+  const f = await fixture();
+  t.after(f.cleanup);
+  await f.session.send('', undefined, undefined, undefined, [testImage]);
+  const records = (await readFile(path.join(f.directory, 'commands.jsonl'), 'utf8'))
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line));
+  const prompt = records.find((record) => record.type === 'prompt');
+  assert.equal(prompt.message, '');
+  assert.deepEqual(prompt.images, [
+    { type: 'image', data: testImage.data, mimeType: testImage.mimeType },
+  ]);
+});
+
+test('Pi routes registered browser tools through the host without duplicating native tool events', async (t) => {
+  const f = await fixture('browser-tools');
+  t.after(f.cleanup);
+  await f.session.send('read browser');
+  const events = f.events.filter((event) => event.type === 'tool');
+  assert.deepEqual(
+    events.map((event) => event.call.status),
+    ['running', 'done'],
+  );
+  assert.equal(events[0].call.name, 'neo_status');
+  assert.ok(f.events.some((event) => event.type === 'complete' && event.text === 'browser done'));
+  assert.equal(
+    f.session.matchesConfiguration(f.directory, path.join(f.directory, 'pi'), []),
+    false,
+  );
+});

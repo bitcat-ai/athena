@@ -4,6 +4,8 @@ import { mkdtemp, writeFile, chmod, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { nodeShebang } from './node-script';
+import { testImage } from './image-fixture';
+import { imageSource } from '../src/shared/images';
 import {
   CodexSession,
   browserToolsFingerprint,
@@ -16,6 +18,7 @@ async function fixture(
   options: {
     initializeDelayMs?: number;
     holdInitialize?: boolean;
+    holdThreadStart?: boolean;
     threadStartDelayMs?: number;
     toolAggregatedOutput?: string;
     modelProtocol?: boolean;
@@ -49,6 +52,10 @@ readline.createInterface({input:process.stdin}).on('line', line => {
     {id:'hidden',model:'hidden',hidden:true},
     ...(p.cursor ? [{id:'catalog-b',model:'model-b',displayName:'Model B',supportedReasoningEfforts:[],defaultReasoningEffort:'low'}] : [])
   ],nextCursor:p.cursor ? null : 'page-2'}});
+  if (request.method === 'thread/start' && options.holdThreadStart) {
+    const release=()=>{if(!fs.existsSync(log+'.release-thread'))return;watcher.close();send({id:request.id,result:{thread:{id:'thread-1'},model:p.model,reasoningEffort:p.config?.model_reasoning_effort}});};
+    const watcher=fs.watch(${JSON.stringify(directory)},release);release();return;
+  }
   if (request.method === 'thread/start' && options.modelProtocol) return send({id:request.id,result:{thread:{id:'thread-1'},model:p.model,reasoningEffort:p.config?.model_reasoning_effort}});
   if (request.method === 'thread/start') return setTimeout(()=>send({id:request.id,result:{thread:{id:'thread-1'}}}),options.threadStartDelayMs||0);
   if (p.threadId?.startsWith('no-rollout-')) {
@@ -59,7 +66,7 @@ readline.createInterface({input:process.stdin}).on('line', line => {
   if (request.method === 'thread/read') return send({id:request.id,result:{thread:{id:p.threadId,turns:p.threadId==='unused-warmed-thread'?[]:[{id:'existing-turn'}]}}});
   if (request.method === 'thread/resume') return p.threadId==='thread-1' ? send({id:request.id,result:{thread:{id:'thread-1'}}}) : send({id:request.id,error:{code:-32602,message:'Thread not found'}});
   if (request.method === 'turn/start') {
-    current='turn-'+(++turn); mode=p.input[0].text.split('\\n')[0];
+    current='turn-'+(++turn); mode=(p.input.find(item=>item.type==='text')?.text || '').split('\\n')[0];
     if(mode==='pre-ack') {
       event('turn/started',{threadId:'thread-1',turn:{id:current,status:'inProgress'}});
       send({id:110,method:'item/tool/requestUserInput',params:{threadId:'thread-1',turnId:current,itemId:'pre-ack-input',isBlocking:true,questions:[{id:'choice',header:'选择',question:'Choose one',options:[{label:'A',description:''},{label:'B',description:''}]}]}});
@@ -253,15 +260,20 @@ test('closing a prewarm rejects its handshake and cannot create a late thread', 
 });
 
 test('a model change during prewarm uses the new turn selection without reconnecting', async (t) => {
-  const f = await fixture({ threadStartDelayMs: 80, modelProtocol: true });
+  const f = await fixture({ holdThreadStart: true, modelProtocol: true });
   const agent = session(f, []);
   t.after(() => {
     agent.close();
     return f.cleanup();
   });
   const ready = agent.prepare({ model: 'model-a', effort: 'low' });
-  await waitFor(async () => (await f.requests()).some((r) => r.method === 'thread/start'));
+  await waitFor(async () => (await f.requests()).some((r) => r.method === 'thread/start'), 10000);
   const turn = agent.send('hello', undefined, undefined, { model: 'model-b' });
+  assert.equal(
+    (await f.requests()).some((r) => r.method === 'turn/start'),
+    false,
+  );
+  await writeFile(f.log + '.release-thread', 'ready');
   await Promise.all([ready, turn]);
   const requests = await f.requests();
   assert.equal(requests.filter((r) => r.method === 'initialize').length, 1);
@@ -436,10 +448,10 @@ test('canceling while the selected-element inspection is pending cannot start a 
     agent.close();
     return f.cleanup();
   });
+  // This case cancels an in-flight inspection; CLI cold-start cancellation has separate coverage.
+  await agent.prepare();
   const stopped = assert.rejects(agent.send('hello', undefined, selectedFixture), /任务已停止/);
-  await waitFor(async () =>
-    (await f.requests()).some((request) => request.method === 'thread/start'),
-  );
+  await waitFor(() => Boolean(resolveInspection));
   await agent.interrupt();
   resolveInspection(selectedFixture);
   await stopped;
@@ -1350,7 +1362,7 @@ test('discovery reports a runtime by its version alone and never asks for its lo
     'opencode',
     'pi',
   ]);
-  assert.equal(agents.find((agent) => agent.id === 'opencode')?.supported, false);
+  assert.ok(agents.some((agent) => agent.id === 'opencode'));
 });
 
 test('Codex update checks compare the installed CLI against the official stable release', async () => {
@@ -1639,4 +1651,21 @@ test('terminal turns refuse late tools while execution-model confirmation is pen
   assert.equal(hostCalls, 0);
   assert.equal((await f.requests()).find((r) => r.id === 101 && r.result).result.success, false);
   assert.equal(events.filter((event) => event.type === 'complete').length, 1);
+});
+
+test('Codex sends image-only and mixed turns as native image inputs, never base64 prompt text', async (t) => {
+  const f = await fixture();
+  const agent = session(f, []);
+  t.after(async () => {
+    agent.close();
+    await f.cleanup();
+  });
+  await agent.send('', undefined, undefined, undefined, [testImage]);
+  await agent.send('describe', undefined, undefined, undefined, [testImage]);
+  const turns = (await f.requests()).filter((r) => r.method === 'turn/start');
+  assert.deepEqual(turns[0].params.input, [{ type: 'image', url: imageSource(testImage) }]);
+  assert.deepEqual(turns[1].params.input, [
+    { type: 'text', text: 'describe' },
+    { type: 'image', url: imageSource(testImage) },
+  ]);
 });
