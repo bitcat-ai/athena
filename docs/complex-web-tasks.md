@@ -1,5 +1,7 @@
 # 复杂网页任务执行
 
+下文是 0.5.0 的实现与验收记录，当时的执行器为 BrowserOS neo。计划、检查点、恢复屏障和执行记录沿用至今；执行器已于 2026-11-12 改为 agent-browser，见 [网页执行器](web-executor.md)。文中的原生 0.0.90 行为、耗时和通过数未在新执行器上逐项重测。
+
 0.5.0 在现有 CodexSession → Athena 宿主 → BrowserOS Neo 原生链路上增加任务计划、证据检查点、失败恢复屏障和结构化执行记录。它保留 0.4.0 的共享控制、0.3.2 的输入与帧性能改进，未新增桌面控制或替换浏览器执行器。
 
 ## 实际能力与执行边界
@@ -48,8 +50,8 @@
 ```bash
 npm run typecheck
 npm test
-WORKBENCH_BROWSEROS_TEST_BINARY="/path/to/BrowserOS neo.app/Contents/MacOS/BrowserOS neo" \
-  npx tsx --test --test-concurrency=1 tests/browser.test.ts tests/neo.test.ts \
+ATHENA_TEST_CHROME="/Applications/Google Chrome.app" ATHENA_TEST_AGENT_BROWSER=1 \
+  npx tsx --test --test-concurrency=1 tests/browser.test.ts tests/web-runtime.test.ts \
   tests/sharing-browser.test.ts tests/complex-native.test.ts
 # 以下使用本机已登录 Codex，产生真实模型调用，不在 npm test 中自动运行。
 npm run test:complex-agent

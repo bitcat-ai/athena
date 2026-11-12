@@ -6,20 +6,20 @@
 - 设置中的默认 CLI 只用于新对话；输入栏可为新对话改选 CLI。已有消息或原生执行会话的对话不能重绑，切换时创建新对话。旧档案缺少 `agent` 的对话仍为 Codex，不随应用默认值改变。
 - 对话保存原始 CLI session ID，只能由对应适配器恢复；恢复失败不自动换新 ID，也不用拼接可见历史假装恢复。模型选择与目录缓存按 CLI 隔离。手动刷新会使空闲连接重新读取本机配置；任务进行中则延后到任务结束，不只凭路径、版本或登录方式相同就复用旧账户配置。
 - 模型目录来自 CLI。未提供可靠目录的 CLI 沿用本机默认配置，不编造选项。实际本轮模型另取 CLI 消息元数据，不把初始化配置或模型自述当作执行证据。
-- 当前源码向 Codex、Claude、Pi、OpenCode 开放同一套 Neo 浏览器和元素预览工具；Gemini、Cursor 尚未接入该授权链路。Claude 通过每轮私有 MCP 配置接入，Pi 通过显式加载的 Athena 扩展注册宿主工具，不导入任意第三方 MCP。
+- 当前源码向 Codex、Claude、Pi、OpenCode 开放同一套网页和元素预览工具；Gemini、Cursor 尚未接入该授权链路。Claude 通过每轮私有 MCP 配置接入，Pi 通过显式加载的 Athena 扩展注册宿主工具，不导入任意第三方 MCP。
 
 ## 能力与验证矩阵
 
-下表中的远端真实模型验收记录来自 2026-11-05；本轮新增的本地原生联调见下方「Neo 原生联动」。**全部 CLI 的远端模型验收尚未完成；0.9.0 发布不代表源码新增能力已随安装包发布。**
+下表中的远端真实模型验收记录来自 2026-11-05；本轮新增的本地原生联调见下方「网页工具联动」；其中的网页验收在当时的 BrowserOS neo 执行器上完成，2026-11-12 改用 agent-browser 后的验证范围见 [网页执行器](web-executor.md#验证)。**全部 CLI 的远端模型验收尚未完成；0.9.0 发布不代表源码新增能力已随安装包发布。**
 
 | CLI          | 当前执行模式                              | 最近验收结果                                                                                                                                                                  |
 | ------------ | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Codex        | app-server、本地审批和 Neo 网页工具       | 真实 Electron 的回复、重启续聊、停止、草稿保留、停止后续聊通过；另完成真实 Neo 本地表单填写与保存核对                                                                         |
-| Claude Code  | stream-json；原生 Skill 与只读 Read/Glob/Grep，宿主 Neo | 适配器的真实回复、流式、原生续聊、停止通过；真实 Electron 四轮对话和重启/停止后续聊通过，取得消息模型和用量证据。新增 Skill 发现、原生 slash 分发、Read 成功/失败仅通过模拟 CLI 测试，尚未进行真实模型或跨 main/UI 的 Claude Skill 验收 |
-| Pi           | RPC 与宿主 Neo；本地工具逐项审批     | Pi 1.0.2 适配器通过独立 API 的真实 write/read、审批、流式、原生续聊、用量/模型证据和停止。此前远端 UI 检查遇到续聊发送禁用；2026-11-11 本地原生 Electron + Neo 连续两轮通过，未复现该现象，远端完整 UI 脚本尚未重验 |
+| Codex        | app-server、本地审批和网页工具       | 真实 Electron 的回复、重启续聊、停止、草稿保留、停止后续聊通过；另完成真实 Neo 本地表单填写与保存核对                                                                         |
+| Claude Code  | stream-json；原生 Skill 与只读 Read/Glob/Grep，宿主网页工具 | 适配器的真实回复、流式、原生续聊、停止通过；真实 Electron 四轮对话和重启/停止后续聊通过，取得消息模型和用量证据。新增 Skill 发现、原生 slash 分发、Read 成功/失败仅通过模拟 CLI 测试，尚未进行真实模型或跨 main/UI 的 Claude Skill 验收 |
+| Pi           | RPC 与宿主网页工具；本地工具逐项审批     | Pi 1.0.2 适配器通过独立 API 的真实 write/read、审批、流式、原生续聊、用量/模型证据和停止。此前远端 UI 检查遇到续聊发送禁用；2026-11-11 本地原生 Electron + Neo 连续两轮通过，未复现该现象，远端完整 UI 脚本尚未重验 |
 | Cursor Agent | Ask 只读；启动前逐次确认工作目录          | 2026.11.05-86047df 登录完成；真实服务返回周额度上限，回复/续聊/停止尚未验收。实际 Electron 的目录审批拒绝、等待审批时停止通过，未启动模型会话                                 |
 | Gemini CLI   | stream-json；admin deny 策略禁用原生工具  | 0.67.0 原生目录、经目录确认后的本地 API 回复、续聊与流式停止通过；Google 个人版登录此前被服务端拒绝，远端模型验收仍未完成                                                        |
-| OpenCode 1.x | ACP、原生文件/命令逐项审批与宿主 Neo | 1.18.15 已通过真实 CLI + 本地模型替身的文件读写、原生续聊、停止、图片输入、宿主 MCP；真实 Electron + Neo 完成页面创建/修改/填写/核对与连续两轮对话。未做远端模型验收 |
+| OpenCode 1.x | ACP、原生文件/命令逐项审批与宿主网页工具 | 1.18.15 已通过真实 CLI + 本地模型替身的文件读写、原生续聊、停止、图片输入、宿主 MCP；真实 Electron + Neo 完成页面创建/修改/填写/核对与连续两轮对话。未做远端模型验收 |
 
 Pi 的真实 API 验收使用独立测试配置，复用用户授权的现有 API；未修改原有 Pi Provider 配置。Cursor 与 Gemini 的隔离安装没有覆盖已有 Grok 的 `agent` 命令。测试配置、凭据、原生会话和私有 API 地址均不进入 Git。
 
@@ -77,15 +77,15 @@ Claude 保留原生只读 Read/Glob/Grep/Skill，关闭 hooks 和 Skill 内联 s
 
 协议依据：[OpenCode 1.18.15 ACP](https://github.com/anomalyco/opencode/blob/v1.18.15/packages/opencode/src/acp/service.ts)、[原生审批桥接](https://github.com/anomalyco/opencode/blob/v1.18.15/packages/opencode/src/acp/permission.ts)、[图片内容转换](https://github.com/anomalyco/opencode/blob/v1.18.15/packages/opencode/src/acp/content.ts)。
 
-### Neo 原生联动
+### 网页工具联动
 
 `AgentMcpServer` 只绑定回环地址，使用随机凭据和固定工具清单，所有操作回到当前 `AgentSession` → `NeoBrowserRuntime` → `BrowserRuntime`。敏感操作仍由宿主审批；停止、会话切换、共享控制权和未知结果恢复不会由 CLI 绕过。
 
-- Claude：原生只读 Read/Glob/Grep/Skill 与精确 Athena MCP 工具共同可用；写入、命令、子任务、hooks 和 Skill 内联 shell 仍禁用。严格 MCP 配置、alwaysLoad 和关闭延迟工具搜索保证 Neo 清单完整且首轮可见。原生测试使用独立 CLI 配置目录，避免日常配置覆盖本地模型替身。
-- Pi：只通过已有的授权扩展注册这些精确工具名。Neo 操作交给宿主权限链；本地文件和命令仍逐次请求批准。授权扩展和浏览器工具均需握手就绪。
+- Claude：原生只读 Read/Glob/Grep/Skill 与精确 Athena MCP 工具共同可用；写入、命令、子任务、hooks 和 Skill 内联 shell 仍禁用。严格 MCP 配置、alwaysLoad 和关闭延迟工具搜索保证网页工具清单完整且首轮可见。原生测试使用独立 CLI 配置目录，避免日常配置覆盖本地模型替身。
+- Pi：只通过已有的授权扩展注册这些精确工具名。网页操作交给宿主权限链；本地文件和命令仍逐次请求批准。授权扩展和浏览器工具均需握手就绪。
 - 对话链接在右侧新标签打开。元素编辑的 `insert` 支持受约束的嵌套 HTML、继续修改和撤销；新引用、页面观察与检查点同属当前任务。
 
-已通过真实 Electron、已安装的 Claude/Pi/OpenCode、真实 Neo、**本地模型响应替身**的端到端联调，覆盖链接打开、节点创建、再次修改、原生填写、页面检查点及结果回传。最终联调在禁止显示和激活的测试窗口中完成，避免抢占桌面焦点；它不等于远端模型自主规划已验证。详情见 [Neo 原生联动说明](native-browser-interop.md)。
+已通过真实 Electron、已安装的 Claude/Pi/OpenCode、真实 Neo、**本地模型响应替身**的端到端联调，覆盖链接打开、节点创建、再次修改、原生填写、页面检查点及结果回传。最终联调在禁止显示和激活的测试窗口中完成，避免抢占桌面焦点；它不等于远端模型自主规划已验证。详情见 [网页工具联动说明](native-browser-interop.md)。
 
 ## 验证入口
 
@@ -97,9 +97,9 @@ Claude 保留原生只读 Read/Glob/Grep/Skill，关闭 hooks 和 Skill 内联 s
 - `tests/cli-models-ui.e2e.ts`：隐藏 Electron 中的原生模型目录、选择、推理档位与保存回读，不发送模型任务。
 - `tests/opencode-native.e2e.ts`：已安装 OpenCode 对接本地模型替身，验证原生读写审批、保留原有 deny、续聊、停止、图片与宿主 MCP；不调用远端模型。
 - `tests/gemini-native.e2e.ts`：已安装 Gemini 对接本地 API 替身，验证协议回复/续聊/停止，并在隐藏 Electron 中验证目录拒绝不发请求、批准后执行、停止保留草稿。
-- `npm test`：协议、权限、用量、引导与状态回归；条件性跳过的浏览器/Neo 检查不算已验证，以对应提交的实际输出为准。
+- `npm test`：协议、权限、用量、引导与状态回归；条件性跳过的浏览器与网页执行器检查不算已验证，以对应提交的实际输出为准。
 - `npm run typecheck`、`npm run build`：类型与构建检查。
-- 首页、控件、引导及 USD 用量四组隔离 renderer 检查通过。测试可使用已安装的 BrowserOS、Chrome 或 Playwright Chromium，也可显式设置 `WORKBENCH_TEST_BROWSER_EXECUTABLE`；这不验证 Neo 或桌面控制能力。
+- 首页、控件、引导及 USD 用量四组隔离 renderer 检查通过。测试可使用已安装的 Chrome 或 Playwright Chromium，也可显式设置 `WORKBENCH_TEST_BROWSER_EXECUTABLE`；这不验证网页执行器或桌面控制能力。
 - `tests/mainstream-cli-ui.e2e.ts`：真实 Electron，独立应用数据/临时项目，使用用户已安装的 Pi。目标是通过界面逐次批准指定文件 write/read，核对文件、CLI 消息模型证据及用量；重启后以同一原生 ID 续聊并回忆前轮随机标记；真实停止流式任务并保留下一段草稿。此次新增本地连续对话通过，但尚未重跑该远端完整脚本。验证默认值仅影响新对话、旧无 agent 档案仍属 Codex、已执行对话切换 CLI 创建新会话。Claude 在此脚本仅被选择，不产生其模型调用；浏览器保持稍后准备。
 - `tests/cli-live-ui.e2e.ts`：Codex/Claude/Gemini/Cursor 的实际 Electron 文本会话检查；Cursor `permissions` 模式只验证目录审批，`icons` 模式只验证图标，二者不产生模型回合，也不能替代真实对话验收。
 - 真实 UI 证据写入忽略提交的 `test-results/mainstream-cli-ui/`；隔离 UI 截图不是实机网页操作证据，不替换 README 的正式截图。

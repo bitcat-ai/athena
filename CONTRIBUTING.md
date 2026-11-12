@@ -24,7 +24,7 @@
 - Node.js **22.12+** 和 npm。
 - CollectUI 分发的 HugeIcons Pro npm key，以及 HeroUI Pro 构建授权或有效的本机授权缓存。
 - 进行真实 Agent 测试时，相关 CLI 已在本机安装并登录；仅检测到安装不等于执行能力已验证。
-- 开发网页功能时，使用项目固定版本的 BrowserOS neo，普通 Chrome 不能替代。
+- 开发网页功能时，本机需已安装 Google Chrome；网页执行器使用项目固定版本的 agent-browser。
 
 先 fork 或克隆仓库，在自己的开发分支工作：
 
@@ -40,14 +40,14 @@ git switch -c docs/describe-your-change
 
 ```bash
 npm ci
-npm run setup:browseros
+npm run setup:agent-browser
 npm run dev
 ```
 
 - HugeIcons Pro 鉴权只放在用户级 `~/.npmrc` 或 CI 临时用户配置中，不提交到仓库。
 - `npm ci` 的 postinstall 会执行 `heroui:setup`；没有可用授权缓存时，通过私密环境配置提供 `HEROUI_KEY`。安装脚本不会自动读取 `.env`。
 - 不提交密钥、授权缓存、完整 Pro 包或绕过授权的实现。
-- `setup:browseros` 下载并校验固定官方版本，不启动浏览器或覆盖已有不同安装。
+- `setup:agent-browser` 把固定版本的官方 agent-browser 下载到 `.runtime/` 并校验 SHA-256，不启动任何进程。
 
 ## 代码与设计约定
 

@@ -36,7 +36,7 @@ _Avoid_: installed Skill, enabled Skill
 
 **Athena MCP Endpoint**:
 Athena's loopback HTTP boundary through which an explicitly approved external Agent can access the operations allowed by its effective access mode.
-_Avoid_: raw MCP server, Electron IPC, BrowserOS endpoint
+_Avoid_: raw MCP server, Electron IPC, browser automation endpoint
 
 **External Agent**:
 A process outside Athena's local CLI execution flow that requests access through the Athena MCP Endpoint.

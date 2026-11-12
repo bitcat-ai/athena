@@ -1,19 +1,20 @@
 # Third-party notices
 
-核查日期：2026-10-31（HugeIcons 依赖于 2026-11-03 核查）。版本来自本次安装的包及锁文件；正式构建以 `package-lock.json` 和实际随包内容为准。
+核查日期：2026-10-31（HugeIcons 依赖于 2026-11-03 核查，agent-browser 于 2026-11-12 核查）。版本来自本次安装的包及锁文件；正式构建以 `package-lock.json` 和实际随包内容为准。
 
 Athena（仓库名 `athena`）的仓库公开可见，项目代码保持 `UNLICENSED`，尚未授予开源许可证。以下许可属于相应第三方组件，不构成对 Athena 本身的 MIT 或其他许可授权。
 
 ## 独立进程组件
 
-| 项目             | 本项目使用方式                                                                                                                                                                                                                   | 上游许可                                                                                                                                          |
-| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| BrowserOS neo    | 从官方分发获取的后台浏览器进程；原生引擎以 Retina DPR 2 渲染，页面帧流嵌入 Athena 同窗口的右侧滑出面板，无独立浏览器窗口；使用独立 profile，关闭随包 sidecars，另启动未修改的官方 claw-server 0.0.90，通过公开 MCP/HTTP 协议调用 | [BrowserOS LICENSE：AGPL-3.0](https://github.com/browseros-ai/BrowserOS/blob/main/LICENSE)；[项目说明](https://github.com/browseros-ai/BrowserOS) |
-| OpenAI Codex CLI | 用户自行安装并登录，本应用通过其 `app-server` 接口交互                                                                                                                                                                           | [Codex LICENSE：Apache-2.0](https://github.com/openai/codex/blob/main/LICENSE)；[NOTICE](https://github.com/openai/codex/blob/main/NOTICE)        |
+| 项目             | 本项目使用方式                                                                                                                                                                  | 上游许可                                                                                                                                                                      |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| agent-browser    | 0.42.0 官方发布的未修改二进制，作为独立进程运行；首次启动网页功能时下载到应用数据目录并按固定的 SHA-256 校验，不随源码仓库分发；通过其本机 socket 协议连接 Athena 启动的 Chrome | [agent-browser LICENSE：Apache-2.0](https://github.com/vercel-labs/agent-browser/blob/v0.42.0/LICENSE)；[项目说明](https://github.com/vercel-labs/agent-browser/tree/v0.42.0) |
+| Google Chrome    | 用户自行安装，Athena 不下载、不分发、不修改；以独立进程和 Athena 专用 profile 启动，页面帧流嵌入 Athena 同窗口的右侧面板                                                        | [Google Chrome 服务条款](https://www.google.com/chrome/terms/)；[Chromium LICENSE](https://chromium.googlesource.com/chromium/src/+/main/LICENSE)                             |
+| OpenAI Codex CLI | 用户自行安装并登录，本应用通过其 `app-server` 接口交互                                                                                                                          | [Codex LICENSE：Apache-2.0](https://github.com/openai/codex/blob/main/LICENSE)；[NOTICE](https://github.com/openai/codex/blob/main/NOTICE)                                    |
 
-BrowserOS neo 和 Electron 均包含 Chromium 及其他第三方组件，各组件可能采用不同许可证。保留官方浏览器/运行时分发随附的完整 LICENSE、NOTICE 和 Chromium 第三方声明；Chromium 本身的许可见 [Chromium LICENSE](https://chromium.googlesource.com/chromium/src/+/main/LICENSE)。
+Electron 包含 Chromium 及其他第三方组件，各组件可能采用不同许可证。保留官方运行时分发随附的完整 LICENSE、NOTICE 和 Chromium 第三方声明；Chromium 本身的许可见 [Chromium LICENSE](https://chromium.googlesource.com/chromium/src/+/main/LICENSE)。
 
-本项目未修改 BrowserOS neo 源码，也没有将其许可证改成 MIT。独立进程架构不应被解读为对任何重分发、修改或组合分发义务的豁免；对外分发前需按采用的具体版本和分发形式核对上游条款。
+本项目未修改 agent-browser，也没有改变其许可证。若今后把该二进制随安装包分发，需同时附带上游 LICENSE 与 NOTICE；独立进程架构不应被解读为对任何重分发、修改或组合分发义务的豁免，对外分发前需按采用的具体版本和分发形式核对上游条款。
 
 ## 直接运行依赖
 

@@ -58,9 +58,9 @@
 npm run typecheck
 npx tsx --test --test-concurrency=1 tests/*.test.ts
 
-# 需要实际 BrowserOS 二进制；全部为隔离本地页面
-WORKBENCH_BROWSEROS_TEST_BINARY="/path/to/BrowserOS neo.app/Contents/MacOS/BrowserOS neo" \
-  npx tsx --test --test-concurrency=1 tests/browser.test.ts tests/neo.test.ts \
+# 需要本机 Chrome 与固定版本的 agent-browser；全部为隔离本地页面
+ATHENA_TEST_CHROME="/Applications/Google Chrome.app" ATHENA_TEST_AGENT_BROWSER=1 \
+  npx tsx --test --test-concurrency=1 tests/browser.test.ts tests/web-runtime.test.ts \
   tests/sharing-browser.test.ts tests/complex-native.test.ts
 
 # 下面两个脚本使用现有 Codex 登录，会消耗真实模型配额

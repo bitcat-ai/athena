@@ -25,7 +25,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/workspace.png" alt="Athena 实际应用：左侧项目与对话，右侧 BrowserOS 网页工作区" width="1100" />
+  <img src="docs/screenshots/workspace.png" alt="Athena 实际应用：左侧项目与对话，右侧网页工作区" width="1100" />
 </p>
 
 <p align="center"><sub>项目、对话与网页，在同一个窗口里。</sub></p>
@@ -61,12 +61,12 @@
 
 **公开下载版本：[0.9.0](https://github.com/bitcat-ai/athena/releases/tag/v0.9.0)** · [ZIP 归档](https://github.com/bitcat-ai/athena/releases/download/v0.9.0/Athena-0.9.0-mac-arm64.zip) · [SHA-256 校验](https://github.com/bitcat-ai/athena/releases/download/v0.9.0/SHA256SUMS.txt) · [全部版本](https://github.com/bitcat-ai/athena/releases)
 
-> 0.9.0 的 macOS Apple Silicon 安装包已完成 Developer ID 正式签名和 Apple 公证，尚无自动更新。安装包不包含用户登录或 BrowserOS neo；引导会按需准备运行组件。
+> 0.9.0 的 macOS Apple Silicon 安装包已完成 Developer ID 正式签名和 Apple 公证，尚无自动更新。安装包不包含用户登录；0.9.0 的网页功能使用 BrowserOS neo，当前源码已改用本机 Google Chrome 和 agent-browser，随后续版本发布。
 
 ## 使用之前
 
-- **按 CLI 的实际能力执行任务。** 模型请求使用对应账户的配额或计费；公开安装包的能力以对应发布说明为准；当前源码版的 Neo 联动支持 Codex、Claude、Pi 和 OpenCode。Pi 的远端模型 UI 续聊仍待排查，Cursor/Gemini 本轮真实模型验收未完成，详见 [CLI 验收矩阵](docs/mainstream-cli-support.md)。
-- **网页功能需要 BrowserOS neo。** 使用独立的浏览器数据，不导入日常浏览器配置；普通 Chrome 不能替代它。
+- **按 CLI 的实际能力执行任务。** 模型请求使用对应账户的配额或计费；公开安装包的能力以对应发布说明为准；当前源码版的网页工具支持 Codex、Claude、Pi 和 OpenCode。Pi 的远端模型 UI 续聊仍待排查，Cursor/Gemini 本轮真实模型验收未完成，详见 [CLI 验收矩阵](docs/mainstream-cli-support.md)。
+- **网页功能需要本机的 Google Chrome。** Athena 使用独立的浏览器数据，不读取日常浏览器配置，也不替你下载或安装浏览器。网页执行器是固定版本的 agent-browser，首次使用时从官方发布下载并校验。
 - **费用展示为 API 等价估算。** 它不代表订阅实际扣费；未知或不完整的用量会保留其状态。
 - **已有数据继续保留。** 沿用原数据目录、钥匙串和工具协议。详见 [数据与凭据](docs/user-guide.md#数据与凭据)。
 
@@ -89,13 +89,13 @@
 
 ```bash
 npm ci
-npm run setup:browseros
+npm run setup:agent-browser
 npm run dev
 ```
 
 Developer ID 正式签名使用 `npm run package:signed`；公证分发使用 `npm run package:release`，需要本机钥匙串公证凭据。步骤与验证见 [macOS 签名与公证](docs/apple-signing.md)。普通 `npm run package` 保持本机 ad-hoc 签名。
 
-`npm ci` 会执行 `heroui:setup`，优先恢复本机授权缓存。新环境需私下配置 `HEROUI_KEY`；不要提交密钥或完整 Pro 包。`setup:browseros` 下载并校验固定官方版本，不启动浏览器或覆盖系统安装。
+`npm ci` 会执行 `heroui:setup`，优先恢复本机授权缓存。新环境需私下配置 `HEROUI_KEY`；不要提交密钥或完整 Pro 包。`setup:agent-browser` 把固定版本的官方 agent-browser 下载到 `.runtime/` 并校验 SHA-256，不启动任何进程；网页功能另需本机已安装 Google Chrome。
 
 ```bash
 npm run typecheck
