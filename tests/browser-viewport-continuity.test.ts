@@ -8,7 +8,7 @@ import { BrowserRuntime } from '../src/main/browser';
 
 test(
   'URL-only fit checks preserve input epochs; actual overflow still invalidates old coordinates',
-  { skip: !process.env.WORKBENCH_BROWSEROS_TEST_BINARY, timeout: 30_000 },
+  { skip: !process.env.ATHENA_TEST_CHROME, timeout: 30_000 },
   async () => {
     const directory = await mkdtemp(path.join(tmpdir(), 'athena-viewport-continuity-'));
     const site = createServer((_req, res) => {
@@ -20,7 +20,7 @@ test(
     await new Promise<void>((resolve) => site.listen(0, '127.0.0.1', resolve));
     const runtime = new BrowserRuntime({
       storageDir: directory,
-      binaryPath: process.env.WORKBENCH_BROWSEROS_TEST_BINARY,
+      binaryPath: process.env.ATHENA_TEST_CHROME,
       onState() {},
       onFrame() {},
       onStep() {},

@@ -9,7 +9,7 @@ import type { RecordedStep } from '../src/shared/types';
 
 test(
   'real browser handoffs settle previews with their owner, refuse foreign undo and release held input',
-  { skip: !process.env.WORKBENCH_BROWSEROS_TEST_BINARY },
+  { skip: !process.env.ATHENA_TEST_CHROME },
   async () => {
     const directory = await mkdtemp(path.join(tmpdir(), 'athena-share-browser-'));
     const site = createServer((_req, res) => {
@@ -23,7 +23,7 @@ test(
     const steps: RecordedStep[] = [];
     const runtime = new BrowserRuntime({
       storageDir: directory,
-      binaryPath: process.env.WORKBENCH_BROWSEROS_TEST_BINARY,
+      binaryPath: process.env.ATHENA_TEST_CHROME,
       onFrame() {},
       onState() {},
       onStep: (s) => steps.push(s),
@@ -127,7 +127,7 @@ test(
         runtime.dispatchInput({ type: 'text', text: 'stale', frameEpoch: epoch }),
         /画面已过期/,
       );
-      const recording = runtime.stopRecording();
+      const recording = await runtime.stopRecording();
       assert.equal(recording.sharedSessionId, 'session');
       assert(recording.steps.some((s) => s.kind === 'edit' && s.actor?.id === 'bob'));
     } finally {

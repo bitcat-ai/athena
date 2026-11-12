@@ -2,16 +2,10 @@ import path from 'node:path';
 import { randomUUID, createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { realpath, stat } from 'node:fs/promises';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import { BrowserRuntime, normalizeBrowserUrl } from './browser';
-import {
-  NeoServer,
-  type NeoMcpSession,
-  type NeoPage,
-  type NeoToolResult,
-  type NeoDownload,
-} from './neo-server';
+import { AgentBrowserServer, type AgentBrowserDownload } from './agent-browser-server';
+import type { AgentBrowserSession } from './agent-browser-session';
+import type { WebFile, WebPage, WebToolResult } from './agent-browser-tools';
 import { WebExecution, checkpointTool, planTool } from './web-execution';
 import type {
   ApprovalRequest,
@@ -21,7 +15,6 @@ import type {
   WebExecutionEvent,
 } from '../shared/types';
 
-const exec = promisify(execFile);
 const nativeNames = new Set([
   'tabs',
   'tab_groups',
@@ -60,7 +53,7 @@ const editorNames = new Set([
 ]);
 interface Task {
   id: string;
-  client: NeoMcpSession;
+  client: AgentBrowserSession;
   readonly: boolean;
   stopped: boolean;
   help: boolean;
@@ -72,7 +65,7 @@ interface Task {
   running?: { signature: string; page?: number; mutating: boolean };
   reconnectClient?: Promise<void>;
 }
-const plain = (result: NeoToolResult) =>
+const plain = (result: WebToolResult) =>
   result.content
     .filter((item) => item.type === 'text')
     .map((item) => item.text || '')
@@ -83,9 +76,9 @@ const safeError = (error: unknown) =>
     .replace(/(?:sk-|ghp_|github_pat_)[A-Za-z0-9_-]+/g, '[hidden]')
     .slice(0, 1500);
 
-/** Reuses Neo's browser tools; only application scope and task lifecycle live here. */
+/** Application scope and task lifecycle around the web executor's tools. */
 export class NeoBrowserRuntime {
-  readonly server: NeoServer;
+  readonly server: AgentBrowserServer;
   private current?: Task;
   private starting?: Promise<void>;
   private endpoint = '';
@@ -93,7 +86,7 @@ export class NeoBrowserRuntime {
     private browser: BrowserRuntime,
     private options: {
       directory: string;
-      download?: NeoDownload;
+      download?: AgentBrowserDownload;
       onState: (state: NativeNeoState) => void;
       onDisconnect: () => void;
       approve: (request: Omit<ApprovalRequest, 'id' | 'kind'>) => Promise<boolean>;
@@ -101,7 +94,7 @@ export class NeoBrowserRuntime {
       onSession?: (taskId: string, sessionId: string) => void;
     },
   ) {
-    this.server = new NeoServer({
+    this.server = new AgentBrowserServer(browser, {
       directory: options.directory,
       download: options.download,
       onState: options.onState,
@@ -127,16 +120,7 @@ export class NeoBrowserRuntime {
       const connection = this.browser.getNativeConnection();
       if (this.endpoint && this.endpoint !== connection.endpoint) await this.server.stop();
       this.endpoint = connection.endpoint;
-      const plist = path.resolve(connection.binaryPath, '../../Info.plist');
-      const { stdout } = await exec('/usr/bin/plutil', [
-        '-extract',
-        'CFBundleShortVersionString',
-        'raw',
-        '-o',
-        '-',
-        plist,
-      ]);
-      await this.server.start(connection.endpoint, stdout.trim());
+      await this.server.start(connection.endpoint);
     })().finally(() => {
       this.starting = undefined;
     });
@@ -146,7 +130,7 @@ export class NeoBrowserRuntime {
     const tools: BrowserTool[] = [
       {
         name: 'neo_status',
-        description: '查看当前 Neo 原生浏览器连接状态。未连接时不能声称网页操作成功。',
+        description: '查看网页执行器的连接状态。未连接时不能声称网页操作成功。',
         inputSchema: { type: 'object', properties: {}, additionalProperties: false },
       },
     ];
@@ -154,24 +138,20 @@ export class NeoBrowserRuntime {
       tools.push(planTool, checkpointTool);
       for (const tool of this.server.tools) {
         if (!nativeNames.has(tool.name)) continue;
-        const inputSchema = structuredClone(tool.inputSchema) as any;
-        if (inputSchema.properties) delete inputSchema.properties.session;
-        if (Array.isArray(inputSchema.required))
-          inputSchema.required = inputSchema.required.filter((name: string) => name !== 'session');
-        let prefix = '由 BrowserOS neo 原生执行。';
+        let prefix = '';
         if (tool.name === 'run' || tool.name === 'evaluate_in_page')
-          prefix +=
-            '高级脚本需要用户在 Athena 确认；普通网页操作优先用 neo_act（整表 fields 批量填写）、neo_read 和 neo_wait。';
-        if (tool.name === 'upload') prefix += '上传本机文件前需要用户在 Athena 确认。';
+          prefix =
+            '高级脚本需要用户在 Athena 确认；普通网页操作优先用 neo_act（整表 fields 批量填写）、neo_read 和 neo_wait。\n';
+        if (tool.name === 'upload') prefix = '上传本机文件前需要用户在 Athena 确认。\n';
         tools.push({
           name: `neo_${tool.name}`,
-          description: `${prefix}\n${tool.description}`,
-          inputSchema,
+          description: prefix + tool.description,
+          inputSchema: structuredClone(tool.inputSchema),
         });
       }
       tools.push({
         name: 'neo_focus_page',
-        description: '把指定 Neo page 显示到 Athena 当前浏览器面板；page 来自原生 tabs/snapshot。',
+        description: '把指定页面显示到 Athena 当前浏览器面板；page 来自 neo_tabs。',
         inputSchema: {
           type: 'object',
           properties: { page: { type: 'integer', minimum: 1 } },
@@ -196,7 +176,7 @@ export class NeoBrowserRuntime {
     if (this.current !== task || task.stopped) throw new Error('网页任务已停止，不能继续操作');
   }
   async beginTask(id: string, readonly = false): Promise<{ sessionId: string; context: string }> {
-    if (this.current) throw new Error('上一个 Neo 任务尚未结束');
+    if (this.current) throw new Error('上一个网页任务尚未结束');
     const client = await this.server.newSession();
     const task: Task = {
       id,
@@ -212,26 +192,14 @@ export class NeoBrowserRuntime {
     };
     this.current = task;
     try {
-      await client.call('name_session', {
-        name: 'web task',
-        category: 'other',
-        summary: 'Athena user-requested webpage task',
-      });
       const pages = await client.pages();
       this.check(task);
-      const current = pages.find((page) => page.targetId === this.browser.getState().activeTabId);
-      if (!current) throw new Error('Neo 与当前可见页面尚未对应，请重试连接');
-      const binding = await client.call('browser_target', {
-        action: 'set_window',
-        windowId: current.windowId,
-        strict: true,
-      });
-      if (binding.isError) throw new Error(plain(binding));
-      this.check(task);
+      const current = pages.find((page) => page.isActive);
+      if (!current) throw new Error('当前可见页面尚未就绪，请重试连接');
       if (!readonly) await this.browser.setNativeAgentActive(true);
       return {
         sessionId: client.id,
-        context: `<neo_browser_context>\n${JSON.stringify({ engine: 'BrowserOS neo', currentPage: current, pages, sessionId: client.id }).replace(/</g, '\\u003c')}\n你与用户操作同一个可见网页。先使用当前页；需要新页面时用 neo_tabs，并用 neo_focus_page 将结果显示在右侧。网页观察、点击、填写、滚动、导航使用 neo_* 原生工具。创建或调整页面元素时使用 workbench_browser_query/inspect/edit/undo；edit 的 insert 可创建嵌套元素，返回新 ref，后续可继续修改并撤销。创建后先观察真实结果再给出结论；DOM 预览不代表源码已保存。Neo pageId/元素引用与 Athena ref/CDP targetId 各有作用域，不能混用；新建元素后用 Neo snapshot 获取新的操作引用。\n</neo_browser_context>`,
+        context: `<neo_browser_context>\n${JSON.stringify({ engine: 'agent-browser', currentPage: current, pages, sessionId: client.id }).replace(/</g, '\\u003c')}\n你与用户操作同一个可见网页。先使用当前页；需要新页面时用 neo_tabs，并用 neo_focus_page 将结果显示在右侧。网页观察、点击、填写、滚动、导航使用 neo_* 工具。创建或调整页面元素时使用 workbench_browser_query/inspect/edit/undo；edit 的 insert 可创建嵌套元素，返回新 ref，后续可继续修改并撤销。创建后先观察真实结果再给出结论；DOM 预览不代表源码已保存。neo_* 的 pageId/元素引用与 workbench_browser_* 的 ref 各有作用域，不能混用；新建元素后用 neo_snapshot 获取新的操作引用。\n</neo_browser_context>`,
       };
     } catch (error) {
       if (this.current === task) this.current = undefined;
@@ -241,13 +209,13 @@ export class NeoBrowserRuntime {
       throw error;
     }
   }
-  private async page(task: Task, id: unknown): Promise<NeoPage> {
-    if (!Number.isInteger(id) || Number(id) < 1) throw new Error('需要当前 Neo 页面编号');
+  private async page(task: Task, id: unknown): Promise<WebPage> {
+    if (!Number.isInteger(id) || Number(id) < 1) throw new Error('需要当前页面编号');
     const pages = await task.client.pages();
     this.check(task);
     const page = pages.find((item) => item.pageId === id);
     if (!page || !this.browser.getState().tabs.some((tab) => tab.id === page.targetId))
-      throw new Error('Neo 页面引用已变化，请重新读取标签页');
+      throw new Error('页面引用已变化，请重新读取标签页');
     return page;
   }
   private async confirm(
@@ -265,11 +233,11 @@ export class NeoBrowserRuntime {
     if (name === 'neo_status') return { text: JSON.stringify(this.getState()) };
     const task = this.current;
     if (!task && name === 'workbench_browser_edit' && args.insert !== undefined)
-      return { text: 'Neo 网页任务尚未建立，请重新连接浏览器后创建元素。', isError: true };
+      return { text: '网页任务尚未建立，请重新连接浏览器后创建元素。', isError: true };
     if (!task)
       return name.startsWith('workbench_browser_')
         ? this.browser.callTool(name, args)
-        : { text: 'Neo 网页任务尚未建立', isError: true };
+        : { text: '网页任务尚未建立', isError: true };
     const revision = task.interactionRevision;
     // Serialize validation as well as dispatch: a queued mutation must see the prior failure.
     task.pendingCalls++;
@@ -327,7 +295,6 @@ export class NeoBrowserRuntime {
       };
       if (task.readonly && !this.isReadOnly(name, args))
         throw new Error('本轮只允许读取，不能操作网页');
-      if (Object.hasOwn(args, 'session')) throw new Error('不能替换宿主管理的 Neo 会话');
       if (name === 'neo_plan') {
         const text = task.execution.plan(args.steps);
         event('succeeded');
@@ -347,18 +314,6 @@ export class NeoBrowserRuntime {
         const client = await this.server.newSession();
         try {
           checkInteraction();
-          const pages = await client.pages();
-          const current = pages.find(
-            (page) => page.targetId === this.browser.getState().activeTabId,
-          );
-          if (!current) throw new Error('Neo 与当前可见页面尚未对应，请重新读取');
-          const binding = await client.call('browser_target', {
-            action: 'set_window',
-            windowId: current.windowId,
-            strict: true,
-          });
-          if (binding.isError) throw new Error(plain(binding));
-          checkInteraction();
           task.client = client;
           task.reconnectClient = undefined;
           this.options.onSession?.(task.id, client.id);
@@ -369,11 +324,9 @@ export class NeoBrowserRuntime {
       }
       if (name.startsWith('workbench_browser_')) {
         const readOnly = ['workbench_browser_query', 'workbench_browser_inspect'].includes(name);
-        const currentPage = (await task.client.pages()).find(
-          (page) => page.targetId === this.browser.getState().activeTabId,
-        );
+        const currentPage = (await task.client.pages()).find((page) => page.isActive);
         checkInteraction();
-        if (!currentPage) throw new Error('Neo 与当前可见页面尚未对应，请重新读取页面');
+        if (!currentPage) throw new Error('当前可见页面尚未就绪，请重新读取页面');
         pageId = currentPage.pageId;
         if (!readOnly) {
           if (task.needsObservation) throw new Error('用户已操作页面，请先重新读取当前页面。');
@@ -408,7 +361,7 @@ export class NeoBrowserRuntime {
       }
       const native = name.slice(4);
       if (!name.startsWith('neo_') || (!nativeNames.has(native) && native !== 'focus_page'))
-        throw new Error('未开放的 Neo 操作');
+        throw new Error('未开放的网页操作');
       if (task.needsObservation && !this.isReadOnly(name, args))
         throw new Error(
           '用户已操作页面，请先用 snapshot/read/grep 重新观察当前状态，再继续网页任务。',
@@ -421,7 +374,7 @@ export class NeoBrowserRuntime {
       if (native === 'focus_page') {
         await this.browser.followNativeTarget(page!.targetId);
         event('succeeded');
-        return { text: '已显示目标页面，请使用当前 Neo 引用继续。', isError: false };
+        return { text: '已显示目标页面，请使用当前页面编号继续。', isError: false };
       }
       if (native === 'request_human_help') {
         const result = await this.humanHelp(task, page!, args);
@@ -439,7 +392,7 @@ export class NeoBrowserRuntime {
           task,
           'browser-script',
           '运行浏览器脚本',
-          `这项高级操作可使用 Neo 的页面、浏览器数据及文件传输能力。请确认脚本符合你的任务。\n\n${JSON.stringify(args, null, 2)}`,
+          `${native === 'run' ? '脚本在隔离环境中运行，可以读取和操作 Athena 浏览器里的页面，也可以下载文件和上传脚本里写明路径的本机文件。' : '这段代码会在当前页面内执行，可以读取和修改该页面。'}请确认它符合你的任务。\n\n${JSON.stringify(args, null, 2)}`,
         );
       if (native === 'upload') {
         await this.confirm(
@@ -485,10 +438,14 @@ export class NeoBrowserRuntime {
         task.execution.requireRecovery(mutating ? signature : '', pageId);
       if (unmatched)
         text += '\n等待条件未匹配，不能据此认定完成。请重新读取页面核对状态，再记录检查点。';
-      if (!failed && native === 'download') {
-        const saved = text.match(/^Downloaded .+ to: (.+)$/m)?.[1];
-        if (!saved) throw new Error('下载工具未返回可核对的文件路径；先检查下载记录，不要重复下载');
-        const file = await realpath(saved);
+      const files: WebFile[] = Array.isArray(result.structuredContent?.files)
+        ? result.structuredContent.files
+        : [];
+      if (!failed && native === 'download' && !files.length)
+        throw new Error('下载工具未返回可核对的文件路径；先检查下载记录，不要重复下载');
+      // A reported file counts only after Athena has found and hashed it itself.
+      for (const saved of files) {
+        const file = await realpath(String(saved.path));
         const directory = await realpath(this.browser.getDownloadDirectory());
         if (!file.startsWith(directory + path.sep))
           throw new Error('下载文件不在 Athena 下载目录内，请人工检查');
@@ -535,13 +492,13 @@ export class NeoBrowserRuntime {
   }
   private async humanHelp(
     task: Task,
-    page: NeoPage,
+    page: WebPage,
     args: Record<string, unknown>,
   ): Promise<ToolResult> {
     await this.browser.followNativeTarget(page.targetId);
     task.help = true;
     task.execution.emit({ kind: 'human-help', status: 'blocked', page: page.pageId });
-    // The native request waits for the human; never hold the browser input queue while it waits.
+    // The request waits for the human; never hold the browser input queue while it waits.
     const pending = task.client.call('request_human_help', args).catch(() => undefined);
     try {
       const approved = await this.options.approve({
@@ -564,7 +521,7 @@ export class NeoBrowserRuntime {
         }
         await new Promise((resolve) => setTimeout(resolve, 40));
       }
-      if (!resolved) throw new Error('Neo 人工协作请求未建立，请重新获取页面状态');
+      if (!resolved) throw new Error('人工协作请求未建立，请重新获取页面状态');
       const result = await pending;
       if (result?.isError) throw new Error(plain(result));
       this.check(task);
@@ -619,7 +576,7 @@ export class NeoBrowserRuntime {
     try {
       await this.server.cancel(task.client.id);
     } catch {
-      // A disconnected native worker cannot be trusted to stop future script steps.
+      // A worker that cannot be stopped cannot be trusted to stop future script steps.
       await this.server.stop();
     }
   }
@@ -638,7 +595,8 @@ export class NeoBrowserRuntime {
             : 'succeeded',
     });
     await this.browser.setNativeAgentActive(false);
-    await task.client.close();
+    // Only a task that ended normally hands its worker to the next one.
+    await task.client.close(successful && !task.stopped && !task.execution.needsRecovery);
   }
   async stop(): Promise<void> {
     await this.cancelTask();

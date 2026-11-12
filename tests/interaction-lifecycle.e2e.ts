@@ -104,9 +104,6 @@ try {
       ...process.env,
       PATH: `${bin}${path.delimiter}${process.env.PATH}`,
       WORKBENCH_USER_DATA_DIR: dir,
-      WORKBENCH_BROWSER_PATH: path.resolve(
-        '../browseros-runtime/BrowserOS neo.app/Contents/MacOS/BrowserOS neo',
-      ),
     },
   });
   const page = await app.firstWindow();

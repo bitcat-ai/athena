@@ -1,6 +1,6 @@
 export type OnboardingStage = 'welcome' | 'codex' | 'workspace' | 'browser' | 'ready';
 export type OnboardingStatus = 'new' | 'in-progress' | 'deferred' | 'complete' | 'legacy';
-export type OnboardingInstallKind = 'codex' | 'browser';
+export type OnboardingInstallKind = 'codex';
 
 /** Only user choices are durable. Runtime readiness is always checked again. */
 export interface OnboardingProgress {

@@ -15,7 +15,7 @@ async function fixture(t: any) {
     epoch: 1,
     getState: () => ({
       status: 'ready',
-      engine: 'browseros',
+      engine: 'agent-browser',
       activeTabId: 'shared',
       title: 'Shared',
       url: 'https://example.test/',
@@ -355,7 +355,11 @@ test('long sessions rotate recordings before the browser step cap', async (t) =>
   const current = f.browser.getRecording();
   current.steps = Array.from({ length: 1800 }, (_, i) => ({ ...step, id: String(i) }));
   f.runtime.onStep(step);
-  await new Promise<void>((r) => queueMicrotask(r));
+  const deadline = Date.now() + 2000;
+  while ((f.runtime as any).rotating) {
+    assert(Date.now() < deadline);
+    await new Promise((r) => setTimeout(r, 5));
+  }
   assert(f.saved.some((r) => r.endedAt && r.steps.length === 1800));
   assert.equal(f.browser.getRecording().steps.length, 0);
   assert.equal((f.runtime as any).part, 2);
@@ -371,6 +375,56 @@ test('a pending participant never receives saved page content when sharing stops
   await f.runtime.stop();
   const ended = await c.until((m) => m.type === 'ended');
   assert.equal(ended.recording, undefined);
+});
+
+test('stopping during asynchronous recording rotation never starts a new segment', async (t) => {
+  const f = await fixture(t);
+  const step = {
+    id: 'last',
+    kind: 'click' as const,
+    description: 'Click',
+    timestamp: Date.now(),
+    url: 'https://example.test/',
+    tabId: 'shared',
+    source: 'human' as const,
+    actor: { id: 'host', name: 'Alice' },
+  };
+  f.browser.getRecording().steps = Array.from({ length: 1800 }, (_, i) => ({
+    ...step,
+    id: String(i),
+  }));
+  const original = f.browser.stopRecording.bind(f.browser);
+  let release!: () => void;
+  const pending = new Promise((resolve) => (release = () => resolve(original())));
+  f.browser.stopRecording = () => pending;
+  f.runtime.onStep(step);
+  await new Promise<void>((r) => queueMicrotask(r));
+  assert((f.runtime as any).rotating);
+  const stopping = f.runtime.stop();
+  release();
+  const stoppedRecording = await stopping;
+  assert(stoppedRecording?.endedAt);
+  const deadline = Date.now() + 2000;
+  while ((f.runtime as any).rotating) {
+    assert(Date.now() < deadline);
+    await new Promise((r) => setTimeout(r, 5));
+  }
+  assert.equal(f.browser.getRecording(), undefined);
+  assert.equal((f.runtime as any).part, 1);
+  assert.equal(f.runtime.getState().active, false);
+});
+
+test('a recorder flush failure still closes sharing and preserves the partial recording', async (t) => {
+  const f = await fixture(t),
+    c = await f.connect();
+  await c.until((m) => m.type === 'welcome');
+  f.browser.stopRecording = async () => {
+    throw new Error('frame unavailable');
+  };
+  await assert.rejects(f.runtime.stop(), /共享已停止/);
+  assert.equal(f.runtime.getState().active, false);
+  assert(f.saved.some((record) => record.id === 'record'));
+  await c.until((m) => m.type === 'ended');
 });
 
 test('failed native handoff closes sharing instead of leaving an unusable control lease', async (t) => {

@@ -667,6 +667,107 @@ export const browserPageSource = String.raw`(() => {
     outline(ref) {
       selectedElement=ref ? resolve(ref) : null;refreshOverlays();
     },
+    // Page content for native web tools: readable text, not the accessibility tree.
+    read(options={}) {
+      const format=options.format || 'markdown';
+      const plain=format==='text';
+      const limit=100000;
+      const marked=el=>el.hasAttribute('data-private') || el.hasAttribute('data-sensitive') || el.classList.contains('rr-block') || el.getAttribute('type')==='password';
+      let roots=[document.body || document.documentElement];
+      if (options.selector) {
+        try { document.querySelector(options.selector); } catch { throw new Error('Invalid CSS selector'); }
+        const matches=scan().found.filter(el=>el.matches(options.selector));
+        roots=matches.filter(el=>!matches.some(other=>other!==el && other.contains(el)));
+        if (!roots.length) return {matched:false,text:'',truncated:false};
+      }
+      const inView=el=>{
+        if (!options.viewportOnly) return true;
+        const rect=el.getBoundingClientRect();
+        return (rect.width===0 && rect.height===0) || (rect.bottom>0 && rect.right>0 && rect.top<innerHeight && rect.left<innerWidth);
+      };
+      const out=[];
+      let length=0, truncated=false;
+      const emit=text=>{ if (!text) return; if (length>limit) { truncated=true; return; } out.push(text); length+=text.length; };
+      if (format==='links') {
+        const seen=new Set();
+        for (const root of roots) for (const el of [root,...scan().found.filter(item=>item!==root && root.contains(item))]) {
+          if (el.localName!=='a' || !el.href || !visible(el) || !inView(el)) continue;
+          const label=safeText(el,300).replace(/\s+/g,' ').trim() || el.getAttribute('aria-label') || el.title || '';
+          const key=label+'\n'+el.href;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          emit('- ['+label+']('+el.href+')\n');
+        }
+        return {matched:true,text:clean(out.join('').trim(),limit),truncated};
+      }
+      const blocks=new Set(['block','flex','grid','list-item','table','table-row','flow-root']);
+      const skipped=new Set(['SCRIPT','STYLE','NOSCRIPT','TEMPLATE','HEAD','IFRAME','OBJECT','EMBED','SVG','CANVAS','VIDEO','AUDIO','TEXTAREA','INPUT','SELECT','BUTTON']);
+      function visit(node,state,depth) {
+        if (!node || truncated || depth>256) return;
+        if (node.nodeType===Node.TEXT_NODE) {
+          const value=node.nodeValue || '';
+          emit(state.pre ? value : value.replace(/\s+/g,' '));
+          return;
+        }
+        if (!(node instanceof Element) || overlays.has(node) || marked(node)) return;
+        const tag=node.localName.toUpperCase();
+        if (tag==='BUTTON') { if (inView(node)) { const label=safeText(node,200).replace(/\s+/g,' ').trim(); if (label) emit(plain ? label+' ' : '['+label+'] '); } return; }
+        if (skipped.has(tag)) return;
+        const style=getComputedStyle(node);
+        if (style.display==='none' || style.visibility==='hidden' || !inView(node)) return;
+        const children=()=>{
+          if (node instanceof HTMLSlotElement) { const assigned=node.assignedNodes({flatten:true}); for (const child of assigned.length ? assigned : node.childNodes) visit(child,state,depth+1); }
+          else if (node.shadowRoot) { observe(node.shadowRoot); for (const child of node.shadowRoot.childNodes) visit(child,state,depth+1); }
+          else for (const child of node.childNodes) visit(child,state,depth+1);
+        };
+        if (tag==='BR') { emit('\n'); return; }
+        if (tag==='HR') { emit(plain ? '\n' : '\n\n---\n\n'); return; }
+        if (tag==='IMG') { if (options.includeImages && !plain) emit('!['+(node.alt || '')+']('+(node.currentSrc || node.src || '')+')'); else if (node.alt) emit(node.alt); return; }
+        if (plain) { children(); if (blocks.has(style.display) || tag==='TD' || tag==='TH') emit(tag==='TD' || tag==='TH' ? '\t' : '\n'); return; }
+        if (/^H[1-6]$/.test(tag)) { emit('\n\n'+'#'.repeat(Number(tag[1]))+' '); children(); emit('\n\n'); return; }
+        if (tag==='A' && node.href && options.includeLinks!==false) { emit('['); children(); emit(']('+node.href+')'); return; }
+        if (tag==='STRONG' || tag==='B') { emit('**'); children(); emit('**'); return; }
+        if (tag==='EM' || tag==='I') { emit('*'); children(); emit('*'); return; }
+        if (tag==='CODE' && !state.pre) { emit('\x60'); children(); emit('\x60'); return; }
+        if (tag==='PRE') { emit('\n\n\x60\x60\x60\n'); const saved=state.pre; state.pre=true; children(); state.pre=saved; emit('\n\x60\x60\x60\n\n'); return; }
+        if (tag==='LI') {
+          const list=node.parentElement;
+          emit('\n'+'  '.repeat(Math.max(0,state.list-1))+(list && list.localName==='ol' ? ([...list.children].indexOf(node)+1)+'. ' : '- '));
+          children(); return;
+        }
+        if (tag==='UL' || tag==='OL') { state.list++; children(); state.list--; emit('\n'); return; }
+        if (tag==='BLOCKQUOTE') { emit('\n\n> '); children(); emit('\n\n'); return; }
+        if (tag==='TR') {
+          emit('\n|');
+          const cells=[...node.children].filter(cell=>cell.localName==='td' || cell.localName==='th');
+          for (const cell of cells) { emit(' '); const saved=state.cell; state.cell=true; visit(cell,state,depth+1); state.cell=saved; emit(' |'); }
+          if (cells.length && cells.every(cell=>cell.localName==='th')) emit('\n|'+' --- |'.repeat(cells.length));
+          return;
+        }
+        if (tag==='TABLE') { emit('\n'); children(); emit('\n\n'); return; }
+        children();
+        if (blocks.has(style.display) && !state.cell) emit(tag==='P' ? '\n\n' : '\n');
+      }
+      for (const root of roots) { visit(root,{pre:false,list:0,cell:false},0); emit('\n\n'); }
+      const text=out.join('').replace(/[ \t]+\n/g,'\n').replace(/\n[ \t]+(?=\S)/g,match=>match.includes('  ') && /^\n +$/.test(match) ? match : '\n').replace(/\n{3,}/g,'\n\n').trim();
+      return {matched:true,text:clean(text,limit),truncated};
+    },
+    // Resolves true once the document stops changing for "idle" ms, false when it never does.
+    quiet(idle=80,timeout=600) {
+      return new Promise(resolve=>{
+        const started=performance.now();
+        let last=started;
+        const observer=new MutationObserver(records=>{ if (records.some(record=>!overlays.has(record.target) && ![...record.addedNodes,...record.removedNodes].some(node=>overlays.has(node)))) last=performance.now(); });
+        observer.observe(document,{subtree:true,childList:true,attributes:true,characterData:true});
+        const tick=()=>{
+          const now=performance.now();
+          if (now-last>=idle) { observer.disconnect(); resolve(true); }
+          else if (now-started>=timeout) { observer.disconnect(); resolve(false); }
+          else setTimeout(tick,20);
+        };
+        setTimeout(tick,idle);
+      });
+    },
     mask(enabled) {
       maskNodes.forEach(node=>node.remove()); maskNodes=[];
       if (!enabled) return;

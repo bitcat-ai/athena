@@ -15,13 +15,11 @@ const component = before
   : '/src/renderer/ElementInspector.tsx';
 assert.ok(existsSync(path.join(root, component)), `Component does not exist: ${component}`);
 const temporary = await mkdtemp(path.join(tmpdir(), 'workbench-inspector-draft-'));
-const executable = [
-  chromium.executablePath(),
-  process.env.WORKBENCH_BROWSEROS_TEST_BINARY,
-  path.resolve('../browseros-runtime/BrowserOS neo.app/Contents/MacOS/BrowserOS neo'),
-  '/Applications/BrowserOS neo.app/Contents/MacOS/BrowserOS neo',
-].find((candidate): candidate is string => Boolean(candidate && existsSync(candidate)));
-assert.ok(executable, 'An installed Chromium or BrowserOS test binary is required');
+const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+const executable = [chromium.executablePath(), CHROME].find((candidate): candidate is string =>
+  Boolean(candidate && existsSync(candidate)),
+);
+assert.ok(executable, 'An installed Chromium or Chrome is required');
 
 const details = {
   ref: 'fixture-ref',
@@ -126,13 +124,8 @@ try {
       PATH: process.env.PATH ?? '',
       TMPDIR: temporary,
       LANG: 'en_US.UTF-8',
-      BROWSERCLAW_DIR: path.join(temporary, 'claw-state'),
     },
     args: [
-      '--disable-browseros-server',
-      '--disable-browseros-server-updater',
-      '--disable-browseros-extensions',
-      '--browseros-disable-url-overrides',
       '--disable-background-networking',
       '--disable-component-update',
       '--use-mock-keychain',

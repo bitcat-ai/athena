@@ -83,7 +83,7 @@ export class SharingRuntime {
   private connections = 0;
   private address = '';
   private part = 1;
-  private rotating = false;
+  private rotating?: Promise<Recording | undefined>;
   constructor(private options: SharingOptions) {}
 
   static addresses(): Array<{ address: string; label: string }> {
@@ -181,17 +181,30 @@ export class SharingRuntime {
         this.changed();
       });
       if (recording.steps.length >= 1800 && !this.rotating) {
-        this.rotating = true;
-        queueMicrotask(() => {
-          if (this.active && this.options.browser.getState().recording) {
-            const completed = this.options.browser.stopRecording();
-            void Promise.resolve(this.options.saveRecording(completed)).catch(() => {});
-            this.options.browser.withActor(this.host, undefined, () =>
-              this.options.browser.startRecording(this.state.sessionId, ++this.part),
-            );
-          }
-          this.rotating = false;
-        });
+        const sessionId = this.state.sessionId;
+        this.rotating = Promise.resolve()
+          .then(async () => {
+            if (this.active && this.options.browser.getState().recording) {
+              const completed = await this.options.browser.stopRecording();
+              await Promise.resolve(this.options.saveRecording(completed)).catch(() => {
+                this.state.error = '操作记录保存失败，请停止共享并检查磁盘';
+                this.changed();
+              });
+              if (this.active && this.state.sessionId === sessionId)
+                this.options.browser.withActor(this.host, undefined, () =>
+                  this.options.browser.startRecording(sessionId, ++this.part),
+                );
+              return completed;
+            }
+          })
+          .catch(() => {
+            this.state.error = '操作记录保存失败，请停止共享并检查磁盘';
+            this.changed();
+            return undefined;
+          })
+          .finally(() => {
+            this.rotating = undefined;
+          });
       }
     }
   }
@@ -742,11 +755,16 @@ export class SharingRuntime {
       await this.options.browser
         .withActor(this.host, undefined, () => this.options.browser.resetHumanInput())
         .catch(() => {});
-    const recording =
-      wasActive && this.options.browser.getState().recording
-        ? this.options.browser.stopRecording()
-        : undefined;
+    let recording: Recording | undefined = await this.rotating;
     let saveError: unknown;
+    if (wasActive && this.options.browser.getState().recording) {
+      try {
+        recording = await this.options.browser.stopRecording();
+      } catch (error) {
+        saveError = error;
+        recording = this.options.browser.getRecording();
+      }
+    }
     if (recording)
       await Promise.resolve(this.options.saveRecording(recording)).catch((error) => {
         saveError = error;

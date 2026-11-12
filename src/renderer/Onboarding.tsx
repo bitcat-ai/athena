@@ -86,6 +86,8 @@ type Action = {
   run: (layoutId: string) => void;
 };
 
+const CHROME_DOWNLOAD_URL = 'https://www.google.com/chrome/';
+
 const icons = {
   download: Download04Icon,
   info: InformationCircleIcon,
@@ -333,15 +335,13 @@ function content(
       };
     case 'installPlan': {
       const plan = state.plan;
-      const title =
-        plan?.kind === 'browser' ? '准备网页工作需要的组件。' : '这一步，交给我来准备。';
       return {
-        title,
+        title: '这一步，交给我来准备。',
         lines: ['请先核对下载来源和安装位置。', '完成后，我会检查它能否正常启动。'],
         cards: [
           {
             icon: 'download',
-            title: plan?.kind === 'browser' ? 'BrowserOS neo' : 'Codex CLI',
+            title: 'Codex CLI',
             detail: plan?.version ? `版本 ${plan.version}` : undefined,
             label: '等待确认',
           },
@@ -446,14 +446,14 @@ function content(
         cards: [
           {
             icon: 'globe',
-            title: 'BrowserOS neo',
-            detail: '使用独立浏览器数据，不导入你的日常浏览器配置',
+            title: 'Chrome',
+            detail: '使用本机已安装的 Chrome 和独立浏览器数据，不读取你的日常浏览器配置',
             label: '可选',
           },
         ],
         note:
           state.browser.status === 'missing'
-            ? '还没有找到浏览器。下载前会展示来源、大小和安装位置。'
+            ? '还没有找到 Chrome。请从官网安装后重新检查；Athena 不会替你下载或安装浏览器。'
             : undefined,
       };
     case 'browserPreparing':
@@ -478,7 +478,7 @@ function content(
           ? [
               connection,
               directory,
-              { icon: 'globe', title: '网页工具', detail: 'BrowserOS neo 已就绪', label: '完成' },
+              { icon: 'globe', title: '网页工具', detail: 'Chrome 已就绪', label: '完成' },
             ]
           : undefined,
       };
@@ -937,7 +937,7 @@ export function Onboarding({
                     'onboarding:install',
                     { planId: state.plan!.id },
                     '下载并安装',
-                    state.plan!.kind === 'browser' ? 'browserPreparing' : 'installing',
+                    'installing',
                     'install',
                     id,
                   ),
@@ -1035,27 +1035,43 @@ export function Onboarding({
         ];
       case 'browser':
       case 'browserError':
+        if (current.screen === 'browser' && state.browser.status === 'missing')
+          return [
+            {
+              label: '打开 Chrome 官网',
+              // Opens the system browser only; setup stays on this step until the user re-checks.
+              run: () =>
+                void window.workbench
+                  .invoke('shell:openExternal', { url: CHROME_DOWNLOAD_URL })
+                  .catch((error) => setRequestError(cleanError(error))),
+            },
+            {
+              label: '我已安装，重新检查',
+              ghost: true,
+              run: (id) =>
+                void run(
+                  'onboarding:browser/prepare',
+                  undefined,
+                  '我已安装，重新检查',
+                  'browserPreparing',
+                  'browser',
+                  id,
+                ),
+            },
+            skipBrowser,
+          ];
         return [
           {
-            label: state.browser.status === 'missing' ? '准备安装浏览器' : '准备浏览器',
+            label: '准备浏览器',
             run: (id) =>
-              state.browser.status === 'missing'
-                ? void run(
-                    'onboarding:plan-install',
-                    { kind: 'browser' },
-                    '准备安装浏览器',
-                    'planLoading',
-                    'plan',
-                    id,
-                  )
-                : void run(
-                    'onboarding:browser/prepare',
-                    undefined,
-                    '准备浏览器',
-                    'browserPreparing',
-                    'browser',
-                    id,
-                  ),
+              void run(
+                'onboarding:browser/prepare',
+                undefined,
+                '准备浏览器',
+                'browserPreparing',
+                'browser',
+                id,
+              ),
           },
           skipBrowser,
         ];
@@ -1135,8 +1151,7 @@ export function Onboarding({
     : ['ready', 'readyWithoutBrowser', 'finishing'].includes(current.screen) ||
         (intent.current === 'complete' && state.operation)
       ? 3
-      : ['browser', 'browserPreparing', 'browserError'].includes(current.screen) ||
-          (current.screen === 'installPlan' && state.plan?.kind === 'browser')
+      : ['browser', 'browserPreparing', 'browserError'].includes(current.screen)
         ? 2
         : 1;
   return (

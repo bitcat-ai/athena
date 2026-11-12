@@ -7,7 +7,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { BrowserRuntime, discoverBrowserOS } from '../src/main/browser';
+import { BrowserRuntime, discoverChrome } from '../src/main/browser';
 import { CodexSession, detectAgents } from '../src/main/agents';
 import type { AgentEvent, ElementRef, RecordedStep } from '../src/shared/types';
 
@@ -98,8 +98,8 @@ async function humanClick(element: ElementRef): Promise<void> {
 }
 
 try {
-  const binary = await discoverBrowserOS(process.env.WORKBENCH_BROWSEROS_TEST_BINARY);
-  assert.ok(binary, 'Install BrowserOS neo or set WORKBENCH_BROWSEROS_TEST_BINARY');
+  const binary = await discoverChrome(process.env.ATHENA_TEST_CHROME);
+  assert.ok(binary, 'Install Chrome or set ATHENA_TEST_CHROME');
   const codex = (await detectAgents()).find(
     (candidate) => candidate.id === 'codex' && candidate.available,
   );
@@ -204,7 +204,7 @@ try {
         (step) => step.kind === 'fill' && step.value === humanValue && step.source === 'human',
       ),
   );
-  const recording = runtime.stopRecording();
+  const recording = await runtime.stopRecording();
   assert.ok(
     recording.steps.some(
       (step) =>

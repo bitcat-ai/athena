@@ -1,5 +1,5 @@
 /** Actual Electron + installed Pi, isolated app data; real paid calls require explicit opt-in.
- * BrowserOS stays deferred. Only the temporary evidence.txt may be approved for read/write.
+ * Browser setup stays deferred. Only the temporary evidence.txt may be approved for read/write.
  * Claude is selected, not sent a model prompt. Legacy history is a clearly isolated fixture.
  */
 import assert from 'node:assert/strict';

@@ -56,7 +56,7 @@ export default async function athenaPermissions(pi) {
     // No pattern-based dangerous-command heuristic and no persistent "always allow".
     if (ctx.mode !== 'rpc' || !ctx.hasUI || ctx.signal?.aborted)
       return { block: true, reason: 'Athena authorization is unavailable' };
-    // Neo's host owns page scope, approvals and cancellation for these exact registered tools.
+    // Athena's host owns page scope, approvals and cancellation for these exact registered tools.
     if (browserTools.has(event.toolName)) return;
     const detail = JSON.stringify(event.input);
     if (typeof detail !== 'string' || detail.length > 16000)

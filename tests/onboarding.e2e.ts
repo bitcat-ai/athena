@@ -30,9 +30,6 @@ async function launch(data: string) {
     env: {
       ...process.env,
       WORKBENCH_USER_DATA_DIR: data,
-      WORKBENCH_BROWSER_PATH: path.resolve(
-        '../browseros-runtime/BrowserOS neo.app/Contents/MacOS/BrowserOS neo',
-      ),
     },
   });
   page = await app.firstWindow();
@@ -152,7 +149,7 @@ try {
     conversationsBefore,
   );
   checks.push(
-    'Existing BrowserOS and Neo become ready; returning from reopened setup preserves the draft and conversation IDs',
+    'The installed Chrome and web executor become ready; returning from reopened setup preserves the draft and conversation IDs',
   );
   await close();
   await launch(profile);
@@ -220,7 +217,7 @@ try {
     passed: true,
     source: executable ? 'packaged-Electron' : 'Electron-build',
     realCodexProbe: true,
-    realBrowserOS: true,
+    realChrome: true,
     directoryPicker: 'controlled result with real filesystem checks',
     realModelCalls: 0,
     realLoginAttempts: 0,

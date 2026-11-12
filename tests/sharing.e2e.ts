@@ -19,6 +19,7 @@ import {
   frameSummary,
   percentile,
 } from './sharing-test-support';
+import { uiBrowserExecutable } from './ui-browser';
 const root = process.cwd();
 const temp = await mkdtemp(path.join(root, '.runtime/share-e2e-'));
 await seedLegacyWorkspace(path.join(temp, 'data'));
@@ -30,9 +31,6 @@ const site = createServer((req, res) => {
 });
 await new Promise<void>((resolve) => site.listen(0, '127.0.0.1', resolve));
 const url = `http://127.0.0.1:${(site.address() as any).port}`;
-const executable = path.resolve(
-  '../browseros-runtime/BrowserOS neo.app/Contents/MacOS/BrowserOS neo',
-);
 const app = await electron.launch({
   ...(process.env.ATHENA_SHARE_APP ? { executablePath: process.env.ATHENA_SHARE_APP } : {}),
   args: process.env.ATHENA_SHARE_APP ? [] : ['.'],
@@ -40,13 +38,12 @@ const app = await electron.launch({
   env: {
     ...process.env,
     WORKBENCH_USER_DATA_DIR: path.join(temp, 'data'),
-    WORKBENCH_BROWSER_PATH: executable,
   },
 });
 const guestBrowser = await chromium.launch({
   headless: true,
-  executablePath: executable,
-  args: ['--disable-browseros-server', '--disable-browseros-extensions', '--no-proxy-server'],
+  executablePath: uiBrowserExecutable(),
+  args: ['--no-proxy-server'],
 });
 let native: CdpConnection | undefined;
 const errors: string[] = [];
@@ -73,7 +70,7 @@ try {
   await expect.poll(async () => (await invoke('app:snapshot')).browser.title).toBe('共同编辑计划');
   await expect(host.locator('.frame-loading')).toHaveCount(0);
   const port = (
-    await readFile(path.join(temp, 'data/browser/browseros-profile/DevToolsActivePort'), 'utf8')
+    await readFile(path.join(temp, 'data/browser/agent-browser-profile/DevToolsActivePort'), 'utf8')
   ).split('\n')[0];
   const targets: any[] = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
   native = await CdpConnection.connect(

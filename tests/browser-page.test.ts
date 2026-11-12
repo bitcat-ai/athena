@@ -50,12 +50,10 @@ interface PageEvent {
   editId?: string;
 }
 
-const executable = [
-  process.env.WORKBENCH_BROWSEROS_TEST_BINARY,
-  path.resolve('../browseros-runtime/BrowserOS neo.app/Contents/MacOS/BrowserOS neo'),
-  '/Applications/BrowserOS neo.app/Contents/MacOS/BrowserOS neo',
-  chromium.executablePath(),
-].find((value): value is string => Boolean(value && existsSync(value)));
+const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+const executable = [chromium.executablePath(), CHROME].find((value): value is string =>
+  Boolean(value && existsSync(value)),
+);
 let browser: Browser | undefined;
 before(async () => {
   if (!executable) return;
@@ -63,10 +61,6 @@ before(async () => {
     executablePath: executable,
     headless: true,
     args: [
-      '--disable-browseros-server',
-      '--disable-browseros-server-updater',
-      '--disable-browseros-extensions',
-      '--browseros-disable-url-overrides',
       '--disable-background-networking',
       '--disable-component-update',
       '--use-mock-keychain',

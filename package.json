@@ -4,7 +4,7 @@
   "private": true,
   "license": "UNLICENSED",
   "author": "Dylan",
-  "description": "A local AI workspace with an interactive BrowserOS neo surface and Feishu connectivity.",
+  "description": "A local AI workspace with an interactive browser surface and Feishu connectivity.",
   "type": "module",
   "main": "dist/main/main.cjs",
   "scripts": {
@@ -19,7 +19,7 @@
     "test:live-agent": "tsx tests/live-agent.e2e.ts",
     "test:live-pi": "tsx tests/pi-live.e2e.ts",
     "test:live-cli": "tsx tests/stream-cli-live.e2e.ts",
-    "setup:browseros": "node scripts/setup-browseros.mjs",
+    "setup:agent-browser": "tsx scripts/setup-agent-browser.ts",
     "package": "npm run build && electron-builder --mac dir",
     "heroui:setup": "node scripts/setup-heroui-pro.mjs",
     "postinstall": "npm run heroui:setup",

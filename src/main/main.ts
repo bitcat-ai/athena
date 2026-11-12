@@ -16,7 +16,7 @@ import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { userInfo } from 'node:os';
-import { BrowserRuntime, discoverBrowserOS } from './browser';
+import { BrowserRuntime, discoverChrome } from './browser';
 import { SharingRuntime } from './sharing';
 import { dispatchBrowserAction } from './browser-actions';
 import { createCodexUpdateChecker, detectAgents } from './agents';
@@ -370,7 +370,7 @@ function prepareConversation(conversation: Conversation): Promise<void> {
       )
         await neo.start();
     } catch {
-      /* Local CLI work does not require Neo. */
+      /* Local CLI work does not require the web executor. */
     }
     if (quitting || revision !== connectionRevision) throw new Error('连接配置已改变');
     // A send may have started while the browser connection was being prepared.
@@ -850,7 +850,7 @@ async function runTurn(
     )
       await neo.start();
   } catch {
-    /* Local CLI tasks remain available; Neo reports its own connection state. */
+    /* Local CLI tasks remain available; the web executor reports its own connection state. */
   }
   if (preparing.cancelled) {
     startingTurn = false;
@@ -1223,13 +1223,13 @@ async function createBrowserRuntime(binaryPath?: string) {
     },
   });
   neo = new NeoBrowserRuntime(browser, {
-    directory: path.join(app.getPath('userData'), 'neo'),
+    directory: path.join(app.getPath('userData'), 'agent-browser'),
     download: (url, options) => net.fetch(url, options),
     onState: (state) => emit({ type: 'neo:state', state }),
     onDisconnect: () => {
       if (active) {
         void stopTurn().catch(() => {});
-        notice('Neo 控制连接已断开，网页任务已停止', 'error');
+        notice('网页执行器连接已断开，网页任务已停止', 'error');
       }
     },
     approve: requestNativeApproval,
@@ -1314,7 +1314,7 @@ async function invoke(action: string, payload: unknown) {
         return onboarding.refresh();
       case 'onboarding:plan-install': {
         const kind = record(payload).kind;
-        if (kind !== 'codex' && kind !== 'browser') throw new Error('安装类型无效');
+        if (kind !== 'codex') throw new Error('安装类型无效');
         return onboarding.planInstall(kind);
       }
       case 'onboarding:install':
@@ -1723,9 +1723,9 @@ async function invoke(action: string, payload: unknown) {
       if (active || startingTurn) throw new Error('请先停止当前任务');
       if (onboarding?.changingEnvironment) throw new Error('请先完成或取消当前环境准备');
       const selection = await dialog.showOpenDialog(window!, {
-        title: '选择 BrowserOS neo',
+        title: '选择 Chrome',
         properties: ['openFile', 'openDirectory'],
-        filters: [{ name: 'BrowserOS neo', extensions: ['app', '*'] }],
+        filters: [{ name: 'Chrome', extensions: ['app', '*'] }],
       });
       if (selection.canceled || !selection.filePaths[0]) return null;
       await stat(selection.filePaths[0]);
@@ -1943,8 +1943,7 @@ async function launch() {
     discoverBrowser: async () => {
       const configured = store.data.settings.browserPath || process.env.WORKBENCH_BROWSER_PATH;
       return (
-        (configured ? await discoverBrowserOS(configured) : undefined) ??
-        (await discoverBrowserOS(undefined, app.getPath('userData')))
+        (configured ? await discoverChrome(configured) : undefined) ?? (await discoverChrome())
       );
     },
     browserReady: () => browser.getState().status === 'ready' && neo.getState().status === 'ready',
@@ -1966,7 +1965,7 @@ async function launch() {
       };
       signal.addEventListener('abort', cancel, { once: true });
       try {
-        phase('starting', '正在连接 BrowserOS neo…');
+        phase('starting', '正在启动 Chrome…');
         await targetBrowser.start(hadBrowser ? undefined : demoUrl);
         signal.throwIfAborted();
         phase('preparing-tools', '正在校验并准备网页控制组件…');

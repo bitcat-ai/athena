@@ -154,10 +154,6 @@ const env: NodeJS.ProcessEnv = {
   WORKBENCH_USER_DATA_DIR: dataDir,
   WORKBENCH_ATTENTION_LOG: protocolLog,
   WORKBENCH_ATTENTION_RESOLVE: resolveControl,
-  WORKBENCH_BROWSER_PATH:
-    process.env.WORKBENCH_BROWSER_PATH ||
-    process.env.WORKBENCH_BROWSEROS_PATH ||
-    path.resolve(root, '../browseros-runtime/BrowserOS neo.app'),
 };
 for (const key of [
   'OPENAI_API_KEY',

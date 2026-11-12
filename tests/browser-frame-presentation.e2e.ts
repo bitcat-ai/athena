@@ -8,6 +8,7 @@ import path from 'node:path';
 import { chromium, expect } from '@playwright/test';
 import react from '@vitejs/plugin-react';
 import { createServer, type Plugin } from 'vite';
+import { uiBrowserExecutable } from './ui-browser';
 
 const root = process.cwd();
 const before = process.argv.includes('--before');
@@ -42,7 +43,7 @@ for(const listener of listeners)listener({type:'browser:frame',frame:{...view,da
 return view;
 }return true;}};
 createRoot(document.getElementById('root')).render(React.createElement(BrowserPane,{
-state:{status:'ready',engine:'browseros',tabs:[{id:'a',title:'A',url:'https://example.com',loading:false,canGoBack:false,canGoForward:false}],activeTabId:'a',url:'https://example.com',title:'A',loading:false,canGoBack:false,canGoForward:false,recording:false,inspecting:false},
+state:{status:'ready',engine:'agent-browser',tabs:[{id:'a',title:'A',url:'https://example.com',loading:false,canGoBack:false,canGoForward:false}],activeTabId:'a',url:'https://example.com',title:'A',loading:false,canGoBack:false,canGoForward:false,recording:false,inspecting:false},
 recordings:[],liveSteps:[],initialFrame:{data:small,width:620,height:400,tabId:'a'},onAction:window.workbench.invoke,onOpenSettings(){},onAnalyze(){},onClose(){},onSourceRequest(){}}));
 `;
 const fixture: Plugin = {
@@ -77,18 +78,9 @@ const server = await createServer({
 await server.listen();
 const address = server.httpServer!.address() as { port: number };
 const browser = await chromium.launch({
-  executablePath: path.resolve(
-    '../browseros-runtime/BrowserOS neo.app/Contents/MacOS/BrowserOS neo',
-  ),
+  executablePath: uiBrowserExecutable(),
   headless: true,
-  args: [
-    '--disable-browseros-server',
-    '--disable-browseros-server-updater',
-    '--disable-browseros-extensions',
-    '--browseros-disable-url-overrides',
-    '--use-mock-keychain',
-    '--disable-sync',
-  ],
+  args: ['--use-mock-keychain', '--disable-sync'],
 });
 const checks: string[] = [];
 try {

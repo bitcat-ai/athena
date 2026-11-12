@@ -490,9 +490,14 @@ export function BrowserPane({
   return (
     <section className="browser-pane" aria-label="浏览器">
       <header className="browser-heading">
-        <span className="engine-label" title={neo?.error || neo?.version || `Neo ${neoStatus}`}>
+        <span
+          className="engine-label"
+          title={
+            neo?.error || (neo?.version ? `agent-browser ${neo.version}` : `网页执行器${neoStatus}`)
+          }
+        >
           <span aria-hidden className={`status-dot ${neo?.status === 'ready' ? 'online' : ''}`} />
-          Neo {neoStatus}
+          网页执行器{neoStatus}
         </span>
         <Tabs
           className="browser-tabstrip"
@@ -722,7 +727,7 @@ export function BrowserPane({
                 if (node && lastFrame.current) node.src = lastFrame.current;
               }}
               className="browser-frame"
-              alt={state.title ? `${state.title}，可交互网页` : 'BrowserOS neo 页面'}
+              alt={state.title ? `${state.title}，可交互网页` : '网页页面'}
               draggable={false}
               onLoad={() => {
                 const node = image.current;
@@ -829,10 +834,10 @@ export function BrowserPane({
                   {state.status === 'starting'
                     ? '正在打开浏览器'
                     : state.status === 'missing'
-                      ? '连接 BrowserOS neo'
+                      ? '需要 Chrome'
                       : '浏览器尚未就绪'}
                 </h3>
-                <p>{state.error || '选择本机的 BrowserOS neo，即可在这里浏览和操作网页。'}</p>
+                <p>{state.error || '安装或选择本机的 Chrome，即可在这里浏览和操作网页。'}</p>
                 {state.status !== 'starting' && (
                   <div className="button-row">
                     <ActionButton className="primary-button" onPress={onOpenSettings}>
@@ -863,7 +868,7 @@ export function BrowserPane({
             <span className={`status-dot ${ready ? 'online' : ''}`} />
             <span>
               {ready
-                ? state.title || 'BrowserOS neo 已连接'
+                ? state.title || '浏览器已连接'
                 : state.status === 'starting'
                   ? '正在连接'
                   : '未连接'}

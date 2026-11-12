@@ -7,17 +7,10 @@ import { createServer } from 'node:http';
 import { BrowserRuntime } from '../src/main/browser';
 import { NeoBrowserRuntime } from '../src/main/neo-browser';
 import { complexWorkflowFixture } from './complex-workflow-fixture';
+import { refOf as ref } from './web-fixture';
 import type { WebExecutionEvent } from '../src/shared/types';
 
-const binary = process.env.WORKBENCH_BROWSEROS_TEST_BINARY;
-function ref(text: string, label: string) {
-  const value = text
-    .split('\n')
-    .find((line) => line.includes('"' + label + '"') && line.includes('[ref='))
-    ?.match(/\[ref=(e\d+)\]/)?.[1];
-  assert(value, label);
-  return value;
-}
+const binary = process.env.ATHENA_TEST_CHROME;
 const observation = (text: string) => text.match(/Athena observationId: ([a-f0-9-]+)/)![1];
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 

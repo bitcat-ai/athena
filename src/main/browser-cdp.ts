@@ -51,7 +51,11 @@ export class CdpConnection {
     });
   }
 
-  call<T = any>(method: string, params: Record<string, unknown> = {}): Promise<T> {
+  call<T = any>(
+    method: string,
+    params: Record<string, unknown> = {},
+    timeout = 10_000,
+  ): Promise<T> {
     if (this.socket.readyState !== WebSocket.OPEN)
       return Promise.reject(new Error('Browser is not connected'));
     return new Promise((resolve, reject) => {
@@ -59,7 +63,7 @@ export class CdpConnection {
       const timer = setTimeout(() => {
         this.pending.delete(id);
         reject(new Error(`Browser command timed out: ${method}`));
-      }, 10_000);
+      }, timeout);
       this.pending.set(id, { resolve, reject, timer });
       this.socket.send(JSON.stringify({ id, method, params }));
     });

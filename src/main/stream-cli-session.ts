@@ -848,7 +848,7 @@ export class StreamCliSession implements AgentSession {
           !Array.isArray(record.tools) ||
           this.options.tools.some((tool) => !record.tools.includes(`mcp__athena__${tool.name}`)))
       ) {
-        this.stop(run, 'Claude 尚未加载完整的 Neo 浏览器工具，请重试连接');
+        this.stop(run, 'Claude 尚未加载完整的网页工具，请重试连接');
         return;
       }
       this.initialize(run, record.session_id);

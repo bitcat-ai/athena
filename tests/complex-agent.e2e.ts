@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, readFile, rm, copyFile } from 'node:fs/promises';
 import path from 'node:path';
-import { BrowserRuntime, discoverBrowserOS } from '../src/main/browser';
+import { BrowserRuntime, discoverChrome } from '../src/main/browser';
 import { NeoBrowserRuntime } from '../src/main/neo-browser';
 import { CodexSession, detectAgents } from '../src/main/agents';
 import { complexWorkflowFixture } from './complex-workflow-fixture';
@@ -29,7 +29,7 @@ let neo: NeoBrowserRuntime;
 let report: Record<string, unknown> = {};
 const browser = new BrowserRuntime({
   storageDir: path.join(dir, 'browser'),
-  binaryPath: await discoverBrowserOS(),
+  binaryPath: await discoverChrome(),
   onState() {},
   onFrame() {},
   onSelected() {},

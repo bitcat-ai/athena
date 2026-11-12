@@ -82,7 +82,7 @@ try {
       { timeout: 10_000 },
     )
     .toBeLessThanOrEqual(1);
-  checks.push('Electron renderer, real BrowserOS neo and live frame');
+  checks.push('Electron renderer, real Chrome and live frame');
   await page
     .locator('.topbar-actions')
     .getByRole('button', { name: '收起浏览器', exact: true })
@@ -243,7 +243,7 @@ try {
       .toContain('Electron 联调通过');
     await expect(page.locator('.message.assistant .activity')).not.toHaveCount(0);
     await page.screenshot({ path: path.join(root, 'docs/screenshots/agent-browser.png') });
-    checks.push('Actual renderer send → Codex → BrowserOS actions → streamed UI result');
+    checks.push('Actual renderer send → Codex → browser actions → streamed UI result');
   }
   if (process.env.WORKBENCH_LIVE_ANALYSIS_TEST === '1') {
     const before = (await snapshot()).text;

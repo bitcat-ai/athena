@@ -29,11 +29,6 @@ import type {
 
 const exec = promisify(execFile);
 export const ONBOARDING_CODEX_VERSION = '0.166.0';
-const BROWSER_VERSION = '0.51.2.3';
-const BROWSER_DIGESTS: Record<string, string> = {
-  arm64: '71de41267c6a9bd991c2d560125304082aa32a45a86f572fd819ce6e521e8a56',
-  x64: '8eb7626cdc291ace6e70b19dc6dc8d1999a4a0492a0d13ee580a6a06ed3a14b6',
-};
 const STAGES: OnboardingStage[] = ['welcome', 'codex', 'workspace', 'browser', 'ready'];
 type Fetcher = (url: string, options?: RequestInit) => Promise<Response>;
 type Context = {
@@ -378,100 +373,77 @@ export class OnboardingRuntime {
       throw new Error('当前安装支持 macOS Apple Silicon 和 Intel');
     return arch;
   }
-  private async createPlan(kind: OnboardingInstallKind, context: Context) {
+  private async createPlan(context: Context) {
     const arch = this.platform();
-    if (kind === 'codex') {
-      await this.probe(context);
-      if (this.state.codex.status === 'ready') {
-        this.state.plan = undefined;
-        this.state.stage = this.nextStage();
-        return;
-      }
-    } else {
-      const installed = await this.options.discoverBrowser();
-      context.check();
-      if (installed) {
-        this.state.browser.path = installed;
-        this.state.plan = undefined;
-        return;
-      }
+    await this.probe(context);
+    if (this.state.codex.status === 'ready') {
+      this.state.plan = undefined;
+      this.state.stage = this.nextStage();
+      return;
     }
-    let version = BROWSER_VERSION;
-    let sourceUrl = `https://github.com/browseros-ai/BrowserOS/releases/download/browserclaw/v${version}/BrowserOS_neo_v${version}_${arch}.dmg`;
-    let sha256 = BROWSER_DIGESTS[arch];
+    const version = ONBOARDING_CODEX_VERSION;
+    const asset = `codex-package-${arch === 'arm64' ? 'aarch64' : 'x86_64'}-apple-darwin.tar.gz`;
+    const root = `https://releases.openai.com/codex/releases/${version}`;
+    const response = await this.download(`${root}/release.json`, {
+      signal: AbortSignal.any([context.signal, AbortSignal.timeout(30000)]),
+    });
+    if (!response.ok) throw new Error(`官方安装信息读取失败（${response.status}）`);
+    const text = await response.text();
+    context.check();
+    if (text.length > 2_000_000) throw new Error('官方安装信息超出大小限制');
+    const metadata = JSON.parse(text);
+    const item = Array.isArray(metadata.assets)
+      ? metadata.assets.find((value: any) => value?.name === asset)
+      : undefined;
+    if (
+      metadata.tag_name !== `rust-v${version}` ||
+      !/^sha256:[a-f0-9]{64}$/i.test(item?.digest ?? '')
+    )
+      throw new Error('官方安装信息缺少匹配版本的 SHA-256 校验值');
+    const sourceUrl = `${root}/${asset}`;
+    const sha256 = item.digest.slice(7).toLowerCase();
     let downloadBytes: number | undefined;
-    let destination = path.join(this.options.directory, 'runtime', 'BrowserOS neo.app');
-    if (kind === 'codex') {
-      version = ONBOARDING_CODEX_VERSION;
-      const asset = `codex-package-${arch === 'arm64' ? 'aarch64' : 'x86_64'}-apple-darwin.tar.gz`;
-      const root = `https://releases.openai.com/codex/releases/${version}`;
-      const response = await this.download(`${root}/release.json`, {
-        signal: AbortSignal.any([context.signal, AbortSignal.timeout(30000)]),
-      });
-      if (!response.ok) throw new Error(`官方安装信息读取失败（${response.status}）`);
-      const text = await response.text();
-      context.check();
-      if (text.length > 2_000_000) throw new Error('官方安装信息超出大小限制');
-      const metadata = JSON.parse(text);
-      const item = Array.isArray(metadata.assets)
-        ? metadata.assets.find((value: any) => value?.name === asset)
-        : undefined;
-      if (
-        metadata.tag_name !== `rust-v${version}` ||
-        !/^sha256:[a-f0-9]{64}$/i.test(item?.digest ?? '')
-      )
-        throw new Error('官方安装信息缺少匹配版本的 SHA-256 校验值');
-      sourceUrl = `${root}/${asset}`;
-      sha256 = item.digest.slice(7).toLowerCase();
-      if (item.size !== undefined) {
-        if (!Number.isSafeInteger(item.size) || item.size <= 0 || item.size > 2_000_000_000)
-          throw new Error('官方安装信息返回了无效的下载大小');
-        downloadBytes = item.size;
-      }
-      if (downloadBytes === undefined) {
-        try {
-          const head = await this.download(sourceUrl, {
-            method: 'HEAD',
-            signal: AbortSignal.any([context.signal, AbortSignal.timeout(4000)]),
-          });
-          const length = Number(head.headers.get('content-length'));
-          if (head.ok && Number.isSafeInteger(length) && length > 0 && length <= 2_000_000_000)
-            downloadBytes = length;
-        } catch {
-          /* Size is optional; the confirmed digest remains mandatory. */
-        }
-        context.check();
-      }
-      destination = path.dirname(path.dirname(managedCodexPath(this.options.directory, arch)));
+    if (item.size !== undefined) {
+      if (!Number.isSafeInteger(item.size) || item.size <= 0 || item.size > 2_000_000_000)
+        throw new Error('官方安装信息返回了无效的下载大小');
+      downloadBytes = item.size;
     }
+    if (downloadBytes === undefined) {
+      try {
+        const head = await this.download(sourceUrl, {
+          method: 'HEAD',
+          signal: AbortSignal.any([context.signal, AbortSignal.timeout(4000)]),
+        });
+        const length = Number(head.headers.get('content-length'));
+        if (head.ok && Number.isSafeInteger(length) && length > 0 && length <= 2_000_000_000)
+          downloadBytes = length;
+      } catch {
+        /* Size is optional; the confirmed digest remains mandatory. */
+      }
+      context.check();
+    }
+    const destination = path.dirname(path.dirname(managedCodexPath(this.options.directory, arch)));
     context.check();
     if (await exists(destination))
       throw new Error('私有安装目录已经存在，请重新检查；不会覆盖已有安装');
     this.state.plan = {
       id: randomUUID(),
-      kind,
+      kind: 'codex',
       version,
       sourceUrl,
       sha256,
       downloadBytes,
       destination,
       expiresAt: Date.now() + 15 * 60_000,
-      changes:
-        kind === 'codex'
-          ? [
-              '下载并校验 OpenAI 官方完整 Codex 包',
-              '仅安装到 Athena 私有运行目录',
-              '不修改全局 CLI、PATH、shell 配置或已有登录',
-            ]
-          : [
-              '下载并校验官方 BrowserOS neo',
-              '仅安装到 Athena 私有运行目录',
-              '使用独立浏览器配置，不导入日常账号',
-            ],
+      changes: [
+        '下载并校验 OpenAI 官方完整 Codex 包',
+        '仅安装到 Athena 私有运行目录',
+        '不修改全局 CLI、PATH、shell 配置或已有登录',
+      ],
     };
   }
   planInstall(kind: OnboardingInstallKind) {
-    if (!['codex', 'browser'].includes(kind)) throw new Error('安装类型无效');
+    if (kind !== 'codex') throw new Error('安装类型无效');
     return this.begin(
       `plan:${kind}`,
       'detect',
@@ -479,7 +451,7 @@ export class OnboardingRuntime {
       '正在核对官方安装来源与目标目录…',
       async (context) => {
         this.state.plan = undefined;
-        await this.createPlan(kind, context);
+        await this.createPlan(context);
         context.check();
       },
     );
@@ -489,9 +461,7 @@ export class OnboardingRuntime {
     destination: string,
     context: Context,
   ) {
-    context.phase('downloading', `正在下载 ${plan.kind === 'codex' ? 'Codex' : 'BrowserOS neo'}…`, {
-      receivedBytes: 0,
-    });
+    context.phase('downloading', '正在下载 Codex…', { receivedBytes: 0 });
     const response = await this.download(plan.sourceUrl, {
       signal: AbortSignal.any([context.signal, AbortSignal.timeout(15 * 60_000)]),
     });
@@ -552,44 +522,20 @@ export class OnboardingRuntime {
       throw new Error('安装后的 Codex 版本验证失败');
     context.check();
   }
-  private async verifyBrowser(root: string, context: Context) {
-    const { stdout } = await exec(
-      '/usr/bin/plutil',
-      ['-convert', 'json', '-o', '-', path.join(root, 'Contents/Info.plist')],
-      { signal: context.signal },
-    );
-    const plist = JSON.parse(stdout);
-    if (
-      plist.CFBundleIdentifier !== 'com.browseros.BrowserClaw' ||
-      plist.CFBundleShortVersionString !== BROWSER_VERSION
-    )
-      throw new Error('BrowserOS 版本或应用身份不匹配');
-    await exec('/usr/bin/codesign', ['--verify', '--deep', '--strict', root], {
-      signal: context.signal,
-    });
-    await access(path.join(root, 'Contents/MacOS', plist.CFBundleExecutable), constants.X_OK);
-    context.check();
-  }
   install(planId: string) {
     const plan = this.state.plan;
     if (!plan || plan.id !== planId || plan.expiresAt < Date.now())
       throw new Error('安装确认已过期，请重新查看安装计划');
     return this.begin(
       `install:${plan.id}`,
-      plan.kind === 'codex' ? 'install-codex' : 'prepare-browser',
+      'install-codex',
       'checking',
       '正在重新检查安装环境…',
       async (context) => {
-        if (plan.kind === 'codex') {
-          await this.probe(context);
-          if (this.state.codex.status === 'ready') {
-            this.state.plan = undefined;
-            this.state.stage = this.nextStage();
-            return;
-          }
-        } else if (await this.options.discoverBrowser()) {
-          context.check();
+        await this.probe(context);
+        if (this.state.codex.status === 'ready') {
           this.state.plan = undefined;
+          this.state.stage = this.nextStage();
           return;
         }
         if (await exists(plan.destination))
@@ -597,86 +543,38 @@ export class OnboardingRuntime {
         const parent = path.dirname(plan.destination);
         await mkdir(parent, { recursive: true, mode: 0o700 });
         const temporary = await mkdtemp(path.join(parent, '.onboarding-'));
-        const archive = path.join(
-          temporary,
-          plan.kind === 'codex' ? 'codex.tar.gz' : 'browser.dmg',
-        );
-        const staged = path.join(
-          temporary,
-          plan.kind === 'codex' ? 'package' : 'BrowserOS neo.app',
-        );
-        let mountpoint: string | undefined;
+        const archive = path.join(temporary, 'codex.tar.gz');
+        const staged = path.join(temporary, 'package');
         try {
           await this.downloadArchive(plan, archive, context);
           context.phase('installing', '正在安装到 Athena 私有运行目录…');
-          if (plan.kind === 'codex') {
-            const { stdout } = await exec('/usr/bin/tar', ['-tzf', archive], {
-              signal: context.signal,
-              maxBuffer: 8 * 1024 * 1024,
-            });
-            if (
-              stdout
-                .split('\n')
-                .filter(Boolean)
-                .some((entry) => path.posix.isAbsolute(entry) || entry.split('/').includes('..'))
-            )
-              throw new Error('安装归档包含不安全路径');
-            await mkdir(staged);
-            await exec('/usr/bin/tar', ['-xzf', archive, '-C', staged], { signal: context.signal });
-            context.phase('verifying', '正在验证 Codex 启动与完整组件…');
-            await this.verifyCodex(staged, context);
-          } else {
-            mountpoint = path.join(temporary, 'mount');
-            await mkdir(mountpoint);
-            await exec(
-              '/usr/bin/hdiutil',
-              ['attach', '-readonly', '-nobrowse', '-mountpoint', mountpoint, archive],
-              { signal: context.signal },
-            );
-            await exec(
-              '/usr/bin/ditto',
-              ['--noextattr', '--norsrc', path.join(mountpoint, 'BrowserOS neo.app'), staged],
-              { signal: context.signal },
-            );
-            context.phase('verifying', '正在验证 BrowserOS 应用签名…');
-            await this.verifyBrowser(staged, context);
-          }
+          const { stdout } = await exec('/usr/bin/tar', ['-tzf', archive], {
+            signal: context.signal,
+            maxBuffer: 8 * 1024 * 1024,
+          });
+          if (
+            stdout
+              .split('\n')
+              .filter(Boolean)
+              .some((entry) => path.posix.isAbsolute(entry) || entry.split('/').includes('..'))
+          )
+            throw new Error('安装归档包含不安全路径');
+          await mkdir(staged);
+          await exec('/usr/bin/tar', ['-xzf', archive, '-C', staged], { signal: context.signal });
+          context.phase('verifying', '正在验证 Codex 启动与完整组件…');
+          await this.verifyCodex(staged, context);
           context.check();
           if (await exists(plan.destination))
             throw new Error('目标目录在安装期间发生变化；已有文件未覆盖');
           await rename(staged, plan.destination);
           this.changedConfiguration = true;
           this.state.plan = undefined;
-          if (plan.kind === 'codex') {
-            await this.probe(context);
-            this.state.stage = this.nextStage();
-          } else {
-            this.state.browser = { status: 'preparing', path: plan.destination };
-            await this.options.prepareBrowser(plan.destination, context.signal, context.phase);
-            context.check();
-            if (!this.options.browserReady()) throw new Error('浏览器控制组件尚未就绪');
-            this.state.browser = { status: 'ready', path: plan.destination };
-            this.state.stage = this.nextStage();
-            this.progress = {
-              ...this.progress,
-              version: 1,
-              status: 'in-progress',
-              stage: this.state.stage,
-              browserDeferred: false,
-            };
-          }
+          await this.probe(context);
+          this.state.stage = this.nextStage();
           await this.persist();
           context.check();
         } finally {
-          let detached = true;
-          if (mountpoint) {
-            try {
-              await exec('/usr/bin/hdiutil', ['detach', mountpoint], { timeout: 15000 });
-            } catch {
-              detached = false;
-            }
-          }
-          if (detached) await rm(temporary, { recursive: true, force: true });
+          await rm(temporary, { recursive: true, force: true });
         }
       },
     );
@@ -861,14 +759,14 @@ export class OnboardingRuntime {
       'browser:prepare',
       'prepare-browser',
       'checking-browser',
-      '正在检查已有 BrowserOS neo…',
+      '正在检查本机的 Chrome…',
       async (context) => {
         const binary = await this.options.discoverBrowser();
         context.check();
         this.state.stage = 'browser';
         if (!binary) {
+          // Chrome is installed by the user from its official site; Athena only detects it again.
           this.state.browser = { status: 'missing' };
-          await this.createPlan('browser', context);
           return;
         }
         this.state.browser = { status: 'preparing', path: binary };

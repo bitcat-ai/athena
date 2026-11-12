@@ -1,12 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createServer } from 'node:http';
-import { mkdtemp, rm, access } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { BrowserRuntime } from '../src/main/browser';
 import { NeoBrowserRuntime } from '../src/main/neo-browser';
-import { parseNeoReply } from '../src/main/neo-server';
 import type { ApprovalRequest, ToolResult } from '../src/shared/types';
 
 async function waitFor<T>(
@@ -26,26 +25,16 @@ function ref(text: string, label: string) {
   const value = text
     .split('\n')
     .find((line) => line.includes('"' + label + '"'))
-    ?.match(/\[ref=(e\d+)\]/)?.[1];
+    ?.match(/\bref=(ab[a-f0-9]{8}:e\d+)/)?.[1];
   assert(value, label);
   return value;
 }
-const binary = process.env.WORKBENCH_BROWSEROS_TEST_BINARY;
-
-test('native MCP parses heartbeat events and multiline replies without mixing request ids', () => {
-  const body =
-    'event: ping\r\ndata: \r\n\r\nevent: message\r\ndata: {"jsonrpc":"2.0","method":"notifications/progress"}\r\n\r\nevent: message\r\ndata: {"jsonrpc":"2.0","id":7,\r\ndata: "result":{"ok":true}}\r\n\r\n';
-  assert.deepEqual(parseNeoReply(body, true, 7), { ok: true });
-  assert.throws(() => parseNeoReply(body, true, 8), /对应请求/);
-  assert.throws(
-    () => parseNeoReply('{"id":7,"error":{"message":"ref stale"}}', false, 7),
-    /ref stale/,
-  );
-});
+// Real pinned agent-browser daemon and an Athena-owned Chrome profile; no model requests.
+const enabled = process.env.ATHENA_TEST_AGENT_BROWSER === '1';
 
 test(
-  'native Neo drives the visible page, batches a form, records the result, and cancels future actions',
-  { skip: !binary, timeout: 60000 },
+  'the web executor drives the visible page, batches a form, records the result, and cancels future actions',
+  { skip: !enabled, timeout: 60000 },
   async () => {
     const directory = await mkdtemp(path.join(tmpdir(), 'athena-native-test-'));
     const saved: Array<{ title: string; owner: string }> = [];
@@ -78,7 +67,6 @@ test(
     let native: NeoBrowserRuntime;
     const browser = new BrowserRuntime({
       storageDir: path.join(directory, 'browser'),
-      binaryPath: binary,
       onState() {},
       onFrame() {},
       onStep() {},
@@ -113,7 +101,7 @@ test(
       await browser.newTab(url);
       const second = browser.getState().activeTabId!;
       await native.start();
-      assert.equal(native.getState().version, '0.0.90');
+      assert.equal(native.getState().version, '0.42.0');
       const tools = native.getTools();
       assert(tools.some((tool) => tool.name === 'neo_act'));
       assert(!tools.some((tool) => tool.name === 'workbench_browser_click'));

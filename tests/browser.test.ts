@@ -72,9 +72,9 @@ test('screenshots discard pixels when a masked document changes during capture',
   await assert.rejects(runtime.screenshotInternal(tab), /丢弃截图/);
 });
 
-const binary = process.env.WORKBENCH_BROWSEROS_TEST_BINARY;
+const binary = process.env.ATHENA_TEST_CHROME;
 test(
-  'real BrowserOS neo: resize publishes the new viewport during continuous motion',
+  'real Chrome: resize publishes the new viewport during continuous motion',
   { skip: !binary, timeout: 30_000 },
   async () => {
     const storageDir = await mkdtemp(join(tmpdir(), 'workbench-motion-resize-test-'));
@@ -183,7 +183,7 @@ test(
   },
 );
 test(
-  'real BrowserOS neo: gradients and owned motion are one reversible preview',
+  'real Chrome: gradients and owned motion are one reversible preview',
   { skip: !binary, timeout: 40_000 },
   async () => {
     const storageDir = await mkdtemp(join(tmpdir(), 'workbench-motion-test-'));
@@ -372,7 +372,7 @@ test(
       });
       assert(blocked.isError);
       assert.equal((await stats()).css, before.css);
-      runtime.stopRecording();
+      await runtime.stopRecording();
       await runtime.reload();
       runtime.allowAgentControl();
       assert(
@@ -387,7 +387,7 @@ test(
   },
 );
 test(
-  'real BrowserOS neo: cross-origin frames and open shadows keep exact element scope',
+  'real Chrome: cross-origin frames and open shadows keep exact element scope',
   { skip: !binary, timeout: 50_000 },
   async () => {
     const storageDir = await mkdtemp(join(tmpdir(), 'workbench-frames-test-'));
@@ -510,7 +510,7 @@ test(
   },
 );
 test(
-  'real BrowserOS neo: tabs preserve pages, reject stale input and record cross-tab edits',
+  'real Chrome: tabs preserve pages, reject stale input and record cross-tab edits',
   { skip: !binary, timeout: 40_000 },
   async () => {
     const storageDir = await mkdtemp(join(tmpdir(), 'workbench-tabs-test-'));
@@ -774,7 +774,7 @@ test(
       await until(heading, (value) => value.elements[0]?.text === 'Popup heading');
       await runtime.closeTab(popupTab.id);
       assert(!runtime.listTabs().some((tab) => tab.id === popupTab.id));
-      const recording = runtime.stopRecording();
+      const recording = await runtime.stopRecording();
       assert(recording.steps.some((step) => step.kind === 'edit' && step.tabId === tabA));
       assert(recording.steps.some((step) => step.kind === 'undo' && step.tabId === tabA));
       assert(recording.steps.some((step) => step.kind === 'navigate' && step.tabId === tabB.id));
@@ -787,7 +787,7 @@ test(
   },
 );
 test(
-  'real BrowserOS neo: initial navigation does not take control from an Agent',
+  'real Chrome: initial navigation does not take control from an Agent',
   { skip: !binary, timeout: 20_000 },
   async () => {
     const storageDir = await mkdtemp(join(tmpdir(), 'workbench-startup-test-'));
@@ -865,7 +865,7 @@ test(
   },
 );
 test(
-  'real BrowserOS neo: history restoration keeps snapshots, recording and agent input usable',
+  'real Chrome: history restoration keeps snapshots, recording and agent input usable',
   { skip: !binary, timeout: 40_000 },
   async () => {
     const storageDir = await mkdtemp(join(tmpdir(), 'workbench-history-test-'));
@@ -968,7 +968,7 @@ test(
         i++
       )
         await new Promise((resolve) => setTimeout(resolve, 20));
-      const recording = runtime.stopRecording();
+      const recording = await runtime.stopRecording();
       assert(
         recording.steps.some(
           (step) =>
@@ -1008,7 +1008,7 @@ test(
   },
 );
 test(
-  'real BrowserOS neo: embedded frames, tools, recording, inspection and stale references',
+  'real Chrome: embedded frames, tools, recording, inspection and stale references',
   { skip: !binary, timeout: 60_000 },
   async () => {
     const storageDir = await mkdtemp(join(tmpdir(), 'workbench-neo-test-'));
@@ -1056,7 +1056,7 @@ test(
       };
     try {
       await runtime.start();
-      assert.equal(runtime.getState().engine, 'browseros');
+      assert.equal(runtime.getState().engine, 'agent-browser');
       assert.equal(runtime.getState().status, 'ready');
       await runtime.resize(760, 650);
       await runtime.navigate(`http://127.0.0.1:${port}/`);
@@ -1123,7 +1123,7 @@ test(
       assert(diagnostics.includes('Human takeover: navigate'));
       assert(diagnostics.includes('Human takeover: mouse-down'));
       assert(!diagnostics.includes('never-export-this'));
-      const recording = runtime.stopRecording();
+      const recording = await runtime.stopRecording();
       assert(recording.steps.some((step) => step.kind === 'fill' && step.source === 'agent'));
       assert(
         recording.steps.some((step) => step.kind === 'click' && step.target?.selector === '#save'),
@@ -1194,7 +1194,7 @@ test(
 );
 
 test(
-  'real BrowserOS neo: hover, selection, iframe cleanup and drag input use native targets',
+  'real Chrome: hover, selection, iframe cleanup and drag input use native targets',
   { skip: !binary, timeout: 30_000 },
   async () => {
     const storageDir = await mkdtemp(join(tmpdir(), 'workbench-hover-test-'));
@@ -1812,7 +1812,7 @@ test('bridge rejects migration after preparation without sending or replaying an
 });
 
 test(
-  'real BrowserOS neo: fit width reveals a fixed desktop page and preserves scaled input',
+  'real Chrome: fit width reveals a fixed desktop page and preserves scaled input',
   { skip: !binary, timeout: 30_000 },
   async () => {
     const storageDir = await mkdtemp(join(tmpdir(), 'workbench-fit-width-test-'));

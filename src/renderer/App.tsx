@@ -129,7 +129,7 @@ import type {
 
 const emptyBrowser: BrowserState = {
   status: 'starting',
-  engine: 'browseros',
+  engine: 'agent-browser',
   tabs: [],
   url: '',
   title: '',
@@ -1689,7 +1689,7 @@ export default function App() {
                   <Icon icon={EarthIcon} size={24} />
                 </div>
                 <div>
-                  <h3>BrowserOS neo</h3>
+                  <h3>Chrome</h3>
                   <p>在当前工作区中浏览、操作和记录网页。</p>
                 </div>
                 <span className={`small-badge ${browser.status === 'ready' ? 'success' : ''}`}>
@@ -1703,23 +1703,24 @@ export default function App() {
               <div className="setting-detail">
                 <label>应用位置</label>
                 <p className="file-path">
-                  {browser.binaryPath || settings.browserPath || '尚未选择 BrowserOS neo'}
+                  {browser.binaryPath || settings.browserPath || '尚未找到 Chrome'}
                 </p>
                 <ActionButton className="secondary-button" onPress={() => void selectBrowser()}>
                   <Icon icon={FolderOpenIcon} size={14} />
-                  选择 BrowserOS neo
+                  选择 Chrome
                 </ActionButton>
               </div>
               {browser.error && <div className="inline-error">{browser.error}</div>}
               <div className="settings-note">
-                网页使用独立的浏览器配置，不会导入日常浏览器中的账号。需要访问受保护页面时，可以在侧边浏览器中自行登录。
+                网页使用本机已安装的 Chrome 和 Athena
+                独立的浏览器配置，不会读取日常浏览器中的账号。需要访问受保护页面时，可以在侧边浏览器中自行登录。
               </div>
               <ActionButton
                 className="text-button"
-                onPress={() => openLink('https://browseros.com/')}
+                onPress={() => openLink('https://www.google.com/chrome/')}
               >
                 <Icon icon={ArrowUpRight01Icon} size={14} />
-                下载 BrowserOS neo
+                前往 Chrome 官网
               </ActionButton>
             </Tabs.Panel>
           )}

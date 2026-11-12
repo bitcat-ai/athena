@@ -40,7 +40,7 @@ const snapshot = {
   codexConnection: { status: 'ready', conversationId: 'home' },
   browser: {
     status: 'ready',
-    engine: 'browseros',
+    engine: 'agent-browser',
     tabs: [],
     url: '',
     title: '',
@@ -206,14 +206,7 @@ const port = (server.httpServer!.address() as { port: number }).port;
 const browser = await chromium.launch({
   executablePath: uiBrowserExecutable(),
   headless: true,
-  args: [
-    '--disable-browseros-server',
-    '--disable-browseros-server-updater',
-    '--disable-browseros-extensions',
-    '--browseros-disable-url-overrides',
-    '--use-mock-keychain',
-    '--disable-sync',
-  ],
+  args: ['--use-mock-keychain', '--disable-sync'],
 });
 const checks: string[] = [];
 const errors: string[] = [];
@@ -545,7 +538,7 @@ try {
   assert.equal(await page.getByRole('dialog', { name: '设置与连接' }).count(), 0);
   await page.screenshot({ path: path.join(output, 'settings-agent.png') });
   await page.getByRole('tab', { name: '浏览器', exact: true }).click();
-  await expect(page.getByRole('button', { name: '选择 BrowserOS neo', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '选择 Chrome', exact: true })).toBeVisible();
   await page.getByRole('tab', { name: '飞书', exact: true }).click();
   await expect(page.getByRole('button', { name: '授权并选择机器人', exact: true })).toBeVisible();
   await page.evaluate(() =>

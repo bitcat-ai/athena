@@ -328,7 +328,7 @@ test('completion rechecks a browser that disconnected after preparation', async 
   const f = await fixture();
   try {
     await confirmProject(f);
-    f.data.browserPath = '/fixture/BrowserOS neo.app';
+    f.data.browserPath = '/fixture/Google Chrome.app';
     f.runtime.prepareBrowser();
     await f.runtime.settled();
     assert.equal(f.runtime.getState().browser.status, 'ready');
@@ -583,16 +583,18 @@ test('an unfinished login is reported and leaves the detected runtime usable', a
   }
 });
 
-test('browser preparation is optional and missing BrowserOS produces a reviewable plan before any download', async () => {
+test('browser preparation is optional and a missing Chrome is reported without any download', async () => {
   const f = await fixture();
   try {
     await confirmProject(f);
     f.runtime.prepareBrowser();
     await f.runtime.settled();
-    assert.equal(f.runtime.getState().plan?.kind, 'browser');
+    assert.equal(f.runtime.getState().browser.status, 'missing');
+    assert.equal(f.runtime.getState().plan, undefined);
+    assert.equal(f.data.browserCalls, 0);
     assert.equal(f.data.downloadCalls.length, 0);
     assert.equal(f.runtime.blocksTasks, false);
-    f.data.browserPath = '/fixture/existing/BrowserOS neo.app';
+    f.data.browserPath = '/fixture/existing/Google Chrome.app';
     f.runtime.prepareBrowser();
     await f.runtime.settled();
     assert.equal(f.data.browserCalls, 1);

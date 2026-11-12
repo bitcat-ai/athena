@@ -304,7 +304,7 @@ export interface BrowserTab {
 export interface BrowserState {
   viewport?: BrowserViewport & { epoch: number };
   status: 'missing' | 'starting' | 'ready' | 'error' | 'stopped';
-  engine: 'browseros';
+  engine: 'agent-browser';
   tabs: BrowserTab[];
   activeTabId?: string;
   binaryPath?: string;
@@ -612,7 +612,13 @@ export interface AppSnapshot {
   recordings: Recording[];
   browserFrame?: BrowserFrame;
   pendingRequests?: PendingAgentRequest[];
-  pendingExternalConnections?: Array<{ id: string; agent: { id: string; name: string }; requestedMode: import('./access').AccessMode; status: string; mode?: import('./access').AccessMode }>;
+  pendingExternalConnections?: Array<{
+    id: string;
+    agent: { id: string; name: string };
+    requestedMode: import('./access').AccessMode;
+    status: string;
+    mode?: import('./access').AccessMode;
+  }>;
   share?: import('./share').ShareState;
 }
 export type AppEvent =

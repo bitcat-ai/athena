@@ -171,7 +171,7 @@ test('a failed resize releases the transition guard and the input queue', async 
 test(
   'real Neo: concurrent capture, resizing and input recover without stale frames or deadlock',
   {
-    skip: !process.env.WORKBENCH_BROWSEROS_TEST_BINARY,
+    skip: !process.env.ATHENA_TEST_CHROME,
     timeout: 30_000,
   },
   async () => {
@@ -187,7 +187,7 @@ test(
       mismatches: any[] = [];
     const runtime = new BrowserRuntime({
       storageDir: directory,
-      binaryPath: process.env.WORKBENCH_BROWSEROS_TEST_BINARY,
+      binaryPath: process.env.ATHENA_TEST_CHROME,
       onState() {},
       onStep() {},
       onSelected() {},

@@ -34,7 +34,7 @@ const snapshot = {
   codexConnection: { status: 'ready', conversationId: 'plan' },
   browser: {
     status: 'ready',
-    engine: 'browseros',
+    engine: 'agent-browser',
     tabs: [],
     url: '',
     title: '',
@@ -198,14 +198,7 @@ const port = (server.httpServer!.address() as { port: number }).port;
 const browser = await chromium.launch({
   executablePath: uiBrowserExecutable(),
   headless: true,
-  args: [
-    '--disable-browseros-server',
-    '--disable-browseros-server-updater',
-    '--disable-browseros-extensions',
-    '--browseros-disable-url-overrides',
-    '--use-mock-keychain',
-    '--disable-sync',
-  ],
+  args: ['--use-mock-keychain', '--disable-sync'],
 });
 const checks: string[] = [];
 const errors: string[] = [];

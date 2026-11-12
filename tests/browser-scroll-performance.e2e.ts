@@ -1,4 +1,4 @@
-/** Actual Electron input -> BrowserOS rendering -> decoded embedded-frame performance. */
+/** Actual Electron input -> Chrome rendering -> decoded embedded-frame performance. */
 import assert from 'node:assert/strict';
 import { _electron as electron, expect } from '@playwright/test';
 import { createServer } from 'node:http';
@@ -35,9 +35,6 @@ const app = await electron.launch({
   env: {
     ...process.env,
     WORKBENCH_USER_DATA_DIR: path.join(temp, 'data'),
-    WORKBENCH_BROWSER_PATH: path.resolve(
-      '../browseros-runtime/BrowserOS neo.app/Contents/MacOS/BrowserOS neo',
-    ),
   },
 });
 let native: CdpConnection | undefined;
@@ -70,7 +67,7 @@ try {
       Promise.all(node.getAnimations().map((a) => a.finished.catch(() => {}))),
     );
   const port = (
-    await readFile(path.join(temp, 'data/browser/browseros-profile/DevToolsActivePort'), 'utf8')
+    await readFile(path.join(temp, 'data/browser/agent-browser-profile/DevToolsActivePort'), 'utf8')
   ).split('\n')[0];
   const targets = (await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()) as any[];
   native = await CdpConnection.connect(

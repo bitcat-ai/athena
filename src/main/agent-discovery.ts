@@ -180,13 +180,13 @@ export async function detectAgents(
             version: versionText,
             detail:
               id === 'claude'
-                ? '支持文字、图片、Skill 与 Neo；本地文件只读，命令工具不可用'
+                ? '支持文字、图片、Skill 与网页操作；本地文件只读，命令工具不可用'
                 : id === 'gemini'
                   ? '支持文本任务；本地文件和命令工具不可用'
                   : id === 'cursor'
                     ? '支持只读任务；不执行文件修改或命令'
                     : id === 'opencode'
-                      ? '支持文字、图片与 Neo；保留本机限制，文件与命令操作逐项确认'
+                      ? '支持文字、图片与网页操作；保留本机限制，文件与命令操作逐项确认'
                       : supported
                         ? '沿用本机登录与模型服务配置，工具操作逐项确认'
                         : '已检测到本机安装',

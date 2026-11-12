@@ -94,12 +94,12 @@ export function NeoHistory({
       <div className="recording-header">
         <div>
           <span className="eyebrow">网页任务</span>
-          <h3>{selected ? '执行过程' : 'Neo 任务记录'}</h3>
+          <h3>{selected ? '执行过程' : '网页任务记录'}</h3>
           <p>查看网页任务实际执行过的操作。</p>
         </div>
         <ActionButton
           className="icon-button"
-          aria-label="刷新 Neo 记录"
+          aria-label="刷新网页任务记录"
           isDisabled={loading || state?.status !== 'ready'}
           onPress={() => void load()}
         >
@@ -108,7 +108,7 @@ export function NeoHistory({
       </div>
       {state?.status !== 'ready' ? (
         <div className="recording-empty">
-          <p>{state?.status === 'starting' ? '正在连接 Neo…' : 'Neo 暂未连接'}</p>
+          <p>{state?.status === 'starting' ? '正在连接网页执行器…' : '网页执行器暂未连接'}</p>
           <ActionButton className="secondary-button" onPress={() => void onAction('neo:connect')}>
             重新连接
           </ActionButton>

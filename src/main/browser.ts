@@ -1,9 +1,9 @@
 import { validateElementControls, controlProperties } from '../shared/element-controls';
 import { spawn, execFile, type ChildProcess } from 'node:child_process';
-import { access, mkdir, readFile, writeFile, rename } from 'node:fs/promises';
+import { access, mkdir, readFile, writeFile, rename, stat } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { homedir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { basename, extname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { randomUUID } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
@@ -46,6 +46,26 @@ const WORLD = 'workbench-browser-observer';
 const PREVIEW_MAX_EDGE = 2048;
 const PREVIEW_INTERVAL = 1000 / 24;
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+/** Requests that can still change what the page shows; media and long polls are not waited for. */
+const SETTLE_RESOURCES = new Set(['Document', 'Stylesheet', 'Script', 'XHR', 'Fetch']);
+
+/** Chrome saves by GUID; the host restores a safe, unused file name. */
+export async function uniqueDownloadPath(directory: string, suggested: string): Promise<string> {
+  const safe = basename(
+    suggested.replace(/[\u0000-\u001f\u007f]/g, '').replace(/[\\/:]/g, '_'),
+  ).replace(/^\.+/, '');
+  const extension = extname(safe);
+  const stem = (extension ? safe.slice(0, -extension.length) : safe).slice(0, 160) || 'download';
+  for (let index = 0; index < 1000; index++) {
+    const name = (index ? `${stem} (${index})` : stem) + extension.slice(0, 20);
+    try {
+      await stat(join(directory, name));
+    } catch {
+      return join(directory, name);
+    }
+  }
+  throw new Error('下载目录中的同名文件过多');
+}
 const editableStyles = new Set<string>(ELEMENT_STYLE_PROPERTIES);
 const animatedStyles = new Set<string>(ELEMENT_ANIMATION_PROPERTIES);
 const backgroundFunctions = new Set<string>(ELEMENT_BACKGROUND_FUNCTIONS);
@@ -332,7 +352,7 @@ function recordedEditValue(value: string): string {
   }
 }
 
-function evidenceUrl(value: string): string {
+export function evidenceUrl(value: string): string {
   try {
     const url = new URL(value);
     return ['http:', 'https:'].includes(url.protocol)
@@ -343,23 +363,26 @@ function evidenceUrl(value: string): string {
   }
 }
 
+const CHROME_BUNDLES = ['com.google.Chrome', 'com.google.Chrome.canary', 'org.chromium.Chromium'];
+
 async function brandedBinary(candidate: string): Promise<string | undefined> {
   try {
     const app = candidate.endsWith('.app')
       ? candidate
       : candidate.slice(0, candidate.lastIndexOf('.app/') + 4);
     if (!app.endsWith('.app')) return undefined;
-    const { stdout } = await execFileAsync('/usr/bin/plutil', [
-      '-convert',
-      'json',
-      '-o',
-      '-',
-      join(app, 'Contents/Info.plist'),
-    ]);
+    const { stdout } = await execFileAsync(
+      '/usr/bin/plutil',
+      ['-convert', 'json', '-o', '-', join(app, 'Contents/Info.plist')],
+      { timeout: 2000, maxBuffer: 64 * 1024 },
+    );
     const info = JSON.parse(stdout);
-    if (info.CFBundleIdentifier !== 'com.browseros.BrowserClaw') return undefined;
+    if (!CHROME_BUNDLES.includes(info.CFBundleIdentifier)) return undefined;
+    if (typeof info.CFBundleExecutable !== 'string' || /[\/\\]/.test(info.CFBundleExecutable))
+      return undefined;
     const binary = join(app, 'Contents/MacOS', info.CFBundleExecutable);
     if (!candidate.endsWith('.app') && resolve(candidate) !== resolve(binary)) return undefined;
+    if (!(await stat(binary)).isFile()) return undefined;
     await access(binary, constants.X_OK);
     return binary;
   } catch {
@@ -367,17 +390,14 @@ async function brandedBinary(candidate: string): Promise<string | undefined> {
   }
 }
 
-export async function discoverBrowserOS(
-  explicit?: string,
-  storageDir?: string,
-): Promise<string | undefined> {
+/** Finds an installed Chrome; an explicit path is never replaced by another installation. */
+export async function discoverChrome(explicit?: string): Promise<string | undefined> {
   if (explicit) return brandedBinary(resolve(explicit));
   const candidates = [
-    process.env.WORKBENCH_BROWSEROS_PATH,
-    '/Applications/BrowserOS neo.app',
-    join(homedir(), 'Applications/BrowserOS neo.app'),
-    resolve(process.cwd(), '../browseros-runtime/BrowserOS neo.app'),
-    storageDir ? join(storageDir, 'runtime/BrowserOS neo.app') : undefined,
+    process.env.ATHENA_CHROME_PATH,
+    '/Applications/Google Chrome.app',
+    join(homedir(), 'Applications/Google Chrome.app'),
+    '/Applications/Chromium.app',
   ];
   for (const candidate of candidates) {
     if (!candidate) continue;
@@ -421,6 +441,11 @@ interface TabSession {
   source: 'human' | 'agent';
   actorId?: string;
   diagnostics: Array<{ time: number; kind: string; text: string }>;
+  /** In-flight page work that native web tools wait out before observing. */
+  requests: Map<string, number>;
+  loadingFrames: Set<string>;
+  documentStatus?: number;
+  chooser?: { channel: BrowserChannel; backendNodeId: number; multiple: boolean };
   edits: Array<{
     transient?: boolean;
     actor?: BrowserActor;
@@ -452,11 +477,11 @@ interface PreparedContext {
   revision: number;
 }
 
-/** One BrowserHost owns all neo targets and grants input only to the visible tab. */
+/** One BrowserHost owns all Chrome targets and grants input only to the visible tab. */
 export class BrowserRuntime {
   private state: BrowserState = {
     status: 'missing',
-    engine: 'browseros',
+    engine: 'agent-browser',
     tabs: [],
     url: '',
     title: '',
@@ -500,13 +525,29 @@ export class BrowserRuntime {
   private agentAllowed = true;
   private agentNeedsObservation = false;
   private nativeAgentActive = false;
-  private pendingDialogs = new Map<string, BrowserChannel>();
+  private pendingDialogs = new Map<
+    string,
+    { channel: BrowserChannel; type: string; message: string; defaultPrompt?: string }
+  >();
+  private downloads = new Map<
+    string,
+    {
+      sequence: number;
+      name: string;
+      state: 'inProgress' | 'saving' | 'completed' | 'canceled';
+      path?: string;
+      size?: number;
+    }
+  >();
+  private downloadSequence = 0;
+  private downloadRenames: Promise<void> = Promise.resolve();
   private suppressMouseUp = false;
   private pointerMove?: Promise<void>;
   private latestMove?: Extract<BrowserInput, { type: 'mouse' }>;
   private hoverEpoch = 0;
   private workingFeedback?: ScopedElement & { ref: string };
   private recording?: Recording;
+  private endingRecording?: Promise<Recording>;
   private actorContext = new AsyncLocalStorage<{
     actor: BrowserActor;
     guard?: () => void;
@@ -653,11 +694,47 @@ export class BrowserRuntime {
         } catch {}
       }
     if (tabId) this.revokeAgentControl();
-    await this.browser?.call('Browser.setDownloadBehavior', {
-      behavior: tabId ? 'deny' : 'default',
+    await this.applyDownloadBehavior();
+  }
+  private async applyDownloadBehavior(): Promise<void> {
+    if (!this.browser) return;
+    if (this.sharedTab) {
+      await this.browser.call('Browser.setDownloadBehavior', { behavior: 'deny' });
+      return;
+    }
+    const downloadPath = this.getDownloadDirectory();
+    await mkdir(downloadPath, { recursive: true, mode: 0o700 });
+    // Chrome's plain "allow" overwrites an earlier file of the same name; GUID names never collide.
+    await this.browser.call('Browser.setDownloadBehavior', {
+      behavior: 'allowAndName',
+      downloadPath,
+      eventsEnabled: true,
     });
-    const tab = this.tabs.get(this.activeTabId);
-    if (tab) await tab.page.call('Page.setInterceptFileChooserDialog', { enabled: Boolean(tabId) });
+  }
+  private finishDownload(p: any): void {
+    const entry = this.downloads.get(p.guid);
+    if (!entry || entry.state !== 'inProgress' || p.state === 'inProgress') return;
+    if (p.state !== 'completed') {
+      entry.state = 'canceled';
+      return;
+    }
+    entry.state = 'saving';
+    const directory = this.getDownloadDirectory();
+    // Renames run one at a time so two files with the same name cannot pick the same target.
+    this.downloadRenames = this.downloadRenames.then(async () => {
+      try {
+        const target = await uniqueDownloadPath(directory, entry.name);
+        await rename(
+          typeof p.filePath === 'string' && p.filePath ? p.filePath : join(directory, p.guid),
+          target,
+        );
+        entry.path = target;
+        entry.size = (await stat(target)).size;
+        entry.state = 'completed';
+      } catch {
+        entry.state = 'canceled';
+      }
+    });
   }
   private sharedNavigation(url: string, actorId: string, mainFrame = true): void {
     if (!this.sharedTab) return;
@@ -878,7 +955,7 @@ export class BrowserRuntime {
   }
   private activeTab(): TabSession {
     const tab = this.tabs.get(this.activeTabId);
-    if (!tab || this.state.status !== 'ready') throw new Error('BrowserOS neo 尚未就绪');
+    if (!tab || this.state.status !== 'ready') throw new Error('浏览器尚未就绪');
     return tab;
   }
   private async until<T>(
@@ -894,6 +971,23 @@ export class BrowserRuntime {
     throw new Error('等待浏览器响应超时');
   }
 
+  /** Re-checks the installed browser without starting it; onboarding polls this after an install. */
+  async detectInstallation(): Promise<string | undefined> {
+    if (this.state.status === 'ready') return this.state.binaryPath;
+    const disposed = this.disposed;
+    // A stored path from another browser must not block the default installation.
+    const binary =
+      (this.options.binaryPath ? await discoverChrome(this.options.binaryPath) : undefined) ??
+      (await discoverChrome());
+    if (
+      this.disposed === disposed &&
+      !this.starting &&
+      this.getState().status !== 'ready' &&
+      this.state.binaryPath !== binary
+    )
+      this.update({ status: binary ? 'stopped' : 'missing', binaryPath: binary, error: undefined });
+    return binary;
+  }
   start(initialUrl?: string): Promise<void> {
     if (this.state.status === 'ready') return Promise.resolve();
     if (this.starting) return this.starting;
@@ -905,18 +999,19 @@ export class BrowserRuntime {
   private async startInternal(initialUrl?: string): Promise<void> {
     const initial = initialUrl === undefined ? undefined : normalizeBrowserUrl(initialUrl);
     this.disposed = false;
-    const binary = await discoverBrowserOS(this.options.binaryPath, this.options.storageDir);
+    const binary = await this.detectInstallation();
     if (!binary) {
       this.update({
         status: 'missing',
-        error: '未找到 BrowserOS neo。请安装官方 neo，或指定其应用路径。',
+        error: '未找到 Chrome，请安装 Chrome 或指定其应用路径。',
       });
       throw new Error(this.state.error);
     }
     this.update({ status: 'starting', binaryPath: binary, error: undefined });
-    const profile = join(this.options.storageDir, 'browseros-profile');
+    // A dedicated profile: never the user's everyday Chrome data.
+    const profile = join(this.options.storageDir, 'agent-browser-profile');
     await mkdir(profile, { recursive: true });
-    // Neo restores CDP's default download behavior; configure this owned profile's default.
+    // Downloads started before the CDP download behavior applies still land in the owned folder.
     const preferencesPath = join(profile, 'Default', 'Preferences');
     let preferences: Record<string, any> = {};
     try {
@@ -944,10 +1039,6 @@ export class BrowserRuntime {
         `--user-data-dir=${profile}`,
         '--no-first-run',
         '--no-default-browser-check',
-        '--disable-browseros-server',
-        '--disable-browseros-server-updater',
-        '--disable-browseros-extensions',
-        '--browseros-disable-url-overrides',
         '--disable-background-networking',
         '--disable-component-update',
         '--disable-features=MediaRouter',
@@ -962,7 +1053,6 @@ export class BrowserRuntime {
           PATH: process.env.PATH,
           TMPDIR: process.env.TMPDIR,
           LANG: process.env.LANG || 'en_US.UTF-8',
-          BROWSERCLAW_DIR: join(profile, 'claw-state'),
         },
       },
     );
@@ -983,13 +1073,13 @@ export class BrowserRuntime {
         this.update({
           status: 'error',
           loading: false,
-          error: 'BrowserOS neo 已退出，请重新启动。',
+          error: '浏览器已退出，请重新启动。',
         });
     });
     try {
       this.endpoint = await this.until(async () => {
         if (failure) throw failure;
-        if (child.exitCode !== null) throw new Error('BrowserOS neo 启动失败');
+        if (child.exitCode !== null) throw new Error('浏览器启动失败');
         return endpoint || undefined;
       }, 20_000);
       this.browser = await CdpConnection.connect(this.endpoint);
@@ -1004,10 +1094,20 @@ export class BrowserRuntime {
       });
       const { targetInfos } = await this.browser.call('Target.getTargets');
       const first = targetInfos.find((item: any) => item.type === 'page');
-      if (!first) throw new Error('BrowserOS neo 没有创建可用页面');
+      if (!first) throw new Error('浏览器没有创建可用页面');
       const tab = await this.attachTab(first);
       await this.activateTab(tab, 'human', false);
       await this.browser.call('Target.setDiscoverTargets', { discover: true });
+      this.browser.on('Browser.downloadWillBegin', (p) => {
+        this.downloads.set(p.guid, {
+          sequence: ++this.downloadSequence,
+          name: String(p.suggestedFilename || 'download'),
+          state: 'inProgress',
+        });
+        if (this.downloads.size > 200) this.downloads.delete(this.downloads.keys().next().value!);
+      });
+      this.browser.on('Browser.downloadProgress', (p) => this.finishDownload(p));
+      await this.applyDownloadBehavior();
       if (initial !== undefined) {
         this.updateTab(tab, { url: initial, loading: true });
         const result = await tab.page.call('Page.navigate', { url: initial });
@@ -1081,6 +1181,8 @@ export class BrowserRuntime {
       activation: 0,
       source: 'human',
       diagnostics: [],
+      requests: new Map(),
+      loadingFrames: new Set(),
       edits: [],
     };
     this.tabs.set(tab.info.id, tab);
@@ -1223,6 +1325,7 @@ export class BrowserRuntime {
       if (root && !p.frame.parentId) {
         tab.mainFrameId = frame.id;
         tab.activation++;
+        tab.chooser = undefined;
         tab.edits = [];
         this.clearTabRefs(tab);
         if (this.activeTabId === tab.info.id)
@@ -1243,6 +1346,7 @@ export class BrowserRuntime {
         void this.prepareFrame(tab, frame).catch(() => {});
     });
     channel.on('Page.frameDetached', (p) => {
+      tab.loadingFrames.delete(p.frameId);
       if (p.reason === 'swap') return;
       const frame = tab.frames.get(p.frameId);
       if (frame) {
@@ -1259,9 +1363,11 @@ export class BrowserRuntime {
       }
     });
     channel.on('Page.frameStartedLoading', (p) => {
+      tab.loadingFrames.add(p.frameId);
       if (p.frameId === tab.mainFrameId) this.updateTab(tab, { loading: true });
     });
     channel.on('Page.frameStoppedLoading', (p) => {
+      tab.loadingFrames.delete(p.frameId);
       if (p.frameId === tab.mainFrameId) {
         this.updateTab(tab, { loading: false });
         void this.refreshTab(tab);
@@ -1282,14 +1388,42 @@ export class BrowserRuntime {
         p.exceptionDetails.exception?.description || p.exceptionDetails.text,
       ),
     );
-    channel.on('Network.responseReceived', (p) =>
-      this.log(tab, 'network', `${p.response.status} ${evidenceUrl(p.response.url)}`),
-    );
-    channel.on('Network.loadingFailed', (p) => this.log(tab, 'network.error', p.errorText));
-    channel.on('Page.javascriptDialogOpening', () => {
+    channel.on('Network.requestWillBeSent', (p) => {
+      if (!SETTLE_RESOURCES.has(p.type)) return;
+      tab.requests.set(p.requestId, Date.now());
+      if (tab.requests.size > 500) tab.requests.delete(tab.requests.keys().next().value!);
+    });
+    channel.on('Network.loadingFinished', (p) => tab.requests.delete(p.requestId));
+    channel.on('Network.responseReceived', (p) => {
+      if (root && p.type === 'Document' && p.frameId === tab.mainFrameId)
+        tab.documentStatus = p.response.status;
+      this.log(tab, 'network', `${p.response.status} ${evidenceUrl(p.response.url)}`);
+    });
+    channel.on('Network.loadingFailed', (p) => {
+      tab.requests.delete(p.requestId);
+      this.log(tab, 'network.error', p.errorText);
+    });
+    channel.on('Page.fileChooserOpened', (p) => {
+      if (typeof p.backendNodeId !== 'number') return;
+      // The chooser never opens natively; a web task may answer it with approved files.
+      tab.chooser = {
+        channel,
+        backendNodeId: p.backendNodeId,
+        multiple: p.mode === 'selectMultiple',
+      };
+      this.log(tab, 'filechooser', '页面请求选择文件');
+    });
+    channel.on('Page.javascriptDialogOpening', (p) => {
       if (this.nativeAgentActive && this.agentAllowed) {
-        this.pendingDialogs.set(tab.info.id, channel);
-        this.log(tab, 'dialog', '页面弹窗等待 Neo 任务处理');
+        this.pendingDialogs.set(tab.info.id, {
+          channel,
+          type: String(p.type || 'alert'),
+          message: redactBrowserText(p.message, 500),
+          ...(p.type === 'prompt'
+            ? { defaultPrompt: redactBrowserText(p.defaultPrompt, 500) }
+            : {}),
+        });
+        this.log(tab, 'dialog', '页面弹窗等待网页任务处理');
         return;
       }
       this.log(tab, 'dialog', '页面弹窗已关闭；请在页面控件中完成交互。');
@@ -1350,6 +1484,8 @@ export class BrowserRuntime {
       tab.pendingFrames.add(setup);
     });
     await channel.call('Page.enable');
+    // The browser is headless: an unanswered native chooser could never be completed.
+    await channel.call('Page.setInterceptFileChooserDialog', { enabled: true }).catch(() => {});
     await channel.call('DOM.enable');
     const tree = await channel.call('Page.getFrameTree');
     const walk = (node: any, parentId?: string) => {
@@ -1587,7 +1723,7 @@ export class BrowserRuntime {
       mobile: false,
     });
     await tab.page.call('Page.bringToFront');
-    // Headless neo can leave a restored native tab hidden; the embedded active page must keep rendering.
+    // A web task can leave another tab in front; the embedded active page must keep rendering.
     await tab.page.call('Emulation.setFocusEmulationEnabled', { enabled: true });
     await this.startScreencast(tab);
     await this.refreshTab(tab);
@@ -1611,8 +1747,11 @@ export class BrowserRuntime {
     if (!value) {
       const dialogs = [...this.pendingDialogs.values()];
       this.pendingDialogs.clear();
+      for (const tab of this.tabs.values()) tab.chooser = undefined;
       await Promise.allSettled(
-        dialogs.map((channel) => channel.call('Page.handleJavaScriptDialog', { accept: false })),
+        dialogs.map((dialog) =>
+          dialog.channel.call('Page.handleJavaScriptDialog', { accept: false }),
+        ),
       );
     }
   }
@@ -1624,7 +1763,7 @@ export class BrowserRuntime {
   getDownloadDirectory(): string {
     return resolve(this.options.storageDir, 'downloads');
   }
-  /** Native Neo owns the action; Athena owns the visible tab and user-control lease. */
+  /** The web task owns the action; Athena owns the visible tab and user-control lease. */
   performNative<T>(
     targetId: string | undefined,
     operation: () => Promise<T>,
@@ -1641,18 +1780,404 @@ export class BrowserRuntime {
       if (targetId) {
         if (this.attaching.has(targetId)) await this.attaching.get(targetId);
         const tab = this.tabs.get(targetId);
-        if (!tab) throw new Error('Neo 目标页已关闭，请重新获取页面');
+        if (!tab) throw new Error('目标页已关闭，请重新获取页面');
         if (!readonly) await this.activateTab(tab, 'agent');
         if (!readonly) await this.setSource(tab, 'agent');
       }
       guard();
-      const result = await operation();
-      guard();
-      return result;
+      try {
+        const result = await operation();
+        guard();
+        return result;
+      } finally {
+        // The web executor brings the page it works on to the front inside the browser.
+        if (targetId !== this.activeTabId)
+          await this.tabs
+            .get(this.activeTabId)
+            ?.page.call('Page.bringToFront')
+            .catch(() => {});
+      }
     });
   }
   followNativeTarget(targetId: string): Promise<void> {
     return this.performNative(targetId, async () => {});
+  }
+  // The helpers below serve native web tools. They run inside performNative, which holds the queue.
+  private nativeTab(targetId: string): TabSession {
+    const tab = this.tabs.get(targetId);
+    if (!tab) throw new Error('目标页已关闭，请重新获取页面');
+    return tab;
+  }
+  nativeTabs(): Array<{ targetId: string; title: string; url: string; active: boolean }> {
+    return [...this.tabs.values()].map((tab) => ({
+      targetId: tab.info.id,
+      title: tab.info.title,
+      url: tab.info.url,
+      active: tab.info.id === this.activeTabId,
+    }));
+  }
+  async nativeNewTab(): Promise<string> {
+    return (await this.createTab('about:blank', 'agent')).id;
+  }
+  nativeCloseTab(targetId: string): Promise<void> {
+    return this.closeTabInternal(targetId, 'agent');
+  }
+  /** Shows the page a multi-page script is about to change. */
+  async nativeActivate(targetId: string): Promise<void> {
+    const tab = this.nativeTab(targetId);
+    await this.activateTab(tab, 'agent');
+    await this.setSource(tab, 'agent');
+  }
+  private tabBusy(tab: TabSession): boolean {
+    if (tab.loadingFrames.size) return true;
+    // Streams and long polls never finish; only fresh requests hold a settle.
+    const recent = Date.now() - 2000;
+    for (const started of tab.requests.values()) if (started > recent) return true;
+    return false;
+  }
+  private framesQuiet(
+    tab: TabSession,
+    idle: number,
+    timeout: number,
+  ): Promise<'quiet' | 'noisy' | 'retry'> {
+    const check = (async () => {
+      const results = await Promise.all(
+        (await this.collectFrames(tab)).map((frame) =>
+          this.bridge<boolean>(
+            tab,
+            frame,
+            `globalThis.__workbenchPage.quiet(${idle},${timeout})`,
+          ).catch(() => undefined),
+        ),
+      );
+      if (results.includes(undefined)) return 'retry' as const;
+      return results.every(Boolean) ? ('quiet' as const) : ('noisy' as const);
+    })().catch(() => 'retry' as const);
+    // A renderer blocked by a dialog never answers.
+    return Promise.race([check, wait(timeout + 300).then(() => 'retry' as const)]);
+  }
+  /** Waits until loading, fresh requests and DOM changes stop. Resolves false when the page stays busy. */
+  async nativeSettle(targetId: string, timeout = 3000): Promise<boolean> {
+    const deadline = Date.now() + timeout;
+    // The action's first request or navigation needs a moment to start.
+    await wait(30);
+    while (Date.now() < deadline) {
+      const tab = this.tabs.get(targetId);
+      if (!tab || this.pendingDialogs.has(targetId)) return true;
+      if (this.tabBusy(tab)) {
+        await wait(25);
+        continue;
+      }
+      const state = await this.framesQuiet(
+        tab,
+        80,
+        Math.max(100, Math.min(600, deadline - Date.now())),
+      );
+      if (this.pendingDialogs.has(targetId)) return true;
+      if (state === 'retry') {
+        await wait(25);
+        continue;
+      }
+      if (this.tabBusy(tab)) continue;
+      // A page that animates its DOM forever is as settled as it will get.
+      return state === 'quiet';
+    }
+    return false;
+  }
+  async nativeNavigate(
+    targetId: string,
+    action: 'url' | 'back' | 'forward' | 'reload',
+    url?: string,
+  ): Promise<{ moved: boolean; download?: boolean; status?: number; settled?: boolean }> {
+    const tab = this.nativeTab(targetId);
+    const activation = tab.activation;
+    const mark = this.downloadSequence;
+    tab.documentStatus = undefined;
+    if (action === 'url') {
+      const result = await tab.page.call(
+        'Page.navigate',
+        { url: normalizeBrowserUrl(url ?? '') },
+        30_000,
+      );
+      if (result.isDownload || (result.errorText && this.downloadSequence > mark))
+        return { moved: false, download: true };
+      if (result.errorText) throw new Error(`页面无法打开：${result.errorText}`);
+    } else if (action === 'reload') await tab.page.call('Page.reload');
+    else {
+      const history = await tab.page.call('Page.getNavigationHistory');
+      const entry = history.entries[history.currentIndex + (action === 'back' ? -1 : 1)];
+      if (!entry) return { moved: false };
+      await tab.page.call('Page.navigateToHistoryEntry', { entryId: entry.id });
+    }
+    // History moves and reloads return before the new document commits.
+    const committed = Date.now() + 1500;
+    while (
+      action !== 'url' &&
+      tab.activation === activation &&
+      !tab.loadingFrames.size &&
+      Date.now() < committed
+    )
+      await wait(20);
+    const settled = await this.nativeSettle(targetId, 15_000);
+    await this.refreshTab(tab);
+    return { moved: true, status: tab.documentStatus, settled };
+  }
+  async nativeRead(
+    targetId: string,
+    options: {
+      format?: 'markdown' | 'text' | 'links';
+      selector?: string;
+      viewportOnly?: boolean;
+      includeLinks?: boolean;
+      includeImages?: boolean;
+    },
+  ): Promise<{ text: string; truncated: boolean }> {
+    const tab = this.nativeTab(targetId);
+    const frames = await this.collectFrames(tab);
+    const parts: string[] = [];
+    let matched = false;
+    let truncated = false;
+    for (const frame of [
+      ...frames.filter((frame) => frame.id === tab.mainFrameId),
+      ...frames.filter((frame) => frame.id !== tab.mainFrameId),
+    ]) {
+      let result: { matched: boolean; text: string; truncated: boolean };
+      try {
+        result = await this.bridge(
+          tab,
+          frame,
+          `globalThis.__workbenchPage.read(${JSON.stringify(options)})`,
+        );
+      } catch (error) {
+        if (frame.id === tab.mainFrameId) throw error;
+        continue;
+      }
+      if (!result.matched) continue;
+      matched = true;
+      truncated ||= result.truncated;
+      if (result.text)
+        parts.push(
+          frame.id === tab.mainFrameId
+            ? result.text
+            : `[iframe ${evidenceUrl(frame.url)}]\n${result.text}`,
+        );
+    }
+    if (options.selector && !matched) throw new Error('没有元素匹配该选择器');
+    return { text: parts.join('\n\n'), truncated };
+  }
+  nativeConsole(targetId: string): string[] {
+    return this.nativeTab(targetId)
+      .diagnostics.filter(
+        (entry) => entry.kind.startsWith('console.') || entry.kind === 'exception',
+      )
+      .map((entry) => `[${entry.kind.replace(/^console\./, '')}] ${entry.text}`);
+  }
+  nativePage(targetId: string): { title: string; url: string; width: number; height: number } {
+    const tab = this.nativeTab(targetId);
+    return { title: tab.info.title, url: tab.info.url, width: this.width, height: this.height };
+  }
+  /** Captures with sensitive fields covered. Output pixels are CSS pixels unless `scale` is device. */
+  async nativeScreenshot(
+    targetId: string,
+    options: {
+      format?: 'jpeg' | 'png' | 'webp';
+      quality?: number;
+      fullPage?: boolean;
+      scale?: 'css' | 'device';
+      size?: { width?: number; height?: number };
+    } = {},
+  ): Promise<{ data: string; mimeType: string; width: number; height: number }> {
+    const tab = this.nativeTab(targetId);
+    const format = options.format ?? 'jpeg';
+    if (tab.info.id !== this.activeTabId)
+      // A background page may still carry the viewport it was created with.
+      await tab.page.call('Emulation.setDeviceMetricsOverride', {
+        width: this.width,
+        height: this.height,
+        deviceScaleFactor: 2,
+        mobile: false,
+      });
+    const metrics = await tab.page.call('Page.getLayoutMetrics');
+    const view = metrics.cssVisualViewport;
+    const area = options.fullPage
+      ? {
+          x: 0,
+          y: 0,
+          width: Math.ceil(metrics.cssContentSize.width),
+          // Chrome cannot rasterize arbitrarily tall surfaces.
+          height: Math.min(8192, Math.ceil(metrics.cssContentSize.height)),
+        }
+      : { x: view.pageX, y: view.pageY, width: view.clientWidth, height: view.clientHeight };
+    let factor = options.scale === 'device' ? 2 : 1;
+    if (options.size)
+      factor = Math.min(
+        2,
+        (options.size.width ?? Infinity) / area.width,
+        (options.size.height ?? Infinity) / area.height,
+      );
+    const result = await this.withMask(tab, false, () =>
+      tab.page.call(
+        'Page.captureScreenshot',
+        {
+          format,
+          ...(format === 'png' ? {} : { quality: options.quality ?? 80 }),
+          captureBeyondViewport: Boolean(options.fullPage),
+          clip: { ...area, scale: factor / 2 },
+        },
+        30_000,
+      ),
+    );
+    return {
+      data: result.data,
+      mimeType: `image/${format}`,
+      width: Math.round(area.width * factor),
+      height: Math.round(area.height * factor),
+    };
+  }
+  /** Runs a capture made by the web task while sensitive fields are covered. */
+  nativeMasked<T>(targetId: string, capture: () => Promise<T>): Promise<T> {
+    return this.withMask(this.nativeTab(targetId), false, capture);
+  }
+  private saveFile(
+    name: string,
+    data: Buffer,
+  ): Promise<{ path: string; name: string; size: number }> {
+    const directory = this.getDownloadDirectory();
+    const saved = this.downloadRenames.then(async () => {
+      await mkdir(directory, { recursive: true, mode: 0o700 });
+      const target = await uniqueDownloadPath(directory, name);
+      await writeFile(target, data, { mode: 0o600, flag: 'wx' });
+      return { path: target, name: basename(target), size: data.byteLength };
+    });
+    this.downloadRenames = saved.then(
+      () => {},
+      () => {},
+    );
+    return saved;
+  }
+  async nativePdf(
+    targetId: string,
+    options: { landscape?: boolean; printBackground?: boolean; preferCSSPageSize?: boolean } = {},
+  ): Promise<{ path: string; name: string; size: number }> {
+    const tab = this.nativeTab(targetId);
+    const result = await tab.page.call(
+      'Page.printToPDF',
+      {
+        landscape: Boolean(options.landscape),
+        printBackground: Boolean(options.printBackground),
+        preferCSSPageSize: Boolean(options.preferCSSPageSize),
+      },
+      60_000,
+    );
+    return this.saveFile(`${tab.info.title || 'page'}.pdf`, Buffer.from(result.data, 'base64'));
+  }
+  /** Evaluates in the page's own world. A dialog opened by the script ends the wait, not the script. */
+  async nativeEvaluate(
+    targetId: string,
+    expression: string,
+    timeout = 30_000,
+  ): Promise<{ value?: unknown; error?: string; dialog?: boolean }> {
+    const tab = this.nativeTab(targetId);
+    let done = false;
+    const evaluation = tab.page
+      .call(
+        'Runtime.evaluate',
+        { expression, awaitPromise: true, returnByValue: true, userGesture: true },
+        timeout + 2000,
+      )
+      .then(
+        (result) =>
+          result.exceptionDetails
+            ? {
+                error: redactBrowserText(
+                  result.exceptionDetails.exception?.description || result.exceptionDetails.text,
+                ),
+              }
+            : { value: result.result.value as unknown },
+        (error) => ({ error: redactBrowserText(error instanceof Error ? error.message : error) }),
+      )
+      .finally(() => {
+        done = true;
+      });
+    const watch = (async () => {
+      const deadline = Date.now() + timeout;
+      while (!done && Date.now() < deadline) {
+        if (this.pendingDialogs.has(targetId)) return { dialog: true };
+        await wait(25);
+      }
+      if (done) return evaluation;
+      await tab.page.call('Runtime.terminateExecution').catch(() => {});
+      return { error: `脚本在 ${timeout} ms 内没有完成` };
+    })();
+    return Promise.race([evaluation, watch]);
+  }
+  nativeDialog(
+    targetId: string,
+  ): { type: string; message: string; defaultPrompt?: string } | undefined {
+    const dialog = this.pendingDialogs.get(targetId);
+    return dialog
+      ? {
+          type: dialog.type,
+          message: dialog.message,
+          ...(dialog.defaultPrompt !== undefined ? { defaultPrompt: dialog.defaultPrompt } : {}),
+        }
+      : undefined;
+  }
+  async nativeDialogRespond(targetId: string, accept: boolean, promptText?: string): Promise<void> {
+    const dialog = this.pendingDialogs.get(targetId);
+    if (!dialog) throw new Error('页面当前没有等待处理的弹窗');
+    await dialog.channel.call('Page.handleJavaScriptDialog', {
+      accept,
+      ...(accept && promptText !== undefined ? { promptText } : {}),
+    });
+    this.pendingDialogs.delete(targetId);
+  }
+  nativeChooser(targetId: string): { multiple: boolean } | undefined {
+    const chooser = this.tabs.get(targetId)?.chooser;
+    return chooser ? { multiple: chooser.multiple } : undefined;
+  }
+  /** Answers the file chooser the page opened; an empty list clears the input. */
+  async nativeChooserFiles(targetId: string, files: string[]): Promise<void> {
+    const tab = this.nativeTab(targetId);
+    const chooser = tab.chooser;
+    if (!chooser) throw new Error('页面当前没有等待中的文件选择');
+    if (files.length > 1 && !chooser.multiple) throw new Error('该文件选择只接受一个文件');
+    if (files.length)
+      await chooser.channel.call('DOM.setFileInputFiles', {
+        files,
+        backendNodeId: chooser.backendNodeId,
+      });
+    else {
+      const node = await chooser.channel.call('DOM.resolveNode', {
+        backendNodeId: chooser.backendNodeId,
+      });
+      await chooser.channel.call('Runtime.callFunctionOn', {
+        objectId: node.object.objectId,
+        functionDeclaration:
+          "function(){this.value='';this.dispatchEvent(new Event('input',{bubbles:true}));this.dispatchEvent(new Event('change',{bubbles:true}));}",
+      });
+    }
+    tab.chooser = undefined;
+  }
+  nativeDownloadMark(): number {
+    return this.downloadSequence;
+  }
+  /** Resolves with the first download that started after `mark` once it is on disk. */
+  async nativeAwaitDownload(
+    mark: number,
+    timeout = 60_000,
+  ): Promise<{ path: string; name: string; size: number }> {
+    const started = Date.now();
+    while (Date.now() - started < timeout) {
+      const entries = [...this.downloads.values()].filter((entry) => entry.sequence > mark);
+      const done = entries.find((entry) => entry.state === 'completed' && entry.path);
+      if (done) return { path: done.path!, name: basename(done.path!), size: done.size ?? 0 };
+      if (entries.length && entries.every((entry) => entry.state === 'canceled'))
+        throw new Error('下载已取消或失败');
+      if (!entries.length && Date.now() - started > 10_000) throw new Error('点击后没有开始下载');
+      await wait(50);
+    }
+    throw new Error('下载在 60 秒内没有完成');
   }
   revokeAgentControl(): void {
     this.leaseGeneration++;
@@ -1759,6 +2284,8 @@ export class BrowserRuntime {
     tab.source = source;
     const actorId = source === 'agent' ? 'agent' : this.currentActor().id;
     tab.actorId = actorId;
+    // A page blocked by a dialog answers nothing; its frames are marked by the next action.
+    if (this.pendingDialogs.has(tab.info.id)) return;
     for (const frame of only ? [only] : await this.collectFrames(tab)) {
       if (frame.source === source && frame.actorId === actorId) continue;
       await this.bridge(
@@ -2531,6 +3058,20 @@ export class BrowserRuntime {
     return this.serialize(() => this.screenshotInternal(this.requireActive(id)));
   }
   private async screenshotInternal(tab: TabSession): Promise<ToolResult> {
+    const result = await this.withMask(tab, true, () =>
+      tab.page.call('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false }),
+    );
+    return {
+      text: `网页截图（tab ${tab.info.id}）：${evidenceUrl(tab.info.url)}。可访问的敏感输入框已遮盖。`,
+      image: result.data,
+    };
+  }
+  /** Covers sensitive fields during a capture and discards it when the page changed meanwhile. */
+  private async withMask<T>(
+    tab: TabSession,
+    visible: boolean,
+    capture: () => Promise<T>,
+  ): Promise<T> {
     const frames = await this.collectFrames(tab),
       masked: FrameContext[] = [];
     const activation = tab.activation;
@@ -2543,7 +3084,7 @@ export class BrowserRuntime {
     const unchanged = async () => {
       const current = await this.collectFrames(tab);
       if (
-        this.activeTabId !== tab.info.id ||
+        (visible && this.activeTabId !== tab.info.id) ||
         tab.activation !== activation ||
         current.length !== scopes.length
       )
@@ -2569,15 +3110,9 @@ export class BrowserRuntime {
         });
       }
       await unchanged();
-      const result = await tab.page.call('Page.captureScreenshot', {
-        format: 'png',
-        captureBeyondViewport: false,
-      });
+      const result = await capture();
       await unchanged();
-      return {
-        text: `BrowserOS neo 页面截图（tab ${tab.info.id}）：${evidenceUrl(tab.info.url)}。可访问的敏感输入框已遮盖。`,
-        image: result.data,
-      };
+      return result;
     } finally {
       for (const frame of masked)
         await this.bridge(tab, frame, 'globalThis.__workbenchPage.mask(false)').catch(() => {});
@@ -2969,12 +3504,41 @@ export class BrowserRuntime {
       frameId: tab.mainFrameId,
     });
   }
-  stopRecording(): Recording {
-    if (!this.recording) throw new Error('当前没有录制');
-    const recording = structuredClone({ ...this.recording, endedAt: Date.now() });
-    this.recording = undefined;
-    this.update({ recording: false });
-    return recording;
+  stopRecording(): Promise<Recording> {
+    if (this.endingRecording) return this.endingRecording;
+    const current = this.recording;
+    if (!current) return Promise.reject(new Error('当前没有录制'));
+    this.endingRecording = this.withActor(this.actors.get('host')!, undefined, async () => {
+      await this.pendingWheel?.result;
+      const active = this.tabs.get(this.activeTabId);
+      const root = active?.frames.get(active.mainFrameId);
+      if (active && root?.contextId !== undefined)
+        // Input acknowledgement can precede the document's scroll event.
+        await this.bridge(
+          active,
+          root,
+          'new Promise(resolve => requestAnimationFrame(() => resolve()))',
+        );
+      for (const tab of this.tabs.values()) {
+        for (const frame of [...tab.frames.values()]) {
+          if (frame.contextId === undefined) continue;
+          try {
+            await this.bridge(tab, frame, 'globalThis.__workbenchPage.flushScroll()');
+          } catch (error) {
+            if (this.tabs.get(tab.info.id) === tab && tab.frames.get(frame.id) === frame)
+              throw error;
+          }
+        }
+      }
+      if (this.recording !== current) throw new Error('录制状态已变化，请重新检查记录');
+      const recording = structuredClone({ ...current, endedAt: Date.now() });
+      this.recording = undefined;
+      this.update({ recording: false });
+      return recording;
+    }).finally(() => {
+      this.endingRecording = undefined;
+    });
+    return this.endingRecording;
   }
   private recordEvent(tab: TabSession, frame: FrameContext, event: any): void {
     if (
@@ -3148,7 +3712,7 @@ export class BrowserRuntime {
       ),
       tool(
         'edit',
-        '修改精确 DOM 的文字、样式、可撤销 WAAPI 动效；或单独用 insert 在 ref 内部/前后创建嵌套 HTML 元素。新建返回新元素 ref，可继续 inspect/edit；要点击或填写它时重新获取 Neo snapshot。结构最多 80 节点/8 层，不接受 HTML 字符串、脚本、事件属性或敏感控件。新增输入控件不提交到原有表单。styles 禁止 URL、var/attr、代码和 !important；animation:null 只取消自己的动画。所有修改可撤销，仅影响当前页面预览，不代表源码已保存。',
+        '修改精确 DOM 的文字、样式、可撤销 WAAPI 动效；或单独用 insert 在 ref 内部/前后创建嵌套 HTML 元素。新建返回新元素 ref，可继续 inspect/edit；要点击或填写它时重新获取 snapshot。结构最多 80 节点/8 层，不接受 HTML 字符串、脚本、事件属性或敏感控件。新增输入控件不提交到原有表单。styles 禁止 URL、var/attr、代码和 !important；animation:null 只取消自己的动画。所有修改可撤销，仅影响当前页面预览，不代表源码已保存。',
         {
           ref,
           text: { type: 'string', maxLength: 20_000 },
@@ -3370,12 +3934,13 @@ export class BrowserRuntime {
           return json({ activeTabId: this.activeTabId, tabs: this.listTabs() });
         }
         const tab = this.requireActive(typeof input.tabId === 'string' ? input.tabId : capturedTab);
-        if (name === 'workbench_browser_snapshot') return observed(this.snapshotInternal(tab));
+        if (name === 'workbench_browser_snapshot')
+          return await observed(this.snapshotInternal(tab));
         if (name === 'workbench_browser_screenshot') return await this.screenshotInternal(tab);
         if (name === 'workbench_browser_diagnostics') return json(tab.diagnostics);
         if (name === 'workbench_browser_query') {
           const { tabId: _, ...query } = input;
-          return observed(
+          return await observed(
             this.queryInternal(tab, query as ElementQuery & { frameId?: string }).then(json),
           );
         }
@@ -3394,7 +3959,7 @@ export class BrowserRuntime {
         }
         if (name === 'workbench_browser_inspect') {
           if (typeof input.ref !== 'string') throw new Error('ref is required');
-          return observed(this.detailsInternal(input.ref).then(json));
+          return await observed(this.detailsInternal(input.ref).then(json));
         }
         assertLease();
         if (name === 'workbench_browser_navigate') {
@@ -3539,13 +4104,33 @@ export class BrowserRuntime {
     }
     this.tabs.clear();
     this.refs.clear();
+    this.pendingDialogs.clear();
     this.activeTabId = '';
+    const child = this.process;
+    this.process = undefined;
+    const exited =
+      child?.pid && child.exitCode === null && child.signalCode === null
+        ? new Promise<void>((resolve) => child.once('exit', () => resolve()))
+        : Promise.resolve();
     try {
       await this.browser?.call('Browser.close');
     } catch {}
     this.browser?.close();
     this.browser = undefined;
-    if (this.process?.exitCode === null) this.process.kill('SIGTERM');
+    // Let Chromium flush the owned profile before another instance can reuse it.
+    if (child?.pid) {
+      await Promise.race([exited, wait(2000)]);
+      if (child.exitCode === null && child.signalCode === null) {
+        child.kill('SIGTERM');
+        await Promise.race([exited, wait(500)]);
+      }
+      if (child.exitCode === null && child.signalCode === null) {
+        child.kill('SIGKILL');
+        await Promise.race([exited, wait(500)]);
+      }
+      if (child.exitCode === null && child.signalCode === null)
+        throw new Error('无法确认浏览器已停止，请先检查运行状态');
+    }
     this.update({
       status: 'stopped',
       loading: false,

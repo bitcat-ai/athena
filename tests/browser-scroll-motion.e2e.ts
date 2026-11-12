@@ -74,11 +74,6 @@ try {
     env: {
       ...process.env,
       WORKBENCH_USER_DATA_DIR: temp,
-      WORKBENCH_BROWSER_PATH: path.resolve(
-        '../browseros-runtime/BrowserOS neo.app/Contents/MacOS/BrowserOS neo',
-      ),
-      ATHENA_NEO_RESOURCES:
-        process.env.ATHENA_NEO_RESOURCES || path.resolve('.runtime/neo-server/0.0.90/resources'),
     },
   });
   report.application = await app.evaluate(({ app }) => ({
@@ -179,7 +174,7 @@ try {
   await expect.poll(async () => (await snapshot()).browser.url, { timeout: 20000 }).toBe(url);
   await expect(page.locator('.frame-loading')).toHaveCount(0, { timeout: 20000 });
   const [port] = (
-    await readFile(path.join(temp, 'browser/browseros-profile/DevToolsActivePort'), 'utf8')
+    await readFile(path.join(temp, 'browser/agent-browser-profile/DevToolsActivePort'), 'utf8')
   ).split('\n');
   const targets = (await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()) as any[];
   native = await CdpConnection.connect(

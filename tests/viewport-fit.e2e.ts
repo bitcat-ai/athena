@@ -47,9 +47,6 @@ const application = await electron.launch({
     ...process.env,
     PATH: `${bin}${path.delimiter}${process.env.PATH ?? ''}`,
     WORKBENCH_USER_DATA_DIR: path.join(temporary, 'data'),
-    WORKBENCH_BROWSER_PATH: path.resolve(
-      '../browseros-runtime/BrowserOS neo.app/Contents/MacOS/BrowserOS neo',
-    ),
   },
 });
 const checks: string[] = [];

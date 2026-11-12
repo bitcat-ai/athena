@@ -6,6 +6,7 @@ import { chromium, expect } from '@playwright/test';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { createServer, type Plugin } from 'vite';
+import { uiBrowserExecutable } from './ui-browser';
 
 const root = process.cwd();
 const output = path.resolve(
@@ -74,18 +75,9 @@ const server = await createServer({
 });
 await server.listen();
 const browser = await chromium.launch({
-  executablePath: path.resolve(
-    '../browseros-runtime/BrowserOS neo.app/Contents/MacOS/BrowserOS neo',
-  ),
+  executablePath: uiBrowserExecutable(),
   headless: true,
-  args: [
-    '--disable-browseros-server',
-    '--disable-browseros-server-updater',
-    '--disable-browseros-extensions',
-    '--browseros-disable-url-overrides',
-    '--use-mock-keychain',
-    '--disable-sync',
-  ],
+  args: ['--use-mock-keychain', '--disable-sync'],
 });
 const samples: any[] = [],
   errors: string[] = [];

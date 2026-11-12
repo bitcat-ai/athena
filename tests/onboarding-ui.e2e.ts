@@ -33,7 +33,7 @@ const initial=${JSON.stringify(initial)};
 if(mode==='legacy'){initial.status='legacy';initial.requiresSetup=false;initial.coreReady=true;initial.codex={status:'ready',path:'/fixture/codex'};initial.workspace.status='ready';initial.browser.status='ready';}
 if(mode==='deferred'){initial.status='deferred';initial.stage='codex';initial.codex={status:'missing'};}
 const fixture=window.__onboardingFixture={mode,state:initial,calls:[],listeners:[],ready:false,pendingSnapshots:[],nextOperation:1,cancelPick:false,exitDeferred:false};
-fixture.snapshot={localUser:{name:'Fixture User'},settings:{workspace:'/fixture/original',agent:'codex'},agents:[],codexConnection:{status:'idle'},browser:{status:'missing',engine:'browseros',tabs:[],url:'',title:'',loading:false,canGoBack:false,canGoForward:false,recording:false,inspecting:false},neo:{status:'stopped'},feishu:{status:'disconnected',paired:false},recordings:[],conversations:mode==='legacy'?[{id:'existing',title:'已有工作',workspace:'/fixture/original',updatedAt:Date.now(),messages:[]}]:[]};
+fixture.snapshot={localUser:{name:'Fixture User'},settings:{workspace:'/fixture/original',agent:'codex'},agents:[],codexConnection:{status:'idle'},browser:{status:'missing',engine:'agent-browser',tabs:[],url:'',title:'',loading:false,canGoBack:false,canGoForward:false,recording:false,inspecting:false},neo:{status:'stopped'},feishu:{status:'disconnected',paired:false},recordings:[],conversations:mode==='legacy'?[{id:'existing',title:'已有工作',workspace:'/fixture/original',updatedAt:Date.now(),messages:[]}]:[]};
 fixture.emit=event=>{for(const listener of fixture.listeners)listener(event)};
 fixture.sync=()=>{
  const codex={id:'codex',name:'Codex',available:fixture.state.codex.status==='ready',supported:true,path:fixture.state.codex.path};
@@ -146,14 +146,7 @@ const port = (server.httpServer!.address() as { port: number }).port;
 const browser = await chromium.launch({
   executablePath: uiBrowserExecutable(),
   headless: true,
-  args: [
-    '--disable-browseros-server',
-    '--disable-browseros-server-updater',
-    '--disable-browseros-extensions',
-    '--browseros-disable-url-overrides',
-    '--use-mock-keychain',
-    '--disable-sync',
-  ],
+  args: ['--use-mock-keychain', '--disable-sync'],
 });
 const errors: string[] = [];
 const checks: string[] = [];

@@ -40,9 +40,6 @@ try {
     env: {
       ...process.env,
       WORKBENCH_USER_DATA_DIR: dir,
-      WORKBENCH_BROWSER_PATH: path.resolve(
-        '../browseros-runtime/BrowserOS neo.app/Contents/MacOS/BrowserOS neo',
-      ),
     },
   });
   const page = await app.firstWindow();
@@ -95,7 +92,7 @@ try {
   await invoke('browser:navigate', { url });
   await expect(page.locator('.frame-loading')).toHaveCount(0, { timeout: 10000 });
   const [port] = (
-    await readFile(path.join(dir, 'browser/browseros-profile/DevToolsActivePort'), 'utf8')
+    await readFile(path.join(dir, 'browser/agent-browser-profile/DevToolsActivePort'), 'utf8')
   ).split('\n');
   const targets = (await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()) as any[];
   native = await CdpConnection.connect(targets.find((t) => t.url === url).webSocketDebuggerUrl);

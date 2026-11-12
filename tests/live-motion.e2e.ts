@@ -1,6 +1,6 @@
 /** Manual live check: ./node_modules/.bin/tsx tests/live-motion.e2e.ts
  * Add --without-selection-prefetch to measure the extra model-driven inspection roundtrip.
- * Uses one real Codex turn and an isolated BrowserOS profile. Never runs in npm test.
+ * Uses one real Codex turn and an isolated Chrome profile. Never runs in npm test.
  */
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
@@ -9,7 +9,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { CodexSession, browserToolsFingerprint, detectAgents } from '../src/main/agents';
-import { BrowserRuntime, discoverBrowserOS } from '../src/main/browser';
+import { BrowserRuntime, discoverChrome } from '../src/main/browser';
 import type { AgentEvent, ElementDetails, ElementEdit, RecordedStep } from '../src/shared/types';
 
 type MotionState = {
@@ -151,14 +151,14 @@ function isRedGradient(value: string): boolean {
 
 async function capture(filename: string): Promise<void> {
   const result = await runtime!.screenshot();
-  assert.ok(result.image, 'Expected a real BrowserOS screenshot');
+  assert.ok(result.image, 'Expected a real browser screenshot');
   const data = result.image.startsWith('data:') ? result.image.split(',')[1] : result.image;
   await writeFile(path.join(evidenceDir, filename), Buffer.from(data, 'base64'));
 }
 
 try {
-  const binary = await discoverBrowserOS(process.env.WORKBENCH_BROWSEROS_TEST_BINARY);
-  assert.ok(binary, 'Install BrowserOS neo or set WORKBENCH_BROWSEROS_TEST_BINARY');
+  const binary = await discoverChrome(process.env.ATHENA_TEST_CHROME);
+  assert.ok(binary, 'Install Chrome or set ATHENA_TEST_CHROME');
   const codex = (await detectAgents()).find(
     (candidate) => candidate.id === 'codex' && candidate.available && candidate.supported,
   );
@@ -382,7 +382,7 @@ try {
     async () => steps,
     (recorded) => recorded.some((step) => step.kind === 'undo'),
   );
-  const recording = runtime.stopRecording();
+  const recording = await runtime.stopRecording();
   const recordedChanges = recording.steps
     .filter((step) => step.kind === 'edit')
     .map((step) => ({ step, changes: JSON.parse(step.value ?? '{}') as ElementEdit }));

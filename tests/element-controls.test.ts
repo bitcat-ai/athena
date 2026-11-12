@@ -27,7 +27,7 @@ test('element catalog rejects unsupported code, oversized input and ambiguous co
   ])
     assert.throws(() => validateElementControls(components));
 });
-const binary = process.env.WORKBENCH_BROWSEROS_TEST_BINARY;
+const binary = process.env.ATHENA_TEST_CHROME;
 test(
   'precise semantics and continuous style preview preserve identity, one gesture undo and external changes',
   { skip: !binary, timeout: 40000 },
