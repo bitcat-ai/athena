@@ -119,7 +119,7 @@ const server = createServer(async (request, response) => {
       const line = result(4)!
         .split('\n')
         .find((line) => line.includes(`${cli} search`) && line.includes('[ref='));
-      const ref = line?.match(/\[ref=(e\d+)\]/)?.[1];
+      const ref = line?.match(/\[ref=(ab[a-f0-9]{8}:e\d+)\]/)?.[1];
       assert.ok(ref, `No native ref for new ${cli} input: ${result(4)!.slice(0, 1200)}`);
       invoke('web_act', { page: pageId, kind: 'fill', ref, value: `typed-${cli}` });
     }
