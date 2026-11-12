@@ -67,7 +67,7 @@ const server = createServer(async (req, res) => {
     answer('DENIED_OK');
     return;
   }
-  const toolName = phase === 'browser' ? 'athena_neo_probe' : phase === 'read' ? 'read' : 'write';
+  const toolName = phase === 'browser' ? 'athena_web_probe' : phase === 'read' ? 'read' : 'write';
   const hasResult = body.messages?.some((m: any) => m.role === 'tool');
   if (phase === 'resume') {
     answer(requests.at(-1).hasMarker ? 'RESUME_OK' : 'RESUME_MISSING');
@@ -136,7 +136,7 @@ const make = (sessionId?: string) =>
     sessionId,
     tools: [
       {
-        name: 'neo_probe',
+        name: 'web_probe',
         description: 'Return a local verification value',
         inputSchema: {
           type: 'object',
@@ -148,7 +148,7 @@ const make = (sessionId?: string) =>
     ],
     callTool: async (name, args) => {
       hostCalls.push({ name, value: args.value });
-      assert.equal(name, 'neo_probe');
+      assert.equal(name, 'web_probe');
       assert.equal(args.value, marker);
       return { text: marker };
     },
@@ -201,9 +201,9 @@ try {
   await session.send('Check the host browser tool.', undefined, undefined, {
     model: 'athena-fixture/fixture-model',
   });
-  assert.deepEqual(hostCalls, [{ name: 'neo_probe', value: marker }]);
+  assert.deepEqual(hostCalls, [{ name: 'web_probe', value: marker }]);
   assert.equal(
-    events.some((e) => e.type === 'tool' && e.call.name === 'athena_neo_probe'),
+    events.some((e) => e.type === 'tool' && e.call.name === 'athena_web_probe'),
     false,
   );
   assert.ok(events.some((e) => e.type === 'complete' && e.text?.includes('BROWSER_OK')));

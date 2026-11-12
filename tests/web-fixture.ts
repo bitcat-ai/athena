@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import assert from 'node:assert/strict';
 import { BrowserRuntime } from '../src/main/browser';
-import { NeoBrowserRuntime } from '../src/main/neo-browser';
+import { WebRuntime } from '../src/main/web-runtime';
 import type { ApprovalRequest, ToolResult } from '../src/shared/types';
 
 /** Real pinned agent-browser daemon and an Athena-owned Chrome profile; no model requests. */
@@ -69,7 +69,7 @@ const FRAME = `<!doctype html><meta charset="utf-8"><label>Email<input id="email
 
 export interface WebFixture {
   browser: BrowserRuntime;
-  runtime: NeoBrowserRuntime;
+  runtime: WebRuntime;
   origin: string;
   /** The same server under another origin. */
   foreign: string;
@@ -142,7 +142,7 @@ export async function webFixture(start = '/lab'): Promise<WebFixture> {
   const port = (site.address() as { port: number }).port;
   const origin = `http://127.0.0.1:${port}`;
   const approvals: WebFixture['approvals'] = [];
-  let runtime!: NeoBrowserRuntime;
+  let runtime!: WebRuntime;
   const browser = new BrowserRuntime({
     storageDir: path.join(directory, 'browser'),
     onState() {},
@@ -153,7 +153,7 @@ export async function webFixture(start = '/lab'): Promise<WebFixture> {
       runtime?.onHumanInteraction();
     },
   });
-  runtime = new NeoBrowserRuntime(browser, {
+  runtime = new WebRuntime(browser, {
     directory: path.join(directory, 'records'),
     onState() {},
     onDisconnect() {},
@@ -196,7 +196,7 @@ export async function webFixture(start = '/lab'): Promise<WebFixture> {
       const client = (runtime.server as any).sessions.get(task.sessionId);
       return {
         sessionId: task.sessionId,
-        page: JSON.parse(task.context.match(/<neo_browser_context>\n([^\n]+)/)![1]).currentPage
+        page: JSON.parse(task.context.match(/<web_browser_context>\n([^\n]+)/)![1]).currentPage
           .pageId,
         client,
         worker: client.worker,
@@ -213,8 +213,8 @@ export async function webFixture(start = '/lab'): Promise<WebFixture> {
       return result.value;
     },
     async recover(page, evidence) {
-      const seen = await call('neo_read', { page, format: 'text' });
-      await call('neo_checkpoint', {
+      const seen = await call('web_read', { page, format: 'text' });
+      await call('web_checkpoint', {
         observationId: seen.text.match(/Athena observationId: ([a-f0-9-]+)/)![1],
         summary: 'Checked the page after a failed step',
         evidence,

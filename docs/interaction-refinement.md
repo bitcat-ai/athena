@@ -13,9 +13,9 @@
 
 启动、新建和选中对话时提前准备 Codex 执行会话，合并并发初始化；预热不发送模型轮次。模型目录和实际任务复用已准备的进程/会话。工作目录、可执行文件、工具定义变化或进程退出会按真实状态刷新，正在执行的会话不会被历史对话预热替换。
 
-普通鼠标、滚轮和键盘输入不再调用整轮 `stopTurn`。人工操作使旧页面观察与排队动作失效，AI 重新观察后可以继续。若 Neo 调用在途，取消该原生会话以释放人工输入队列，下一次观察重新建立原生会话；只读等待不产生“未知写入”屏障。对可能已经写入的动作，仍需以新观察和证据检查点核对结果，避免重复提交。显式“停止任务”、共享控制权、旧坐标与授权检查保留。
+普通鼠标、滚轮和键盘输入不再调用整轮 `stopTurn`。人工操作使旧页面观察与排队动作失效，AI 重新观察后可以继续。若网页工具调用在途，取消该原生会话以释放人工输入队列，下一次观察重新建立原生会话；只读等待不产生“未知写入”屏障。对可能已经写入的动作，仍需以新观察和证据检查点核对结果，避免重复提交。显式“停止任务”、共享控制权、旧坐标与授权检查保留。
 
-相关入口：`main.ts` 的会话准备与派发、`agents.ts` 的 `prepare()`、`neo-browser.ts` 的人工交互处理；UI 使用 `conversation:prepare`、`codex:state` 和 `AppSnapshot.codexConnection`。协议初始化依据为 [OpenAI App Server 文档](https://learn.chatgpt.com/docs/app-server)。
+相关入口：`main.ts` 的会话准备与派发、`agents.ts` 的 `prepare()`、`web-runtime.ts` 的人工交互处理；UI 使用 `conversation:prepare`、`codex:state` 和 `AppSnapshot.codexConnection`。协议初始化依据为 [OpenAI App Server 文档](https://learn.chatgpt.com/docs/app-server)。
 
 ## 美元口径
 
@@ -28,7 +28,7 @@
 ## 验收入口
 
 - `tests/interaction-controls.e2e.ts`：隔离 UI，目录预加载、滑块键盘、默认恢复、错误回滚、未知/失效选项、焦点、375px 布局、减少动态效果。
-- `tests/interaction-lifecycle.e2e.ts`：真实 Electron/Neo 与确定性 CLI 夹具，核对发送前初始化、连续对话复用、人工输入不取消整轮和显式停止。夹具不消耗模型配额。
+- `tests/interaction-lifecycle.e2e.ts`：真实 Electron、网页执行器与确定性 CLI 夹具，核对发送前初始化、连续对话复用、人工输入不取消整轮和显式停止。夹具不消耗模型配额。
 - `tests/interaction-live.e2e.ts`：真实 Codex 与本地页面，等待期间人工滚动/点击、重新观察并完成填写、后续轮次连接复用及真实用量估算。
 - `tests/complex-native.test.ts`：原生长只读等待及时释放输入；在途写入取消、未知结果核对与恢复；保留既有复杂工作流边界。
 - `tests/usage-pricing.test.ts`、`tests/usage.test.ts`、`tests/usage-currency-ui.e2e.ts`：计价、缺失数据、快照、重启、筛选、分组与窄面板。

@@ -7,7 +7,7 @@ import path from 'node:path';
 import type { BrowserRuntime } from './browser';
 import { AgentBrowserSession } from './agent-browser-session';
 import { TAB_GROUP_COLORS, webTools, type WebPage, type WebTool } from './agent-browser-tools';
-import type { NativeNeoState, NeoSessionDetail, NeoSessionSummary } from '../shared/types';
+import type { WebExecutorState, WebSessionDetail, WebSessionSummary } from '../shared/types';
 
 // Pinned official release. Update the version and both upstream SHA-256 values together.
 export const AGENT_BROWSER_VERSION = '0.42.0';
@@ -101,7 +101,7 @@ export async function ensureAgentBrowserBinary(
 export class AgentBrowserServer {
   readonly tools: WebTool[] = webTools;
   binary = '';
-  private state: NativeNeoState = { status: 'stopped' };
+  private state: WebExecutorState = { status: 'stopped' };
   private endpoint = '';
   private sessions = new Map<string, AgentBrowserSession>();
   private worker?: AgentBrowserWorker;
@@ -118,14 +118,14 @@ export class AgentBrowserServer {
     private options: {
       directory: string;
       download?: AgentBrowserDownload;
-      onState: (state: NativeNeoState) => void;
+      onState: (state: WebExecutorState) => void;
       onDisconnect: () => void;
     },
   ) {}
   getState() {
     return { ...this.state };
   }
-  private update(state: NativeNeoState) {
+  private update(state: WebExecutorState) {
     this.state = state;
     this.options.onState(this.getState());
   }
@@ -325,7 +325,7 @@ export class AgentBrowserServer {
   async resolveHelp(id: string) {
     return { resolved: this.sessions.get(id)?.resolveHelp() ?? false };
   }
-  async records(): Promise<NeoSessionSummary[]> {
+  async records(): Promise<WebSessionSummary[]> {
     let files: string[];
     try {
       files = await readdir(this.options.directory);
@@ -340,7 +340,7 @@ export class AgentBrowserServer {
             return (
               JSON.parse(
                 await readFile(path.join(this.options.directory, file), 'utf8'),
-              ) as NeoSessionDetail
+              ) as WebSessionDetail
             ).session;
           } catch {
             return undefined;
@@ -348,10 +348,10 @@ export class AgentBrowserServer {
         }),
     );
     return records
-      .filter((record): record is NeoSessionSummary => !!record)
+      .filter((record): record is WebSessionSummary => !!record)
       .sort((a, b) => b.startedAt - a.startedAt);
   }
-  async detail(id: string): Promise<NeoSessionDetail> {
+  async detail(id: string): Promise<WebSessionDetail> {
     if (!/^ab-[a-f0-9-]{36}$/.test(id)) throw new Error('无效的网页任务编号');
     return JSON.parse(await readFile(path.join(this.options.directory, id + '.json'), 'utf8'));
   }

@@ -320,12 +320,12 @@ export interface BrowserState {
   elementControls?: ElementControlSurface;
   error?: string;
 }
-export interface NativeNeoState {
+export interface WebExecutorState {
   status: 'stopped' | 'starting' | 'ready' | 'error';
   version?: string;
   error?: string;
 }
-export interface NeoSessionSummary {
+export interface WebSessionSummary {
   sessionId: string;
   name?: string;
   label?: string;
@@ -337,8 +337,8 @@ export interface NeoSessionSummary {
   status: string;
   errorCount?: number;
 }
-export interface NeoSessionDetail {
-  session: NeoSessionSummary;
+export interface WebSessionDetail {
+  session: WebSessionSummary;
   dispatches: Array<{
     dispatchId: number;
     createdAt: number;
@@ -525,7 +525,7 @@ export interface ChatMessage {
   mentions?: ElementMention[];
   // shortcut: images live in workspace.json; use separate blobs when large image histories are needed.
   images?: import('./images').ImageAttachment[];
-  neoSessionId?: string;
+  webSessionId?: string;
   plan?: AgentPlanStep[];
   execution?: WebExecutionEvent[];
   model?: import('./usage').ExecutionModel;
@@ -606,7 +606,7 @@ export interface AppSnapshot {
   providerSkillDiscovery?: import('./skills').ProviderSkillDiscovery;
   codexConnection?: CodexConnectionState;
   browser: BrowserState;
-  neo?: NativeNeoState;
+  web?: WebExecutorState;
   feishu: FeishuState;
   conversations: Conversation[];
   recordings: Recording[];
@@ -627,7 +627,7 @@ export type AppEvent =
   | { type: 'usage:updated' }
   | { type: 'share:state'; state: import('./share').ShareState }
   | { type: 'browser:state'; state: BrowserState }
-  | { type: 'neo:state'; state: NativeNeoState }
+  | { type: 'web:state'; state: WebExecutorState }
   | { type: 'browser:frame'; frame: BrowserFrame }
   | { type: 'browser:step'; step: RecordedStep }
   | { type: 'browser:selected'; element: ElementRef; reason?: 'pick' | 'edit' }

@@ -1572,13 +1572,13 @@ select {
   line-height: 1.7;
   font-size: 12px;
 }
-.neo-session-list {
+.web-task-list {
   display: flex;
   flex-direction: column;
   gap: 5px;
   padding: 0 16px 18px;
 }
-.neo-session-list > .button {
+.web-task-list > .button {
   max-width: 100%;
   height: auto;
   min-height: 72px;
@@ -1590,31 +1590,31 @@ select {
   white-space: normal;
   overflow-wrap: anywhere;
 }
-.neo-session-list strong {
+.web-task-list strong {
   font-size: 12px;
   font-weight: 550;
 }
-.neo-session-list span,
-.neo-session-list small,
-.neo-session-meta {
+.web-task-list span,
+.web-task-list small,
+.web-task-meta {
   color: var(--muted);
   font-size: 10px;
 }
-.neo-back {
+.web-task-back {
   margin: 0 24px 12px;
 }
-.neo-session-meta {
+.web-task-meta {
   margin: 0 24px;
 }
-.neo-step-detail {
+.web-task-step {
   margin-top: 6px;
   font-size: 10px;
   color: var(--muted);
 }
-.neo-step-detail summary {
+.web-task-step summary {
   cursor: pointer;
 }
-.neo-step-detail pre {
+.web-task-step pre {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   font: 10px/1.7 var(--font-mono);

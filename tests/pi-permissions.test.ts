@@ -23,7 +23,7 @@ test('Pi browser requests use transport IDs independent of reused model call IDs
           request.method === 'tools/list'
             ? {
                 tools: [
-                  { name: 'neo_status', description: 'Status', inputSchema: { type: 'object' } },
+                  { name: 'web_status', description: 'Status', inputSchema: { type: 'object' } },
                 ],
               }
             : { content: [{ type: 'text', text: 'ready' }] },

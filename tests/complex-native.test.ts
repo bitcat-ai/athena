@@ -5,7 +5,7 @@ import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { createServer } from 'node:http';
 import { BrowserRuntime } from '../src/main/browser';
-import { NeoBrowserRuntime } from '../src/main/neo-browser';
+import { WebRuntime } from '../src/main/web-runtime';
 import { complexWorkflowFixture } from './complex-workflow-fixture';
 import { refOf as ref } from './web-fixture';
 import type { WebExecutionEvent } from '../src/shared/types';
@@ -26,7 +26,7 @@ test(
       );
     });
     await new Promise<void>((resolve) => site.listen(0, '127.0.0.1', resolve));
-    let neo!: NeoBrowserRuntime;
+    let web!: WebRuntime;
     const browser = new BrowserRuntime({
       storageDir: path.join(dir, 'browser'),
       binaryPath: binary,
@@ -34,10 +34,10 @@ test(
       onFrame() {},
       onSelected() {},
       onStep() {},
-      onHumanTakeover: () => neo?.onHumanInteraction(),
+      onHumanTakeover: () => web?.onHumanInteraction(),
     });
-    neo = new NeoBrowserRuntime(browser, {
-      directory: path.join(dir, 'neo'),
+    web = new WebRuntime(browser, {
+      directory: path.join(dir, 'records'),
       onState() {},
       onDisconnect() {},
       approve: async () => true,
@@ -45,10 +45,10 @@ test(
     const samples: unknown[] = [];
     try {
       await browser.start(`http://127.0.0.1:${(site.address() as { port: number }).port}`);
-      await neo.start();
+      await web.start();
       browser.allowAgentControl();
-      const task = await neo.beginTask('readonly-interaction');
-      const page = JSON.parse(task.context.match(/<neo_browser_context>\n([^\n]+)/)![1]).currentPage
+      const task = await web.beginTask('readonly-interaction');
+      const page = JSON.parse(task.context.match(/<web_browser_context>\n([^\n]+)/)![1]).currentPage
         .pageId;
       const native = (browser as any).tabs.get(browser.getState().activeTabId).page;
       const value = async (expression: string) =>
@@ -60,22 +60,22 @@ test(
           })
         ).result.value;
       for (const gesture of ['wheel', 'click']) {
-        const initial = await neo.callTool('neo_snapshot', { page });
+        const initial = await web.callTool('web_snapshot', { page });
         assert.equal(initial.isError, false, initial.text);
-        const previousSession = (neo as any).current.client.id;
+        const previousSession = (web as any).current.client.id;
         const beforeCount = await value('window.clicks');
-        const waiting = neo.callTool('neo_wait', {
+        const waiting = web.callTool('web_wait', {
           page,
           for: 'text',
           value: 'NEVER-READY-READONLY',
           timeout: 5000,
         });
         const deadline = Date.now() + 2000;
-        while (!(neo as any).current.running) {
+        while (!(web as any).current.running) {
           assert(Date.now() < deadline, 'Native wait must actually be in flight');
           await delay(10);
         }
-        assert.equal((neo as any).current.running.mutating, false);
+        assert.equal((web as any).current.running.mutating, false);
         await delay(80);
         const started = performance.now();
         const input =
@@ -109,16 +109,16 @@ test(
           assert(actual >= 230, 'The wheel must change the actual page position');
         else assert.equal(actual, beforeCount + 1, 'The manual click must reach the real button');
         assert.equal((await waiting).isError, true);
-        assert.equal((neo as any).current.stopped, false, 'AI task must remain active');
+        assert.equal((web as any).current.stopped, false, 'AI task must remain active');
         assert.equal(
-          (neo as any).current.execution.needsRecovery,
+          (web as any).current.execution.needsRecovery,
           false,
           'A cancelled read has no uncertain write to reconcile',
         );
-        const fresh = await neo.callTool('neo_snapshot', { page });
+        const fresh = await web.callTool('web_snapshot', { page });
         assert.equal(fresh.isError, false, fresh.text);
-        assert.notEqual((neo as any).current.client.id, previousSession);
-        const continued = await neo.callTool('neo_act', {
+        assert.notEqual((web as any).current.client.id, previousSession);
+        const continued = await web.callTool('web_act', {
           page,
           kind: 'click',
           ref: ref(fresh.text, '增加计数'),
@@ -133,7 +133,7 @@ test(
         JSON.stringify({ passed: true, samples }, null, 2),
       );
     } finally {
-      await neo.stop();
+      await web.stop();
       await browser.dispose();
       await new Promise<void>((resolve) => site.close(() => resolve()));
       await rm(dir, { recursive: true, force: true });
@@ -151,7 +151,7 @@ test(
     let approved = true;
     let pendingApproval: ((answer: boolean) => void) | undefined;
     let holdApproval = false;
-    let neo: NeoBrowserRuntime;
+    let web: WebRuntime;
     const browser = new BrowserRuntime({
       storageDir: path.join(dir, 'browser'),
       binaryPath: binary,
@@ -160,11 +160,11 @@ test(
       onSelected() {},
       onStep() {},
       onHumanTakeover() {
-        neo?.onHumanInteraction();
+        web?.onHumanInteraction();
       },
     });
-    neo = new NeoBrowserRuntime(browser, {
-      directory: path.join(dir, 'neo'),
+    web = new WebRuntime(browser, {
+      directory: path.join(dir, 'records'),
       onState() {},
       onDisconnect() {},
       onExecution: (e) => events.push(e),
@@ -181,7 +181,7 @@ test(
       },
     });
     const call = async (name: string, args: Record<string, unknown>) => {
-      const result = await neo.callTool('neo_' + name, args);
+      const result = await web.callTool('web_' + name, args);
       assert.equal(result.isError, false, result.text);
       return result;
     };
@@ -202,16 +202,16 @@ test(
     };
     const begin = async (id: string) => {
       browser.allowAgentControl();
-      const task = await neo.beginTask(id);
+      const task = await web.beginTask(id);
       return {
         task,
-        page: JSON.parse(task.context.match(/<neo_browser_context>\n([^\n]+)/)![1]).currentPage
+        page: JSON.parse(task.context.match(/<web_browser_context>\n([^\n]+)/)![1]).currentPage
           .pageId as number,
       };
     };
     try {
       await browser.start(fixture.origin + '/?loseReply=1');
-      await neo.start();
+      await web.start();
       const { task, page } = await begin('workflow');
       let snap = await call('snapshot', { page });
       await call('act', {
@@ -242,8 +242,8 @@ test(
       // Removing a conditional field invalidates its native ref. A queued write must see that failure.
       await call('act', { page, kind: 'select', ref: ref(snap.text, '区域'), value: 'domestic' });
       await delay(500);
-      const stale = neo.callTool('neo_act', { page, kind: 'fill', ref: taxRef, value: 'WRONG' });
-      const queued = neo.callTool('neo_act', {
+      const stale = web.callTool('web_act', { page, kind: 'fill', ref: taxRef, value: 'WRONG' });
+      const queued = web.callTool('web_act', {
         page,
         kind: 'fill',
         ref: ref(snap.text, '客户名称'),
@@ -280,7 +280,7 @@ test(
       await writeFile(file, 'Athena controlled upload\n');
       approved = false;
       assert.equal(
-        (await neo.callTool('neo_upload', { page, ref: ref(snap.text, '订单附件'), file })).isError,
+        (await web.callTool('web_upload', { page, ref: ref(snap.text, '订单附件'), file })).isError,
         true,
       );
       assert.equal(fixture.uploads.length, 0);
@@ -289,7 +289,7 @@ test(
       await call('wait', { page, for: 'text', value: '附件已验证', timeout: 3000 });
       await call('request_human_help', { page, reason: '检查表单', kind: 'other' });
       assert.match(
-        (await neo.callTool('neo_act', { page, kind: 'click', ref: ref(snap.text, '检查订单') }))
+        (await web.callTool('web_act', { page, kind: 'click', ref: ref(snap.text, '检查订单') }))
           .text,
         /核对/,
       );
@@ -301,14 +301,14 @@ test(
       snap = await call('snapshot', { page });
       const submit = { page, kind: 'click', ref: ref(snap.text, '提交订单') };
       await call('act', submit);
-      const unmatched = await neo.callTool('neo_wait', {
+      const unmatched = await web.callTool('web_wait', {
         page,
         for: 'text',
         value: '已保存',
         timeout: 100,
       });
       assert.equal(unmatched.isError, true, 'Native timeout must not be reported as success');
-      assert.match((await neo.callTool('neo_act', submit)).text, /核对/);
+      assert.match((await web.callTool('web_act', submit)).text, /核对/);
       assert.equal(fixture.attempts, 1, 'No blind retry reached the server');
       const receiptTab = await call('tabs', { action: 'new', url: fixture.origin + '/receipts' });
       const receiptPage = Number(receiptTab.text.match(/opened page (\d+)/)![1]);
@@ -326,18 +326,18 @@ test(
         code: `const pages=await browser.pages.list();const p=browser.page(${receiptPage});const content=await p.read();return {pages:pages.length,receipt:content.includes('ORDER-1')};`,
       });
       assert.match(run.text, /true/);
-      const record = await neo.server.detail(task.sessionId);
+      const record = await web.server.detail(task.sessionId);
       assert(record.dispatches.some((x) => x.toolName === 'run'));
-      await neo.finishTask('workflow');
+      await web.finishTask('workflow');
       await browser.switchTab(browser.getState().tabs.find((t) => t.url.includes('loseReply'))!.id);
       const takeover = await begin('takeover');
       snap = await call('snapshot', { page: takeover.page });
       const customer = ref(snap.text, '客户名称');
       const humanField = (await browser.queryElements({ selector: '#customer' })).elements[0];
-      const late = neo.callTool('neo_run', {
+      const late = web.callTool('web_run', {
         code: `const p=browser.page(${takeover.page});await p.waitForTime(1000);await p.fill('${customer}','SHOULD-NOT');return true;`,
       });
-      const later = neo.callTool('neo_act', {
+      const later = web.callTool('web_act', {
         page: takeover.page,
         kind: 'fill',
         ref: customer,
@@ -350,17 +350,17 @@ test(
       await delay(1100);
       assert.equal((await browser.getElementDetails(humanField.ref)).value, 'Ada Studio');
       assert.equal(fixture.attempts, 1);
-      assert.equal((neo as any).current.stopped, false, 'Human input must not stop the AI task');
-      const oldNativeSession = (neo as any).current.client.id;
+      assert.equal((web as any).current.stopped, false, 'Human input must not stop the AI task');
+      const oldNativeSession = (web as any).current.client.id;
       snap = await call('snapshot', { page: takeover.page });
       assert.notEqual(
-        (neo as any).current.client.id,
+        (web as any).current.client.id,
         oldNativeSession,
         'Interrupted native dispatch gets a fresh session',
       );
       assert.equal(
         (
-          await neo.callTool('neo_act', {
+          await web.callTool('web_act', {
             page: takeover.page,
             kind: 'fill',
             ref: ref(snap.text, '客户名称'),
@@ -384,10 +384,10 @@ test(
         'Continued after interaction',
       );
 
-      const idleSession = (neo as any).current.client.id;
+      const idleSession = (web as any).current.client.id;
       await browser.dispatchInput({ type: 'wheel', x: 30, y: 30, deltaX: 0, deltaY: 30 });
-      assert.equal((neo as any).current.stopped, false);
-      const staleAfterScroll = await neo.callTool('neo_act', {
+      assert.equal((web as any).current.stopped, false);
+      const staleAfterScroll = await web.callTool('web_act', {
         page: takeover.page,
         kind: 'fill',
         ref: ref(snap.text, '客户名称'),
@@ -396,7 +396,7 @@ test(
       assert.equal(staleAfterScroll.isError, true);
       snap = await call('snapshot', { page: takeover.page });
       assert.equal(
-        (neo as any).current.client.id,
+        (web as any).current.client.id,
         idleSession,
         'Idle viewing does not restart native session',
       );
@@ -406,22 +406,22 @@ test(
         ref: ref(snap.text, '客户名称'),
         value: 'After scroll',
       });
-      await neo.finishTask('takeover');
+      await web.finishTask('takeover');
       await begin('approval-cancel');
       holdApproval = true;
-      const pending = neo.callTool('neo_run', { code: 'throw new Error("must not dispatch");' });
+      const pending = web.callTool('web_run', { code: 'throw new Error("must not dispatch");' });
       while (!pendingApproval) await delay(10);
-      await neo.cancelTask();
+      await web.cancelTask();
       pendingApproval(true);
       assert.equal((await pending).isError, true);
-      await neo.finishTask('approval-cancel');
+      await web.finishTask('approval-cancel');
       pendingApproval = undefined;
       await begin('finish-pending');
-      const unfinished = neo.callTool('neo_run', {
+      const unfinished = web.callTool('web_run', {
         code: 'throw new Error(\"must not dispatch\");',
       });
       while (!pendingApproval) await delay(10);
-      await neo.finishTask('finish-pending');
+      await web.finishTask('finish-pending');
       (pendingApproval as (answer: boolean) => void)(true);
       assert.equal((await unfinished).isError, true);
       assert(events.some((e) => e.kind === 'cancelled'));
@@ -445,7 +445,7 @@ test(
         ),
       );
     } finally {
-      await neo.stop();
+      await web.stop();
       await browser.dispose();
       await fixture.close();
       await rm(dir, { recursive: true, force: true });
@@ -465,7 +465,7 @@ test(
       );
     });
     await new Promise<void>((resolve) => site.listen(0, '127.0.0.1', resolve));
-    let neo!: NeoBrowserRuntime;
+    let web!: WebRuntime;
     const browser = new BrowserRuntime({
       storageDir: path.join(directory, 'browser'),
       binaryPath: binary,
@@ -473,20 +473,20 @@ test(
       onFrame() {},
       onSelected() {},
       onStep() {},
-      onHumanTakeover: () => neo?.onHumanInteraction(),
+      onHumanTakeover: () => web?.onHumanInteraction(),
     });
-    neo = new NeoBrowserRuntime(browser, {
-      directory: path.join(directory, 'neo'),
+    web = new WebRuntime(browser, {
+      directory: path.join(directory, 'records'),
       onState() {},
       onDisconnect() {},
       approve: async () => false,
     });
     try {
       await browser.start(`http://127.0.0.1:${(site.address() as { port: number }).port}`);
-      await neo.start();
+      await web.start();
       browser.allowAgentControl();
-      await neo.beginTask('structure-receipt');
-      const queried = await neo.callTool('workbench_browser_query', { selector: '#workspace' });
+      await web.beginTask('structure-receipt');
+      const queried = await web.callTool('workbench_browser_query', { selector: '#workspace' });
       assert.ok(!queried.isError, queried.text);
       const anchor = JSON.parse(queried.text).elements[0].ref;
       const first = {
@@ -513,37 +513,37 @@ test(
         }
         return result;
       };
-      assert.equal((await neo.callTool('workbench_browser_edit', first)).isError, true);
-      assert.equal((await neo.callTool('workbench_browser_edit', first)).isError, true);
+      assert.equal((await web.callTool('workbench_browser_edit', first)).isError, true);
+      assert.equal((await web.callTool('workbench_browser_edit', first)).isError, true);
       assert.equal(insertions, 1);
-      const observed = await neo.callTool('workbench_browser_query', {
+      const observed = await web.callTool('workbench_browser_query', {
         selector: '#first-created',
       });
       const evidence = JSON.parse(observed.text);
       assert.equal(evidence.elements.length, 1);
-      const verified = await neo.callTool('neo_checkpoint', {
+      const verified = await web.callTool('web_checkpoint', {
         observationId: evidence.observationId,
         summary: 'Insertion already exists',
         evidence: 'Created once',
         outcome: 'verified',
       });
       assert.equal(verified.isError, false, verified.text);
-      assert.match((await neo.callTool('workbench_browser_edit', first)).text, /不能重复/);
+      assert.match((await web.callTool('workbench_browser_edit', first)).text, /不能重复/);
       const second = {
         ref: anchor,
         insert: {
           node: { tag: 'section', text: 'Second creation', attributes: { id: 'second-created' } },
         },
       };
-      const succeeded = await neo.callTool('workbench_browser_edit', second);
+      const succeeded = await web.callTool('workbench_browser_edit', second);
       assert.ok(!succeeded.isError, succeeded.text);
-      assert.match((await neo.callTool('workbench_browser_edit', second)).text, /不能重复/);
+      assert.match((await web.callTool('workbench_browser_edit', second)).text, /不能重复/);
       assert.equal(insertions, 2);
       assert.equal(
         (await browser.queryElements({ selector: '#second-created' })).elements.length,
         1,
       );
-      const undone = await neo.callTool('workbench_browser_undo', {
+      const undone = await web.callTool('workbench_browser_undo', {
         editId: JSON.parse(succeeded.text).editId,
       });
       assert.ok(!undone.isError, undone.text);
@@ -551,9 +551,9 @@ test(
         (await browser.queryElements({ selector: '#second-created' })).elements.length,
         0,
       );
-      await neo.finishTask('structure-receipt');
+      await web.finishTask('structure-receipt');
     } finally {
-      await neo.stop();
+      await web.stop();
       await browser.dispose();
       await new Promise<void>((resolve) => site.close(() => resolve()));
       await rm(directory, { recursive: true, force: true });

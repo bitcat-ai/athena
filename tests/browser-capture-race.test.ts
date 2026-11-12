@@ -169,7 +169,7 @@ test('a failed resize releases the transition guard and the input queue', async 
 });
 
 test(
-  'real Neo: concurrent capture, resizing and input recover without stale frames or deadlock',
+  'real Chrome: concurrent capture, resizing and input recover without stale frames or deadlock',
   {
     skip: !process.env.ATHENA_TEST_CHROME,
     timeout: 30_000,

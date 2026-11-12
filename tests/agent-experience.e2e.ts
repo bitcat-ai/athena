@@ -1,4 +1,4 @@
-/** Packaged, real CLI/Neo integration. All pages, files and app data belong to this test. */
+/** Packaged, real CLI/web executor integration. All pages, files and app data belong to this test. */
 import assert from 'node:assert/strict';
 import { chooseOption } from './ui-choices';
 import {
@@ -58,7 +58,7 @@ const start = async () => {
     w.webContents.setBackgroundThrottling(false);
     w.hide();
   });
-  await expect.poll(async () => (await snapshot()).neo?.status, { timeout: 30000 }).toBe('ready');
+  await expect.poll(async () => (await snapshot()).web?.status, { timeout: 30000 }).toBe('ready');
 };
 const send = async (text: string) => {
   const before = (await usage()).records.length;
@@ -122,7 +122,7 @@ try {
   await selectModel(first);
   await invoke('browser:navigate', { url: site.origin + '/policy' });
   const normalId = await send(
-    `请执行这次本地网页验收：先用 neo_plan 记录三步“读取配送规则”“人工核对”“下载回执文件”。用 neo_read 读取当前页，以真实原文和 observationId 写 neo_checkpoint。然后必须调用 neo_request_human_help，请我核对当前规则，等待我点击“已完成，继续”。我交回后重新读取并核对。最后打开 ${site.origin}/receipts，读取空订单列表，从页面链接用 neo_download 下载 CSV（这是空表，下载即可，不要求再打开本地文件；不要创建订单）；将计划更新为完成并报告实际结果。仅使用 neo_*，不执行脚本或命令，不访问外站。`,
+    `请执行这次本地网页验收：先用 web_plan 记录三步“读取配送规则”“人工核对”“下载回执文件”。用 web_read 读取当前页，以真实原文和 observationId 写 web_checkpoint。然后必须调用 web_request_human_help，请我核对当前规则，等待我点击“已完成，继续”。我交回后重新读取并核对。最后打开 ${site.origin}/receipts，读取空订单列表，从页面链接用 web_download 下载 CSV（这是空表，下载即可，不要求再打开本地文件；不要创建订单）；将计划更新为完成并报告实际结果。仅使用 web_*，不执行脚本或命令，不访问外站。`,
   );
   await expect
     .poll(async () => (await snapshot()).pendingRequests?.[0]?.kind, { timeout: 150000 })
@@ -191,7 +191,7 @@ try {
 
   await selectModel(second);
   const unknownId = await send(
-    '这是本地失败状态验收。仅调用一次 neo_wait，在当前页面等待文本 NEVER-EXISTS-51a，timeout=50 毫秒。条件未匹配后不再调用工具，不恢复；结束并如实说明未匹配。',
+    '这是本地失败状态验收。仅调用一次 web_wait，在当前页面等待文本 NEVER-EXISTS-51a，timeout=50 毫秒。条件未匹配后不再调用工具，不恢复；结束并如实说明未匹配。',
   );
   const unknown = await waitResult(unknownId);
   assert.equal(unknown.status, 'error');
@@ -208,7 +208,7 @@ try {
   );
 
   const cancelledId = await send(
-    '请只调用 neo_request_human_help，请我核对当前页；保持等待，不自行确认完成。我会停止任务。',
+    '请只调用 web_request_human_help，请我核对当前页；保持等待，不自行确认完成。我会停止任务。',
   );
   await expect
     .poll(async () => (await snapshot()).pendingRequests?.[0]?.kind, { timeout: 120000 })

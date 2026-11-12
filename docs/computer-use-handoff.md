@@ -90,7 +90,7 @@ Cua 官方提供 TypeScript 与 Electron 嵌入路径，原生 helper 需要放�
 
 ## 2026-10-31：复杂 Agent 网页任务（任务 2）
 
-0.5.0 继续复用 CodexSession 与 Neo 原生 act/run/read/wait。`src/main/web-execution.ts` 提供公开计划、原文证据检查点和任务内恢复屏障；`neo-browser.ts` 串行校验/派发，拒绝未知结果重放并记录下载文件证据。`agents.ts` 拒绝重复 callId，接收公开 plan 通知并记录工具耗时。主进程持久化 `ChatMessage.plan/execution`，未核对的结果不能以成功完成；重启不自动重放。
+0.5.0 继续复用 CodexSession 与 Neo 原生 act/run/read/wait。`src/main/web-execution.ts` 提供公开计划、原文证据检查点和任务内恢复屏障；`web-runtime.ts`（当时名为 `neo-browser.ts`）串行校验/派发，拒绝未知结果重放并记录下载文件证据。`agents.ts` 拒绝重复 callId，接收公开 plan 通知并记录工具耗时。主进程持久化 `ChatMessage.plan/execution`，未核对的结果不能以成功完成；重启不自动重放。
 
 真实 CLI 的正常和回执异常多步骤工作流已完成本地页面、服务端唯一订单与 CSV 文件回读。原生测试另覆盖旧引用、条件等待失败、人工帮助、接管取消、晚到确认和有界脚本。详细证据与复现见 [复杂网页任务执行](complex-web-tasks.md) 和 `test-results/complex-agent/verification.json`。模型选择、usage、费用与新增交互面板仍由任务 3 处理。
 

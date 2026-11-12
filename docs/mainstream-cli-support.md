@@ -79,7 +79,7 @@ Claude 保留原生只读 Read/Glob/Grep/Skill，关闭 hooks 和 Skill 内联 s
 
 ### 网页工具联动
 
-`AgentMcpServer` 只绑定回环地址，使用随机凭据和固定工具清单，所有操作回到当前 `AgentSession` → `NeoBrowserRuntime` → `BrowserRuntime`。敏感操作仍由宿主审批；停止、会话切换、共享控制权和未知结果恢复不会由 CLI 绕过。
+`AgentMcpServer` 只绑定回环地址，使用随机凭据和固定工具清单，所有操作回到当前 `AgentSession` → `WebRuntime` → `BrowserRuntime`。敏感操作仍由宿主审批；停止、会话切换、共享控制权和未知结果恢复不会由 CLI 绕过。
 
 - Claude：原生只读 Read/Glob/Grep/Skill 与精确 Athena MCP 工具共同可用；写入、命令、子任务、hooks 和 Skill 内联 shell 仍禁用。严格 MCP 配置、alwaysLoad 和关闭延迟工具搜索保证网页工具清单完整且首轮可见。原生测试使用独立 CLI 配置目录，避免日常配置覆盖本地模型替身。
 - Pi：只通过已有的授权扩展注册这些精确工具名。网页操作交给宿主权限链；本地文件和命令仍逐次请求批准。授权扩展和浏览器工具均需握手就绪。

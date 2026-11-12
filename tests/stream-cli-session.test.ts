@@ -38,7 +38,7 @@ process.stdin.setEncoding('utf8'); process.stdin.on('data',s=>input+=s); process
  if(mode==='missing-session'){process.exitCode=1;return;}
  if(mode==='invalid-json'){process.stdout.write('not json\\n');return;}
  if(mode==='no-init'){result();return;}
- out(cli==='gemini'?{type:'init',session_id:id,model:'auto'}:{type:'system',subtype:'init',session_id:id,model:'configured-alias',...(mode==='browser-tools'?{mcp_servers:[{name:'athena',status:'connected'}],tools:['mcp__athena__neo_status']}:{} )});
+ out(cli==='gemini'?{type:'init',session_id:id,model:'auto'}:{type:'system',subtype:'init',session_id:id,model:'configured-alias',...(mode==='browser-tools'?{mcp_servers:[{name:'athena',status:'connected'}],tools:['mcp__athena__web_status']}:{} )});
  if(mode==='wrong-session') return;
  if(mode==='browser-tools') {
   void (async()=>{
@@ -50,8 +50,8 @@ process.stdin.setEncoding('utf8'); process.stdin.on('data',s=>input+=s); process
    const pending=new Map(); require('node:readline').createInterface({input:child.stdout}).on('line',line=>{const r=JSON.parse(line);pending.get(r.id)?.(r);pending.delete(r.id);});
    const request=(id,method,params)=>new Promise(resolve=>{pending.set(id,resolve);child.stdin.write(JSON.stringify({jsonrpc:'2.0',id,method,params})+'\\n');});
    await request('init','initialize',{}); await request('list','tools/list');
-   out({type:'assistant',message:{role:'assistant',content:[{type:'tool_use',id:'call-1',name:'mcp__athena__neo_status',input:{}}]}});
-   const response=await request('action','tools/call',{name:'neo_status',arguments:{}});
+   out({type:'assistant',message:{role:'assistant',content:[{type:'tool_use',id:'call-1',name:'mcp__athena__web_status',input:{}}]}});
+   const response=await request('action','tools/call',{name:'web_status',arguments:{}});
    child.stdin.end();
    if(response.error || response.result.isError) throw new Error('browser call rejected');
    out({type:'assistant',message:message('browser done')});
@@ -1052,7 +1052,7 @@ test('Claude uses streaming image content while unsupported CLIs reject before l
 
 test('Claude native MCP configuration routes browser calls and is revoked after each turn', async (t) => {
   const tool = {
-    name: 'neo_status',
+    name: 'web_status',
     description: 'Browser status',
     inputSchema: { type: 'object', properties: {} },
   };
@@ -1065,7 +1065,7 @@ test('Claude native MCP configuration routes browser calls and is revoked after 
     events.map((event) => event.call.status),
     ['running', 'done'],
   );
-  assert.equal(events[0].call.name, 'neo_status');
+  assert.equal(events[0].call.name, 'web_status');
   const [call] = await f.logs();
   assert.ok(!call.args.includes('--restricted'));
   assert.equal(call.args.filter((arg: string) => arg === '--allowedTools').length, 1);
@@ -1074,7 +1074,7 @@ test('Claude native MCP configuration routes browser calls and is revoked after 
     'Glob',
     'Grep',
     'Skill',
-    'mcp__athena__neo_status',
+    'mcp__athena__web_status',
   ]);
   assert.equal(call.args[call.args.indexOf('--tools') + 1], 'Read,Glob,Grep,Skill');
   assert.ok(!call.args.includes('--safe-mode'));

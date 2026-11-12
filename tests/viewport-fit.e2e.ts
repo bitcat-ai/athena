@@ -1,4 +1,4 @@
-/** Electron → IPC → real neo viewport regression. --before uses the saved 0.2.3 build. */
+/** Electron → IPC → real browser viewport regression. --before uses the saved 0.2.3 build. */
 import assert from 'node:assert/strict';
 import { chooseOption } from './ui-choices';
 import { _electron as electron, expect } from '@playwright/test';

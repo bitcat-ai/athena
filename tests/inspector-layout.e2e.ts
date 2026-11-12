@@ -31,11 +31,11 @@ try {
   page.on('pageerror', (e) => errors.push(e.message));
   if (packaged) {
     page.on('console', (message) => {
-      if (message.text().startsWith('NEO_STATE ')) console.log(message.text());
+      if (message.text().startsWith('WEB_STATE ')) console.log(message.text());
     });
     await page.evaluate(() =>
       window.workbench.onEvent((event) => {
-        if (event.type === 'neo:state') console.log('NEO_STATE ' + JSON.stringify(event.state));
+        if (event.type === 'web:state') console.log('WEB_STATE ' + JSON.stringify(event.state));
       }),
     );
   }
@@ -50,7 +50,7 @@ try {
     const deadline = Date.now() + 150000;
     let native;
     do {
-      native = (await state()).neo;
+      native = (await state()).web;
       if (native?.status === 'ready' || native?.status === 'error') break;
       await new Promise((resolve) => setTimeout(resolve, 100));
     } while (Date.now() < deadline);

@@ -1,4 +1,4 @@
-/** Actual Electron/Neo with a deterministic local CLI fixture; no model inference. */
+/** Actual Electron and web executor with a deterministic local CLI fixture; no model inference. */
 import assert from 'node:assert/strict';
 import { _electron as electron, expect } from '@playwright/test';
 import { createServer } from 'node:http';

@@ -1,4 +1,4 @@
-/** Real Electron UI + neo, deterministic CLI task lifecycle; no real accounts or messages. */
+/** Real Electron UI + web executor, deterministic CLI task lifecycle; no real accounts or messages. */
 import assert from 'node:assert/strict';
 import { _electron as electron, expect } from '@playwright/test';
 import { createServer } from 'node:http';

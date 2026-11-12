@@ -46,7 +46,7 @@ const snapshot = {
     recording: false,
     inspecting: false,
   },
-  neo: { status: 'stopped' },
+  web: { status: 'stopped' },
   feishu: { status: 'disconnected', paired: false },
   recordings: [],
   conversations: [
@@ -161,7 +161,7 @@ window.workbench={
   if(action==='conversation:prepare')return {status:'ready',conversationId:payload.conversationId};
   if(action==='share:state')return {active:false,participants:[]};
   if(action==='usage:snapshot')return {records:[],since:Date.now(),updatedAt:Date.now()};
-  if(action==='neo:records')return [];
+  if(action==='web:records')return [];
   return true;
  },
  onEvent(fn){fixture.listeners.push(fn);return()=>{fixture.listeners=fixture.listeners.filter(item=>item!==fn)}}
@@ -536,7 +536,7 @@ try {
     0,
   );
   checks.push(
-    'Reply links open the Neo drawer and a new tab; a stopped browser starts first, and sharing rejection never falls back to the system browser',
+    'Reply links open the browser drawer and a new tab; a stopped browser starts first, and sharing rejection never falls back to the system browser',
   );
 
   assert.deepEqual(errors, []);

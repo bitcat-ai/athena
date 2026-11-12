@@ -40,7 +40,7 @@ const start = async () => {
     .poll(
       () =>
         page.evaluate(
-          async () => (await window.workbench.invoke<AppSnapshot>('app:snapshot')).neo?.status,
+          async () => (await window.workbench.invoke<AppSnapshot>('app:snapshot')).web?.status,
         ),
       { timeout: 30000 },
     )
@@ -91,7 +91,7 @@ try {
   const fresh = await invoke('conversation:new');
   // Use the visible composer for a fresh conversation after the rejected start cleaned up.
   const normalId = await send(
-    '请用 neo_plan 记录一个读取国际配送规则的步骤；用 neo_read 读取当前页，使用实际 observationId 和原文证据记录 neo_checkpoint，再将计划更新为已完成。只做这些只读操作，最后简短报告规则。',
+    '请用 web_plan 记录一个读取国际配送规则的步骤；用 web_read 读取当前页，使用实际 observationId 和原文证据记录 web_checkpoint，再将计划更新为已完成。只做这些只读操作，最后简短报告规则。',
   );
   const normal = await waitResult(normalId);
   assert.equal(normal.status, 'done');
@@ -102,7 +102,7 @@ try {
   await page.screenshot({ path: path.join(output, 'completed.png') });
   await invoke('conversation:new');
   const unknownId = await send(
-    '这是等待失败状态的本地验收。只调用一次 neo_wait，在当前页面等待文本 NEVER-APPEARS-7f33，timeout 为 50 毫秒。条件未匹配后不再调用任何工具，也不恢复，直接结束并说明条件未匹配。不要把任务说成成功。',
+    '这是等待失败状态的本地验收。只调用一次 web_wait，在当前页面等待文本 NEVER-APPEARS-7f33，timeout 为 50 毫秒。条件未匹配后不再调用任何工具，也不恢复，直接结束并说明条件未匹配。不要把任务说成成功。',
   );
   const unknown = await waitResult(unknownId);
   assert.equal(unknown.status, 'error', 'Host must not mark an unreconciled wait as done');

@@ -1,4 +1,4 @@
-/** Real Codex + Neo coexistence on a local page; uses existing login and a small model quota. */
+/** Real Codex + web executor coexistence on a local page; uses existing login and a small model quota. */
 import assert from 'node:assert/strict';
 import { _electron as electron, expect } from '@playwright/test';
 import { createServer } from 'node:http';
@@ -105,13 +105,13 @@ try {
       .sort((a, b) => a.createdAt - b.createdAt)
       .at(-1)!;
   const prompt =
-    '这是本地协作验收。先用 neo_plan 记录读取资料、等待就绪、填写并核对三步。读取当前资料核对页面后，必须调用一次 neo_wait 等待文本“资料已就绪”，timeout 20000 毫秒。我会在等待时滚动和点击页面；这不表示停止任务。若工具因人工操作提示旧观察失效，重新用 neo_read/snapshot 读取并继续等待，勿放弃任务。资料就绪后，在“核对结果”输入框填写“协作继续通过”，再次读取，以实际原文和 observationId 写 neo_checkpoint，并完成计划。仅使用 neo_*，不用脚本或命令，不访问外站。';
+    '这是本地协作验收。先用 web_plan 记录读取资料、等待就绪、填写并核对三步。读取当前资料核对页面后，必须调用一次 web_wait 等待文本“资料已就绪”，timeout 20000 毫秒。我会在等待时滚动和点击页面；这不表示停止任务。若工具因人工操作提示旧观察失效，重新用 web_read/snapshot 读取并继续等待，勿放弃任务。资料就绪后，在“核对结果”输入框填写“协作继续通过”，再次读取，以实际原文和 observationId 写 web_checkpoint，并完成计划。仅使用 web_*，不用脚本或命令，不访问外站。';
   await page.getByRole('textbox', { name: '发送给 Agent 的任务' }).fill(prompt);
   await page.getByRole('button', { name: '发送任务', exact: true }).click();
   await expect
     .poll(
       async () =>
-        (await latest())?.tools?.some((t) => t.name === 'neo_wait' && t.status === 'running'),
+        (await latest())?.tools?.some((t) => t.name === 'web_wait' && t.status === 'running'),
       { timeout: 120000 },
     )
     .toBe(true);
@@ -136,7 +136,7 @@ try {
   assert.equal(evidence.firstTurn.status, 'done', evidence.firstTurn.failure);
   assert.equal(await read('document.querySelector("#result").value'), '协作继续通过');
   assert(
-    evidence.firstTurn.tools.filter((t: any) => ['neo_read', 'neo_snapshot'].includes(t.name))
+    evidence.firstTurn.tools.filter((t: any) => ['web_read', 'web_snapshot'].includes(t.name))
       .length >= 2,
   );
   assert(

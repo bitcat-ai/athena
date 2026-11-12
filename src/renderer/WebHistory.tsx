@@ -7,7 +7,7 @@ import {
   Tick02Icon,
   XIcon,
 } from '@hugeicons-pro/core-stroke-rounded';
-import type { NativeNeoState, NeoSessionDetail, NeoSessionSummary } from '../shared/types';
+import type { WebExecutorState, WebSessionDetail, WebSessionSummary } from '../shared/types';
 
 const names: Record<string, string> = {
   snapshot: '查看页面',
@@ -31,7 +31,7 @@ const names: Record<string, string> = {
   request_human_help: '交给你处理',
   await_human_help: '等待你的操作',
 };
-function detailOf(step: NeoSessionDetail['dispatches'][number]) {
+function detailOf(step: WebSessionDetail['dispatches'][number]) {
   try {
     const args = JSON.parse(step.argsJson || '{}');
     if (step.toolName === 'act')
@@ -52,18 +52,18 @@ function detailOf(step: NeoSessionDetail['dispatches'][number]) {
   } catch {}
   return names[step.toolName] || '网页操作';
 }
-export function NeoHistory({
+export function WebHistory({
   state,
   selectedId,
   onAction,
 }: {
-  state?: NativeNeoState;
+  state?: WebExecutorState;
   selectedId?: string;
   onAction: <T = unknown>(name: string, payload?: unknown) => Promise<T>;
 }) {
-  const [records, setRecords] = useState<NeoSessionSummary[]>([]);
+  const [records, setRecords] = useState<WebSessionSummary[]>([]);
   const [selected, setSelected] = useState<string | undefined>(selectedId);
-  const [detail, setDetail] = useState<NeoSessionDetail>();
+  const [detail, setDetail] = useState<WebSessionDetail>();
   const [loading, setLoading] = useState(false);
   const revision = useRef(0);
   useEffect(() => {
@@ -73,12 +73,12 @@ export function NeoHistory({
     const current = ++revision.current;
     setLoading(true);
     const result = selected
-      ? await onAction<NeoSessionDetail>('neo:record', { id: selected })
-      : await onAction<NeoSessionSummary[]>('neo:records');
+      ? await onAction<WebSessionDetail>('web:record', { id: selected })
+      : await onAction<WebSessionSummary[]>('web:records');
     if (current !== revision.current) return;
-    if (selected) setDetail(result as NeoSessionDetail | undefined);
+    if (selected) setDetail(result as WebSessionDetail | undefined);
     else if (result)
-      setRecords((result as NeoSessionSummary[]).filter((item) => item.dispatchCount > 0));
+      setRecords((result as WebSessionSummary[]).filter((item) => item.dispatchCount > 0));
     setLoading(false);
   };
   useEffect(() => {
@@ -90,7 +90,7 @@ export function NeoHistory({
     };
   }, [selected, state?.status]);
   return (
-    <div className="recordings-view neo-history">
+    <div className="recordings-view web-history">
       <div className="recording-header">
         <div>
           <span className="eyebrow">网页任务</span>
@@ -109,13 +109,16 @@ export function NeoHistory({
       {state?.status !== 'ready' ? (
         <div className="recording-empty">
           <p>{state?.status === 'starting' ? '正在连接网页执行器…' : '网页执行器暂未连接'}</p>
-          <ActionButton className="secondary-button" onPress={() => void onAction('neo:connect')}>
+          <ActionButton className="secondary-button" onPress={() => void onAction('web:connect')}>
             重新连接
           </ActionButton>
         </div>
       ) : selected ? (
         <>
-          <ActionButton className="text-button neo-back" onPress={() => setSelected(undefined)}>
+          <ActionButton
+            className="text-button web-task-back"
+            onPress={() => setSelected(undefined)}
+          >
             <Icon icon={ArrowLeft02Icon} size={13} />
             全部任务
           </ActionButton>
@@ -123,7 +126,7 @@ export function NeoHistory({
             <Icon icon={Loading02Icon} className="spin" size={20} />
           ) : detail ? (
             <>
-              <p className="neo-session-meta">
+              <p className="web-task-meta">
                 {new Date(detail.session.startedAt).toLocaleString('zh-CN')} ·{' '}
                 {detail.session.status === 'cancelled' ? '已停止' : '已记录'}
               </p>
@@ -146,7 +149,7 @@ export function NeoHistory({
                               ? '处理中'
                               : `${(step.durationMs / 1000).toFixed(2)}s`}
                           </span>
-                          <details className="neo-step-detail">
+                          <details className="web-task-step">
                             <summary>操作详情</summary>
                             <pre>{step.argsJson || '—'}</pre>
                           </details>
@@ -166,7 +169,7 @@ export function NeoHistory({
           )}
         </>
       ) : records.length ? (
-        <div className="neo-session-list">
+        <div className="web-task-list">
           {records.map((record) => (
             <ActionButton key={record.sessionId} onPress={() => setSelected(record.sessionId)}>
               <strong>{record.name || '网页任务'}</strong>

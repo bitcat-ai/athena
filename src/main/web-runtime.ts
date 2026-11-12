@@ -10,7 +10,7 @@ import { WebExecution, checkpointTool, planTool } from './web-execution';
 import type {
   ApprovalRequest,
   BrowserTool,
-  NativeNeoState,
+  WebExecutorState,
   ToolResult,
   WebExecutionEvent,
 } from '../shared/types';
@@ -77,7 +77,7 @@ const safeError = (error: unknown) =>
     .slice(0, 1500);
 
 /** Application scope and task lifecycle around the web executor's tools. */
-export class NeoBrowserRuntime {
+export class WebRuntime {
   readonly server: AgentBrowserServer;
   private current?: Task;
   private starting?: Promise<void>;
@@ -87,7 +87,7 @@ export class NeoBrowserRuntime {
     private options: {
       directory: string;
       download?: AgentBrowserDownload;
-      onState: (state: NativeNeoState) => void;
+      onState: (state: WebExecutorState) => void;
       onDisconnect: () => void;
       approve: (request: Omit<ApprovalRequest, 'id' | 'kind'>) => Promise<boolean>;
       onExecution?: (event: WebExecutionEvent) => void;
@@ -129,7 +129,7 @@ export class NeoBrowserRuntime {
   getTools(): BrowserTool[] {
     const tools: BrowserTool[] = [
       {
-        name: 'neo_status',
+        name: 'web_status',
         description: '查看网页执行器的连接状态。未连接时不能声称网页操作成功。',
         inputSchema: { type: 'object', properties: {}, additionalProperties: false },
       },
@@ -141,17 +141,17 @@ export class NeoBrowserRuntime {
         let prefix = '';
         if (tool.name === 'run' || tool.name === 'evaluate_in_page')
           prefix =
-            '高级脚本需要用户在 Athena 确认；普通网页操作优先用 neo_act（整表 fields 批量填写）、neo_read 和 neo_wait。\n';
+            '高级脚本需要用户在 Athena 确认；普通网页操作优先用 web_act（整表 fields 批量填写）、web_read 和 web_wait。\n';
         if (tool.name === 'upload') prefix = '上传本机文件前需要用户在 Athena 确认。\n';
         tools.push({
-          name: `neo_${tool.name}`,
+          name: `web_${tool.name}`,
           description: prefix + tool.description,
           inputSchema: structuredClone(tool.inputSchema),
         });
       }
       tools.push({
-        name: 'neo_focus_page',
-        description: '把指定页面显示到 Athena 当前浏览器面板；page 来自 neo_tabs。',
+        name: 'web_focus_page',
+        description: '把指定页面显示到 Athena 当前浏览器面板；page 来自 web_tabs。',
         inputSchema: {
           type: 'object',
           properties: { page: { type: 'integer', minimum: 1 } },
@@ -164,10 +164,10 @@ export class NeoBrowserRuntime {
   }
   isReadOnly(name: string, args: Record<string, unknown>): boolean {
     if (['workbench_browser_query', 'workbench_browser_inspect'].includes(name)) return true;
-    if (['neo_status', 'neo_plan', 'neo_checkpoint'].includes(name)) return true;
+    if (['web_status', 'web_plan', 'web_checkpoint'].includes(name)) return true;
     const native = name.slice(4);
     return (
-      name.startsWith('neo_') &&
+      name.startsWith('web_') &&
       (readonlyNames.has(native) ||
         (native === 'tabs' && ['list', 'active'].includes(String(args.action))))
     );
@@ -199,7 +199,7 @@ export class NeoBrowserRuntime {
       if (!readonly) await this.browser.setNativeAgentActive(true);
       return {
         sessionId: client.id,
-        context: `<neo_browser_context>\n${JSON.stringify({ engine: 'agent-browser', currentPage: current, pages, sessionId: client.id }).replace(/</g, '\\u003c')}\n你与用户操作同一个可见网页。先使用当前页；需要新页面时用 neo_tabs，并用 neo_focus_page 将结果显示在右侧。网页观察、点击、填写、滚动、导航使用 neo_* 工具。创建或调整页面元素时使用 workbench_browser_query/inspect/edit/undo；edit 的 insert 可创建嵌套元素，返回新 ref，后续可继续修改并撤销。创建后先观察真实结果再给出结论；DOM 预览不代表源码已保存。neo_* 的 pageId/元素引用与 workbench_browser_* 的 ref 各有作用域，不能混用；新建元素后用 neo_snapshot 获取新的操作引用。\n</neo_browser_context>`,
+        context: `<web_browser_context>\n${JSON.stringify({ engine: 'agent-browser', currentPage: current, pages, sessionId: client.id }).replace(/</g, '\\u003c')}\n你与用户操作同一个可见网页。先使用当前页；需要新页面时用 web_tabs，并用 web_focus_page 将结果显示在右侧。网页观察、点击、填写、滚动、导航使用 web_* 工具。创建或调整页面元素时使用 workbench_browser_query/inspect/edit/undo；edit 的 insert 可创建嵌套元素，返回新 ref，后续可继续修改并撤销。创建后先观察真实结果再给出结论；DOM 预览不代表源码已保存。web_* 的 pageId/元素引用与 workbench_browser_* 的 ref 各有作用域，不能混用；新建元素后用 web_snapshot 获取新的操作引用。\n</web_browser_context>`,
       };
     } catch (error) {
       if (this.current === task) this.current = undefined;
@@ -230,7 +230,7 @@ export class NeoBrowserRuntime {
     if (!approved) throw new Error('用户未允许这次操作');
   }
   async callTool(name: string, args: Record<string, unknown>): Promise<ToolResult> {
-    if (name === 'neo_status') return { text: JSON.stringify(this.getState()) };
+    if (name === 'web_status') return { text: JSON.stringify(this.getState()) };
     const task = this.current;
     if (!task && name === 'workbench_browser_edit' && args.insert !== undefined)
       return { text: '网页任务尚未建立，请重新连接浏览器后创建元素。', isError: true };
@@ -295,12 +295,12 @@ export class NeoBrowserRuntime {
       };
       if (task.readonly && !this.isReadOnly(name, args))
         throw new Error('本轮只允许读取，不能操作网页');
-      if (name === 'neo_plan') {
+      if (name === 'web_plan') {
         const text = task.execution.plan(args.steps);
         event('succeeded');
         return { text, isError: false };
       }
-      if (name === 'neo_checkpoint') {
+      if (name === 'web_checkpoint') {
         const text = task.execution.checkpoint(args);
         if (!task.needsObservation && !task.execution.needsRecovery && !task.readonly)
           this.browser.allowAgentControl();
@@ -360,7 +360,7 @@ export class NeoBrowserRuntime {
         return result;
       }
       const native = name.slice(4);
-      if (!name.startsWith('neo_') || (!nativeNames.has(native) && native !== 'focus_page'))
+      if (!name.startsWith('web_') || (!nativeNames.has(native) && native !== 'focus_page'))
         throw new Error('未开放的网页操作');
       if (task.needsObservation && !this.isReadOnly(name, args))
         throw new Error(
@@ -471,7 +471,7 @@ export class NeoBrowserRuntime {
           this.browser.allowAgentControl();
           await this.browser.setNativeAgentActive(true);
         }
-        text += `\n\nAthena observationId: ${observationId}（neo_checkpoint 可引用本次原文作为证据）`;
+        text += `\n\nAthena observationId: ${observationId}（web_checkpoint 可引用本次原文作为证据）`;
       }
       const images = result.content
         .filter(

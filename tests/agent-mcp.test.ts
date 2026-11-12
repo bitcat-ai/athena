@@ -7,7 +7,7 @@ import type { ToolCall } from '../src/shared/types';
 import { testImage } from './image-fixture';
 
 const tool = {
-  name: 'neo_act',
+  name: 'web_act',
   description: 'Perform a browser operation',
   inputSchema: { type: 'object', properties: {} },
 };
@@ -66,7 +66,7 @@ test('private MCP authenticates, limits tool names, redacts UI inputs and refuse
       ).json()
     ).error,
   );
-  const params = { name: 'neo_act', arguments: { text: 'secret-input', sensitive: true } };
+  const params = { name: 'web_act', arguments: { text: 'secret-input', sensitive: true } };
   const result = (await (await invoke('operation', 'tools/call', params)).json()).result;
   assert.deepEqual(result.content, [
     { type: 'text', text: 'browser result' },
@@ -126,7 +126,7 @@ test('the actual stdio child completes MCP initialization and tool calls without
   );
   assert.deepEqual((await request('list', 'tools/list')).result.tools, [tool]);
   assert.equal(
-    (await request('call', 'tools/call', { name: 'neo_act', arguments: {} })).result.content[0]
+    (await request('call', 'tools/call', { name: 'web_act', arguments: {} })).result.content[0]
       .text,
     'one browser action',
   );
@@ -160,7 +160,7 @@ test('closing a MCP connection revokes pending results and all subsequent access
       jsonrpc: '2.0',
       id: 1,
       method: 'tools/call',
-      params: { name: 'neo_act' },
+      params: { name: 'web_act' },
     }),
   }).then(
     () => false,

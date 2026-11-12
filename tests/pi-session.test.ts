@@ -54,8 +54,8 @@ if(mode==='browser-tools') {
  const headers={authorization:'Bearer '+process.env.ATHENA_MCP_TOKEN,'x-athena-client':'pi-fixture','content-type':'application/json'};
  const request=(id,method,params)=>fetch(process.env.ATHENA_MCP_URL,{method:'POST',headers,body:JSON.stringify({jsonrpc:'2.0',id,method,params})}).then(r=>r.json());
  void request('list','tools/list').then(()=>{
-   out({type:'tool_execution_start',toolCallId:'native-1',toolName:'neo_status',args:{}});
-   return request('call','tools/call',{name:'neo_status',arguments:{}});
+   out({type:'tool_execution_start',toolCallId:'native-1',toolName:'web_status',args:{}});
+   return request('call','tools/call',{name:'web_status',arguments:{}});
  }).then(result=>{
    out({type:'tool_execution_end',toolCallId:'native-1',isError:!!result.error});
    end(result.error?'rejected':'browser done');
@@ -94,7 +94,7 @@ out({type:'agent_end',willRetry:true});setTimeout(()=>end('a\\u2028b!'),20);
       mode === 'browser-tools'
         ? [
             {
-              name: 'neo_status',
+              name: 'web_status',
               description: 'Browser status',
               inputSchema: { type: 'object', properties: {} },
             },
@@ -377,7 +377,7 @@ test('Pi routes registered browser tools through the host without duplicating na
     events.map((event) => event.call.status),
     ['running', 'done'],
   );
-  assert.equal(events[0].call.name, 'neo_status');
+  assert.equal(events[0].call.name, 'web_status');
   assert.ok(f.events.some((event) => event.type === 'complete' && event.text === 'browser done'));
   assert.equal(
     f.session.matchesConfiguration(f.directory, path.join(f.directory, 'pi'), []),

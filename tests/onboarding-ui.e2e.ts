@@ -33,7 +33,7 @@ const initial=${JSON.stringify(initial)};
 if(mode==='legacy'){initial.status='legacy';initial.requiresSetup=false;initial.coreReady=true;initial.codex={status:'ready',path:'/fixture/codex'};initial.workspace.status='ready';initial.browser.status='ready';}
 if(mode==='deferred'){initial.status='deferred';initial.stage='codex';initial.codex={status:'missing'};}
 const fixture=window.__onboardingFixture={mode,state:initial,calls:[],listeners:[],ready:false,pendingSnapshots:[],nextOperation:1,cancelPick:false,exitDeferred:false};
-fixture.snapshot={localUser:{name:'Fixture User'},settings:{workspace:'/fixture/original',agent:'codex'},agents:[],codexConnection:{status:'idle'},browser:{status:'missing',engine:'agent-browser',tabs:[],url:'',title:'',loading:false,canGoBack:false,canGoForward:false,recording:false,inspecting:false},neo:{status:'stopped'},feishu:{status:'disconnected',paired:false},recordings:[],conversations:mode==='legacy'?[{id:'existing',title:'已有工作',workspace:'/fixture/original',updatedAt:Date.now(),messages:[]}]:[]};
+fixture.snapshot={localUser:{name:'Fixture User'},settings:{workspace:'/fixture/original',agent:'codex'},agents:[],codexConnection:{status:'idle'},browser:{status:'missing',engine:'agent-browser',tabs:[],url:'',title:'',loading:false,canGoBack:false,canGoForward:false,recording:false,inspecting:false},web:{status:'stopped'},feishu:{status:'disconnected',paired:false},recordings:[],conversations:mode==='legacy'?[{id:'existing',title:'已有工作',workspace:'/fixture/original',updatedAt:Date.now(),messages:[]}]:[]};
 fixture.emit=event=>{for(const listener of fixture.listeners)listener(event)};
 fixture.sync=()=>{
  const codex={id:'codex',name:'Codex',available:fixture.state.codex.status==='ready',supported:true,path:fixture.state.codex.path};
@@ -94,7 +94,7 @@ window.workbench={async invoke(command,payload){
  if(command==='conversation:prepare')return {status:'ready',conversationId:payload.conversationId};
  if(command==='share:state')return {active:false,participants:[]};
  if(command==='usage:snapshot')return {records:[],since:Date.now(),updatedAt:Date.now()};
- if(command==='neo:records')return [];
+ if(command==='web:records')return [];
  if(command==='browser:resize')return payload;
  return true;
 },onEvent(listener){fixture.listeners.push(listener);return()=>{fixture.listeners=fixture.listeners.filter(item=>item!==listener)}}};

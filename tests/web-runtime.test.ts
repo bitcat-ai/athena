@@ -5,7 +5,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { BrowserRuntime } from '../src/main/browser';
-import { NeoBrowserRuntime } from '../src/main/neo-browser';
+import { WebRuntime } from '../src/main/web-runtime';
 import type { ApprovalRequest, ToolResult } from '../src/shared/types';
 
 async function waitFor<T>(
@@ -64,7 +64,7 @@ test(
     const url = `http://127.0.0.1:${(site.address() as { port: number }).port}`;
     const approvals: Array<Omit<ApprovalRequest, 'id' | 'kind'>> = [];
     let approve = true;
-    let native: NeoBrowserRuntime;
+    let native: WebRuntime;
     const browser = new BrowserRuntime({
       storageDir: path.join(directory, 'browser'),
       onState() {},
@@ -75,7 +75,7 @@ test(
         if (native && !native.isHandingOver()) void native.cancelTask();
       },
     });
-    native = new NeoBrowserRuntime(browser, {
+    native = new WebRuntime(browser, {
       directory: path.join(directory, 'native'),
       onState() {},
       onDisconnect() {},
@@ -103,23 +103,23 @@ test(
       await native.start();
       assert.equal(native.getState().version, '0.42.0');
       const tools = native.getTools();
-      assert(tools.some((tool) => tool.name === 'neo_act'));
+      assert(tools.some((tool) => tool.name === 'web_act'));
       assert(!tools.some((tool) => tool.name === 'workbench_browser_click'));
       assert(
         !tools.some(
           (tool) =>
-            tool.name === 'neo_credentials' ||
-            tool.name === 'neo_browser_profiles' ||
-            tool.name === 'neo_save_skill',
+            tool.name === 'web_credentials' ||
+            tool.name === 'web_browser_profiles' ||
+            tool.name === 'web_save_skill',
         ),
       );
       browser.allowAgentControl();
       const task = await native.beginTask('form');
-      const context = JSON.parse(task.context.match(/<neo_browser_context>\n([^\n]+)/)![1]);
+      const context = JSON.parse(task.context.match(/<web_browser_context>\n([^\n]+)/)![1]);
       assert.equal(context.currentPage.targetId, second);
       const page = context.currentPage.pageId;
-      const snapshot = await call('neo_snapshot', { page, mode: 'interactive' });
-      await call('neo_act', {
+      const snapshot = await call('web_snapshot', { page, mode: 'interactive' });
+      await call('web_act', {
         page,
         kind: 'fill',
         fields: [
@@ -127,8 +127,8 @@ test(
           { ref: ref(snapshot.text, '负责人'), value: 'Ada' },
         ],
       });
-      await call('neo_act', { page, kind: 'click', ref: ref(snapshot.text, '保存') });
-      await call('neo_wait', { page, for: 'text', value: '已保存 #1', timeout: 3000 });
+      await call('web_act', { page, kind: 'click', ref: ref(snapshot.text, '保存') });
+      await call('web_wait', { page, for: 'text', value: '已保存 #1', timeout: 3000 });
       assert.deepEqual(saved, [{ title: '发布 Athena', owner: 'Ada' }]);
       const other = (browser as any).tabs.get(first);
       const value = await other.page.call('Runtime.evaluate', {
@@ -152,9 +152,9 @@ test(
           (step) => step.toolName === 'act' && step.argsJson?.includes('click'),
         ),
       );
-      await call('neo_request_human_help', { page, reason: '确认负责人', kind: 'other' });
+      await call('web_request_human_help', { page, reason: '确认负责人', kind: 'other' });
       assert.equal(native.isHandingOver(), false);
-      const resumed = await call('neo_snapshot', { page });
+      const resumed = await call('web_snapshot', { page });
       assert.match(resumed.text, /负责人/);
       await native.finishTask('form');
       const finished = await native.server.detail(task.sessionId);
@@ -167,11 +167,11 @@ test(
       browser.allowAgentControl();
       const control = await native.beginTask('control');
       const controlContext = JSON.parse(
-        control.context.match(/<neo_browser_context>\n([^\n]+)/)![1],
+        control.context.match(/<web_browser_context>\n([^\n]+)/)![1],
       );
       const controlPage = controlContext.currentPage.pageId;
-      const controlSnapshot = await call('neo_snapshot', { page: controlPage });
-      await call('neo_run', {
+      const controlSnapshot = await call('web_snapshot', { page: controlPage });
+      await call('web_run', {
         code: `const p=browser.page(${controlPage});await p.evaluateInPage(()=>fetch('/signal',{method:'POST'}).then(r=>r.json()));await p.waitForTime(2000);await p.click(${JSON.stringify(ref(controlSnapshot.text, '保存'))});return true;`,
       });
       await waitFor(
@@ -182,11 +182,11 @@ test(
       browser.allowAgentControl();
       const waiting = await native.beginTask('cancel');
       const waitingContext = JSON.parse(
-        waiting.context.match(/<neo_browser_context>\n([^\n]+)/)![1],
+        waiting.context.match(/<web_browser_context>\n([^\n]+)/)![1],
       );
       const current = waitingContext.currentPage.pageId;
-      const fresh = await call('neo_snapshot', { page: current });
-      const planned = native.callTool('neo_run', {
+      const fresh = await call('web_snapshot', { page: current });
+      const planned = native.callTool('web_run', {
         code: `const p=browser.page(${current});await p.evaluateInPage(()=>fetch('/signal',{method:'POST'}).then(r=>r.json()));await p.waitForTime(2000);await p.click(${JSON.stringify(ref(fresh.text, '保存'))});return true;`,
       });
       await waitFor(
@@ -204,7 +204,7 @@ test(
       browser.allowAgentControl();
       approve = false;
       const denied = await native.beginTask('denied');
-      const deniedResult = await native.callTool('neo_run', { code: 'return 7;' });
+      const deniedResult = await native.callTool('web_run', { code: 'return 7;' });
       assert.equal(deniedResult.isError, true);
       assert.match(deniedResult.text, /未允许/);
       assert.equal(approvals.at(-1)?.action, 'browser-script');

@@ -124,7 +124,7 @@ import type {
   RecordedStep,
   Recording,
   Settings,
-  NativeNeoState,
+  WebExecutorState,
 } from '../shared/types';
 
 const emptyBrowser: BrowserState = {
@@ -298,7 +298,7 @@ export default function App() {
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [codexConnection, setCodexConnection] = useState<CodexConnectionState>({ status: 'idle' });
   const [browser, setBrowser] = useState<BrowserState>(emptyBrowser);
-  const [neo, setNeo] = useState<NativeNeoState>({ status: 'stopped' });
+  const [web, setWeb] = useState<WebExecutorState>({ status: 'stopped' });
   const [nativeRecordId, setNativeRecordId] = useState<string>();
   const [feishu, setFeishu] = useState<FeishuState>(emptyFeishu);
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -682,7 +682,7 @@ export default function App() {
     }
     let disposed = false;
     let browserUpdated = false;
-    let neoUpdated = false;
+    let webUpdated = false;
     let feishuUpdated = false;
     type RequestChange = (previous: PendingAgentRequest[]) => PendingAgentRequest[];
     let beforeSnapshot: RequestChange[] | undefined = [];
@@ -705,9 +705,9 @@ export default function App() {
           return;
         codexUpdated = true;
         setCodexConnection(event.state);
-      } else if (event.type === 'neo:state') {
-        neoUpdated = true;
-        setNeo(event.state);
+      } else if (event.type === 'web:state') {
+        webUpdated = true;
+        setWeb(event.state);
       } else if (event.type === 'browser:frame') {
         if (!event.frame.tabId || event.frame.tabId === activeBrowserTab.current)
           lastFrame.current = event.frame;
@@ -746,7 +746,7 @@ export default function App() {
         if (
           agentEvent.type === 'tool' &&
           (agentEvent.call.name.startsWith('workbench_browser_') ||
-            agentEvent.call.name.startsWith('neo_')) &&
+            agentEvent.call.name.startsWith('web_')) &&
           revealBrowserOnTool.current
         ) {
           setBrowserVisible(true);
@@ -848,7 +848,7 @@ export default function App() {
         lastFrame.current ??= snapshot.browserFrame;
         setSettings(snapshot.settings);
         setLocalUserName(snapshot.localUser?.name || '');
-        if (!neoUpdated) setNeo(snapshot.neo ?? { status: 'stopped' });
+        if (!webUpdated) setWeb(snapshot.web ?? { status: 'stopped' });
         setAgents(snapshot.agents);
         setSkills(snapshot.skills ?? []);
         setProviderSkills(snapshot.providerSkills ?? []);
@@ -1236,7 +1236,7 @@ export default function App() {
       setAgents(snapshot.agents);
       setSkills(snapshot.skills ?? []);
       setBrowser(snapshot.browser);
-      setNeo(snapshot.neo ?? { status: 'stopped' });
+      setWeb(snapshot.web ?? { status: 'stopped' });
       lastFrame.current = snapshot.browserFrame ?? lastFrame.current;
       if (snapshot.onboarding) acceptOnboardingState(snapshot.onboarding);
     } catch (error) {
@@ -2295,7 +2295,7 @@ export default function App() {
                                         actions={
                                           message.status !== 'streaming' &&
                                           (copyableText(message, message === messages.at(-1)) ||
-                                            message.neoSessionId) && (
+                                            message.webSessionId) && (
                                             <ChatMessageActions>
                                               {copyableText(
                                                 message,
@@ -2310,11 +2310,11 @@ export default function App() {
                                                   <Tooltip.Content>复制回答</Tooltip.Content>
                                                 </Tooltip>
                                               )}
-                                              {message.neoSessionId && (
+                                              {message.webSessionId && (
                                                 <ProChatMessage.Action
                                                   isIconOnly={false}
                                                   onPress={() => {
-                                                    setNativeRecordId(message.neoSessionId);
+                                                    setNativeRecordId(message.webSessionId);
                                                     setBrowserVisible(true);
                                                   }}
                                                 >
@@ -2780,7 +2780,7 @@ export default function App() {
                 />
                 <BrowserPane
                   state={browser}
-                  neo={neo}
+                  web={web}
                   nativeRecordId={nativeRecordId}
                   recordings={recordings}
                   liveSteps={liveSteps}

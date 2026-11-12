@@ -5,6 +5,7 @@ import {
   copyableText,
   endedOutcome,
   failedStep,
+  isBookkeepingTool,
   legacyStatus,
   phaseGlyph,
   phaseOfMessage,
@@ -61,7 +62,7 @@ test('a running turn has exactly one phase, in priority order', () => {
     tool: 'commandExecution',
     target: 'npm run build',
   });
-  const checkpoint = tool({ name: 'neo_checkpoint', input: { summary: '标题显示为欢迎回来' } });
+  const checkpoint = tool({ name: 'web_checkpoint', input: { summary: '标题显示为欢迎回来' } });
   assert.deepEqual(runningPhase({ ...idle, tools: [command, checkpoint] }), {
     kind: 'verifying',
     checkpoint: '标题显示为欢迎回来',
@@ -86,7 +87,7 @@ test('a running turn has exactly one phase, in priority order', () => {
     runningPhase({
       ...idle,
       connected: false,
-      tools: [{ ...command, status: 'done' }, tool({ name: 'neo_plan' })],
+      tools: [{ ...command, status: 'done' }, tool({ name: 'web_plan' })],
     }),
     { kind: 'thinking' },
   );
@@ -158,7 +159,7 @@ test('vocabulary: titles, glyphs and legacy status come from the phase alone', (
   assert.equal(phaseText(run), '运行 npm test');
   assert.equal(phaseTitle({ kind: 'acting', tool: 'commandExecution' }), '执行命令');
   assert.equal(
-    phaseTitle({ kind: 'acting', tool: 'neo_snapshot', target: '页面 2' }),
+    phaseTitle({ kind: 'acting', tool: 'web_snapshot', target: '页面 2' }),
     '查看页面结构',
   );
   assert.equal(
@@ -177,27 +178,31 @@ test('vocabulary: titles, glyphs and legacy status come from the phase alone', (
 
 test('tools map to a glyph kind, a title and a recognisable target', () => {
   assert.equal(toolKind('fileChange'), 'edit');
-  assert.equal(toolKind('neo_navigate'), 'web');
-  assert.equal(toolKind('neo_act'), 'click');
+  assert.equal(toolKind('web_navigate'), 'web');
+  assert.equal(toolKind('web_act'), 'click');
   assert.equal(toolKind('workbench_browser_snapshot'), 'read');
   assert.equal(toolKind('grepToolCall', 'cursor'), 'read');
   assert.equal(toolKind('bash', 'pi'), 'run');
   assert.equal(toolTitle('read', 'pi'), '读取文件');
   assert.equal(toolTitle('write', 'pi'), '写入文件');
+  assert.equal(toolTitle('web_read'), '读取网页内容');
+  // Conversations stored before the rename keep their tool names.
   assert.equal(toolTitle('neo_read'), '读取网页内容');
+  assert.equal(toolKind('neo_act'), 'click');
+  assert.equal(isBookkeepingTool('neo_checkpoint'), true);
   assert.equal(toolTitle('mystery_tool'), 'mystery_tool');
   assert.equal(
-    toolTarget({ name: 'neo_navigate', input: { url: 'https://example.com/docs?q=1' } }),
+    toolTarget({ name: 'web_navigate', input: { url: 'https://example.com/docs?q=1' } }),
     'example.com/docs',
   );
-  assert.equal(toolTarget({ name: 'neo_snapshot', input: { page: 2 } }), '页面 2');
+  assert.equal(toolTarget({ name: 'web_snapshot', input: { page: 2 } }), '页面 2');
   assert.equal(
     toolTarget({ name: 'read', input: { path: '/Users/me/project/src/renderer/App.tsx' } }),
     'src/renderer/App.tsx',
   );
   const changes = [{ path: 'src/a.ts' }, { path: 'src/b.ts' }];
   assert.equal(toolTarget({ name: 'fileChange', input: changes }), 'src/a.ts 等 2 个文件');
-  assert.equal(toolTarget({ name: 'neo_act', input: { action: 'click' } }), '');
+  assert.equal(toolTarget({ name: 'web_act', input: { action: 'click' } }), '');
   assert.equal(
     changedFiles([
       tool({ name: 'fileChange', input: changes, status: 'done' }),
@@ -256,9 +261,9 @@ test('the timeline merges plan, actions, checkpoints and requests by time', () =
     plan: next,
     tools: [
       tool({ name: 'fileChange', input: [{ path: 'src/a.ts' }], status: 'done', startedAt: 20 }),
-      tool({ name: 'neo_plan', status: 'done', startedAt: 39 }),
+      tool({ name: 'web_plan', status: 'done', startedAt: 39 }),
       tool({ name: 'commandExecution', input: 'npm run build', status: 'error', startedAt: 30 }),
-      tool({ name: 'neo_snapshot', input: { page: 1 }, status: 'done', startedAt: 50 }),
+      tool({ name: 'web_snapshot', input: { page: 1 }, status: 'done', startedAt: 50 }),
     ],
     requests: [
       { id: 'a1', kind: 'approval', summary: 'npm run build', resolution: 'approved', at: 25 },
@@ -284,7 +289,7 @@ test('the timeline merges plan, actions, checkpoints and requests by time', () =
       'request:已允许 · npm run build',
       'tool:commandExecution',
       'plan:核对页面',
-      'tool:neo_snapshot',
+      'tool:web_snapshot',
       'check:已核对 · 标题显示为欢迎回来',
     ],
   );
@@ -297,7 +302,7 @@ test('the timeline merges plan, actions, checkpoints and requests by time', () =
     ...message,
     status: 'error',
     plan: [{ step: '核对页面', status: 'inProgress' }],
-    tools: [tool({ name: 'neo_act' })],
+    tools: [tool({ name: 'web_act' })],
     execution: [],
     requests: [],
   });

@@ -1011,7 +1011,7 @@ test(
   'real Chrome: embedded frames, tools, recording, inspection and stale references',
   { skip: !binary, timeout: 60_000 },
   async () => {
-    const storageDir = await mkdtemp(join(tmpdir(), 'workbench-neo-test-'));
+    const storageDir = await mkdtemp(join(tmpdir(), 'workbench-web-test-'));
     const fixture = createServer((_req, response) => {
       response.setHeader('Content-Type', 'text/html; charset=utf-8');
       response.end(

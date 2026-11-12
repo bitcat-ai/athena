@@ -44,7 +44,7 @@ const snapshot = {
     recording: false,
     inspecting: false,
   },
-  neo: { status: 'stopped' },
+  web: { status: 'stopped' },
   feishu: { status: 'disconnected', paired: false },
   recordings: [],
   conversations: [
@@ -144,7 +144,7 @@ window.workbench={
   if(action==='models:list')return [{model:'fixture-model',name:'Fixture Model',efforts:[{id:'low',description:'Low'}],defaultEffort:'low'}];
   if(action==='share:state')return {active:false,participants:[]};
   if(action==='usage:snapshot')return {records:[],since:Date.now(),updatedAt:Date.now()};
-  if(action==='neo:records')return [];
+  if(action==='web:records')return [];
   return true;
  },
  onEvent(fn){fixture.listeners.push(fn);return()=>{fixture.listeners=fixture.listeners.filter(item=>item!==fn)}}

@@ -29,7 +29,7 @@
 
 ```ts
 type TurnPhase =
-  | { kind: 'preparing' } // 连接 Agent / 启动 Neo
+  | { kind: 'preparing' } // 连接 Agent / 启动网页执行器
   | { kind: 'thinking' } // 模型推理，无工具
   | { kind: 'acting'; tool: string; target?: string } // 执行工具
   | { kind: 'verifying'; checkpoint: string } // 正在核对结果（checkpoint）

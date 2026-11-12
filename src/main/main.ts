@@ -29,7 +29,7 @@ import {
   supportsImages,
 } from '../shared/agents';
 import { imageSource, parseImages, type ImageAttachment } from '../shared/images';
-import { NeoBrowserRuntime } from './neo-browser';
+import { WebRuntime } from './web-runtime';
 import { copyText } from './clipboard';
 import { FeishuConnector } from './feishu';
 import { TurnNotifications } from './notifications';
@@ -120,7 +120,7 @@ let resetAfterTurn = false;
 const warming = new Map<string, Promise<void>>();
 let browser: BrowserRuntime;
 let sharing: SharingRuntime | undefined;
-let neo: NeoBrowserRuntime;
+let web: WebRuntime;
 let feishu: FeishuConnector;
 let agents: AgentInfo[] = [];
 const checkCodexUpdate = createCodexUpdateChecker((url, options) => net.fetch(url, options));
@@ -221,7 +221,7 @@ function toolsFor(conversation: Pick<Conversation, 'agent'>) {
   const agent = conversationAgent(conversation);
   if (!supportsBrowser(agent)) return [];
   if (agent !== 'codex' && browser.getState().status !== 'ready') return [];
-  return neo.getTools();
+  return web.getTools();
 }
 function assertTaskEnvironment() {
   if (onboarding?.getState().requiresSetup && onboarding.getState().workspace.status !== 'ready')
@@ -368,7 +368,7 @@ function prepareConversation(conversation: Conversation): Promise<void> {
         supportsBrowser(info.id) &&
         (onboarding?.allowsBrowserStartup !== false || browser.getState().status === 'ready')
       )
-        await neo.start();
+        await web.start();
     } catch {
       /* Local CLI work does not require the web executor. */
     }
@@ -682,10 +682,10 @@ function getSession(
         if (
           active.readonly &&
           !readOnlyBrowserTools.has(name) &&
-          !neo.isReadOnly(name, args as Record<string, unknown>)
+          !web.isReadOnly(name, args as Record<string, unknown>)
         )
           return { text: '本轮只分析录制，不能执行页面操作。', isError: true };
-        return neo.callTool(name, args as Record<string, unknown>);
+        return web.callTool(name, args as Record<string, unknown>);
       },
       onClose: (message) => {
         if (
@@ -705,7 +705,7 @@ function getSession(
         const current = conversation.messages.find((message) => message.id === active?.messageId);
         if (current) {
           const unresolved =
-            event.type === 'complete' ? neo.unresolvedResult(current.id) : undefined;
+            event.type === 'complete' ? web.unresolvedResult(current.id) : undefined;
           // The outcome card explains an unverified result; the reply itself stays untouched.
           if (unresolved)
             onAgentEvent(conversation.id, current, { type: 'error', message: unresolved });
@@ -848,7 +848,7 @@ async function runTurn(
       supportsBrowser(info.id) &&
       (onboarding?.allowsBrowserStartup !== false || browser.getState().status === 'ready')
     )
-      await neo.start();
+      await web.start();
   } catch {
     /* Local CLI tasks remain available; the web executor reports its own connection state. */
   }
@@ -912,14 +912,14 @@ async function runTurn(
     if (selectedElement && !readonly)
       void browser.setElementFeedback(selectedElement.ref, 'working').catch(() => {});
     let nativeContext = '';
-    if (supportsBrowser(info.id) && neo.getState().status === 'ready') {
-      const task = await neo.beginTask(assistant.id, readonly);
-      assistant.neoSessionId = task.sessionId;
+    if (supportsBrowser(info.id) && web.getState().status === 'ready') {
+      const task = await web.beginTask(assistant.id, readonly);
+      assistant.webSessionId = task.sessionId;
       nativeContext = task.context;
       emit({ type: 'conversation:updated', conversation });
     }
     if (active?.cancelled) {
-      await neo.cancelTask();
+      await web.cancelTask();
       throw new Error('任务已停止');
     }
     await session.send(
@@ -930,7 +930,7 @@ async function runTurn(
       selectedProviderSkills,
       images,
     );
-    const unresolved = neo.unresolvedResult(assistant.id);
+    const unresolved = web.unresolvedResult(assistant.id);
     if (unresolved) throw new Error(unresolved);
     if (assistant.status === 'streaming') assistant.status = 'done';
     return notifications.includesSecretInput
@@ -958,7 +958,7 @@ async function runTurn(
     browser.revokeAgentControl();
     for (const resolve of active?.nativeApprovals.values() ?? []) resolve(false);
     active?.nativeApprovals.clear();
-    await neo.finishTask(assistant.id, assistant.status === 'done').catch(() => {});
+    await web.finishTask(assistant.id, assistant.status === 'done').catch(() => {});
     if (selectedElement && !readonly)
       await browser.setElementFeedback(selectedElement.ref, null).catch(() => {});
     endPhase(assistant, active?.cancelled);
@@ -1004,7 +1004,7 @@ async function stopTurn() {
   browser.revokeAgentControl();
   for (const resolve of active.nativeApprovals.values()) resolve(false);
   active.nativeApprovals.clear();
-  await neo.cancelTask();
+  await web.cancelTask();
   await active?.session.interrupt();
 }
 /** Hidden context for 再核对一次: the agent re-observes instead of repeating what it already did. */
@@ -1016,7 +1016,7 @@ function recheckContext(message: ChatMessage): string {
     '<follow_up>',
     '上一轮的网页操作结果没有核对成功。',
     ...(checks.length ? ['未能核对的检查点：', ...checks.map((item) => `- ${item}`)] : []),
-    '先用 snapshot/read/grep 重新观察实际页面，再用 neo_checkpoint 引用页面原文给出结论。不要重复已生效的操作；仍无法确认时请求人工处理。',
+    '先用 snapshot/read/grep 重新观察实际页面，再用 web_checkpoint 引用页面原文给出结论。不要重复已生效的操作；仍无法确认时请求人工处理。',
     '</follow_up>',
   ].join('\n');
 }
@@ -1044,7 +1044,7 @@ function retryRequest(message: ChatMessage, agent: AgentId) {
 function requestNativeApproval(request: Omit<ApprovalRequest, 'id' | 'kind'>): Promise<boolean> {
   const turn = active;
   if (!turn || turn.cancelled) return Promise.resolve(false);
-  const id = 'neo:' + randomUUID();
+  const id = 'web:' + randomUUID();
   const assistant = getConversation(turn.conversationId).messages.find(
     (message) => message.id === turn.messageId,
   )!;
@@ -1173,7 +1173,7 @@ async function handleFeishuMessage(message: FeishuMessage) {
   }
 }
 async function createBrowserRuntime(binaryPath?: string) {
-  if (neo) await neo.stop();
+  if (web) await web.stop();
   await sharing?.stop();
   if (browser) await browser.dispose();
   browser = new BrowserRuntime({
@@ -1188,10 +1188,10 @@ async function createBrowserRuntime(binaryPath?: string) {
       sharing?.onBrowserState(state);
       if (
         state.status === 'ready' &&
-        neo?.getState().status === 'stopped' &&
+        web?.getState().status === 'stopped' &&
         onboarding?.allowsBrowserStartup !== false
       )
-        void neo.start().catch(() => {});
+        void web.start().catch(() => {});
     },
     onFrame: (frame) => {
       lastFrame = frame;
@@ -1204,7 +1204,7 @@ async function createBrowserRuntime(binaryPath?: string) {
     },
     onSelected: (element, reason) => emit({ type: 'browser:selected', element, reason }),
     onHumanTakeover: () => {
-      neo?.onHumanInteraction();
+      web?.onHumanInteraction();
     },
   });
   sharing = new SharingRuntime({
@@ -1222,10 +1222,10 @@ async function createBrowserRuntime(binaryPath?: string) {
       } else store.schedule();
     },
   });
-  neo = new NeoBrowserRuntime(browser, {
+  web = new WebRuntime(browser, {
     directory: path.join(app.getPath('userData'), 'agent-browser'),
     download: (url, options) => net.fetch(url, options),
-    onState: (state) => emit({ type: 'neo:state', state }),
+    onState: (state) => emit({ type: 'web:state', state }),
     onDisconnect: () => {
       if (active) {
         void stopTurn().catch(() => {});
@@ -1247,7 +1247,7 @@ async function createBrowserRuntime(binaryPath?: string) {
         (item) => item.id === taskId,
       );
       if (message) {
-        message.neoSessionId = sessionId;
+        message.webSessionId = sessionId;
         store.schedule();
         emit({
           type: 'conversation:updated',
@@ -1291,7 +1291,7 @@ async function snapshot(): Promise<AppSnapshot> {
     providerSkillDiscovery,
     codexConnection,
     browser: browser.getState(),
-    neo: neo?.getState(),
+    web: web?.getState(),
     feishu: feishu.getState(),
     conversations: store.data.conversations,
     recordings: store.data.recordings,
@@ -1737,15 +1737,15 @@ async function invoke(action: string, payload: unknown) {
       void prepareConversation(selectedConversation()).catch(() => {});
       return store.data.settings;
     }
-    case 'neo:connect':
+    case 'web:connect':
       if (active || startingTurn) throw new Error('请先停止当前任务');
-      await neo.stop();
-      await neo.start();
-      return neo.getState();
-    case 'neo:records':
-      return neo.server.records();
-    case 'neo:record':
-      return neo.server.detail(string(record(payload).id, 150));
+      await web.stop();
+      await web.start();
+      return web.getState();
+    case 'web:records':
+      return web.server.records();
+    case 'web:record':
+      return web.server.detail(string(record(payload).id, 150));
     case 'recording:start':
       await browser.startRecording();
       return true;
@@ -1946,18 +1946,18 @@ async function launch() {
         (configured ? await discoverChrome(configured) : undefined) ?? (await discoverChrome())
       );
     },
-    browserReady: () => browser.getState().status === 'ready' && neo.getState().status === 'ready',
+    browserReady: () => browser.getState().status === 'ready' && web.getState().status === 'ready',
     prepareBrowser: async (binary, signal, phase) => {
       signal.throwIfAborted();
       if (active || startingTurn || sharing?.active) throw new Error('请先结束当前任务或共享');
       if (binary && browser.getState().binaryPath !== binary) await createBrowserRuntime(binary);
       signal.throwIfAborted();
       const targetBrowser = browser,
-        targetNeo = neo;
+        targetWeb = web;
       const hadBrowser = ['ready', 'starting'].includes(targetBrowser.getState().status);
-      const hadNeo = ['ready', 'starting'].includes(targetNeo.getState().status);
+      const hadWeb = ['ready', 'starting'].includes(targetWeb.getState().status);
       const cleanup = async () => {
-        if (!hadNeo) await targetNeo.stop();
+        if (!hadWeb) await targetWeb.stop();
         if (!hadBrowser) await targetBrowser.dispose();
       };
       const cancel = () => {
@@ -1969,7 +1969,7 @@ async function launch() {
         await targetBrowser.start(hadBrowser ? undefined : demoUrl);
         signal.throwIfAborted();
         phase('preparing-tools', '正在校验并准备网页控制组件…');
-        await targetNeo.start();
+        await targetWeb.start();
         signal.throwIfAborted();
         const previous = store.data.settings.browserPath;
         store.data.settings.browserPath = targetBrowser.getState().binaryPath;
@@ -2153,7 +2153,7 @@ app.on('before-quit', (event) => {
     onboarding?.dispose(),
     sharing
       ?.stop()
-      .then(() => neo?.stop())
+      .then(() => web?.stop())
       .then(() => browser?.dispose()),
     feishu?.dispose(),
     ...[...sessions.values()].map((session) => session.close()),

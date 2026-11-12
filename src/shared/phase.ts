@@ -151,7 +151,8 @@ const nativeVerbs: Record<string, string> = {
   shell: '运行',
   webfetch: '打开',
 };
-const bare = (name: string) => name.replace(/^(?:workbench_browser_|neo_)/, '');
+/** `neo_` is the prefix stored in conversations from 0.9.0 and earlier. */
+const bare = (name: string) => name.replace(/^(?:workbench_browser_|web_|neo_)/, '');
 const native = (name: string) => name.replace(/ToolCall$/, '').toLowerCase();
 /** Bookkeeping tools that are shown as plan steps and checkpoints, never as actions. */
 export const isBookkeepingTool = (name: string) => ['plan', 'checkpoint'].includes(bare(name));

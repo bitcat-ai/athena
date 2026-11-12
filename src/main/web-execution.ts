@@ -5,7 +5,7 @@ type Observation = { id: string; page?: number; revision: number; text: string }
 type Recovery = { page?: number; signature: string; observation?: Observation };
 
 export const planTool: BrowserTool = {
-  name: 'neo_plan',
+  name: 'web_plan',
   description:
     '发布或更新多步骤网页任务的简短计划。只写用户可理解的目标和真实状态，不包含内部推理、凭据或虚构进度。完成步骤需由页面检查点支持。',
   inputSchema: {
@@ -32,7 +32,7 @@ export const planTool: BrowserTool = {
 };
 
 export const checkpointTool: BrowserTool = {
-  name: 'neo_checkpoint',
+  name: 'web_checkpoint',
   description:
     '记录网页任务的可核对检查点。引用最近工具返回的 observationId，并提供其中原样出现的短证据。操作失败或等待未匹配后，必须先 snapshot/read/grep 检查实际状态，再以 verified（已发生，无需重放）、not_applied（确认未发生，可重新规划）或 unknown（仍未知，等待人工）核对。恢复期间可用 tabs new 打开回执页检查；跨页面证据必须用 recoveryPage 指明原失败页编号。未知结果不能重放提交。检查点是有证据的 Agent 判断，不替代页面或服务端事实。',
   inputSchema: {
@@ -90,7 +90,7 @@ export class WebExecution {
   assertCanMutate(signature: string) {
     if (this.recovery)
       throw new Error(
-        '上次动作结果尚未核对：先用 snapshot/read/grep 重新观察，再用 neo_checkpoint 引用证据。不能重放提交；仍未知时请求人工处理。',
+        '上次动作结果尚未核对：先用 snapshot/read/grep 重新观察，再用 web_checkpoint 引用证据。不能重放提交；仍未知时请求人工处理。',
       );
     if (this.completedActions.has(signature))
       throw new Error('该操作已确认生效，不能重复执行。请检查结果并继续后续步骤。');

@@ -1,6 +1,6 @@
 # Claude Code / Gemini CLI / Cursor Agent 协议依据
 
-本文记录隔离适配阶段的协议依据。当前源码新增了 Claude 的宿主 Neo MCP 接入，纯文本模式和 Gemini/Cursor 仍保留原限制。宿主集成与验证层级见 [本机 CLI 适配](mainstream-cli-support.md)；不能把协议或模拟结果当作全部远端模型实测通过。
+本文记录隔离适配阶段的协议依据。当前源码新增了 Claude 的宿主网页工具 MCP 接入，纯文本模式和 Gemini/Cursor 仍保留原限制。宿主集成与验证层级见 [本机 CLI 适配](mainstream-cli-support.md)；不能把协议或模拟结果当作全部远端模型实测通过。
 
 ## 范围与验证层级
 
@@ -21,7 +21,7 @@
 - [官方 CLI 参数](https://code.claude.com/docs/en/cli-reference) 与本机 `claude 2.1.311 --help`：`--tools` 指定可用内置工具，`--allowedTools` 仅配置 permission allow 规则，二者重复但职责不同；当前均设 `Read,Glob,Grep,Skill`。`--disallowedTools` 显式拒绝 `Write,Edit,Bash,Task,WebFetch,WebSearch`；`--permission-mode dontAsk --permission-prompts none` 使其它需要审批的调用拒绝而不等待。`--strict-mcp-config --mcp-config '{"mcpServers":{}}'` 不载入用户 MCP。`--settings` 仅对该次进程设 `disableAllHooks` 和 `disableSkillShellExecution`，分别关闭配置/插件 hooks 与 Skill/custom command 的内联 shell；保留 slash Skill 原生分发。未使用 `--safe-mode`（该模式禁用 Skills），也未设置未经 CLI 支持承诺的环境变量。
 - 本机 help / headless 文档：`--permission-mode dontAsk --permission-prompts none`，无人审批时拒绝请求而非等待；保留 `--no-chrome`。Skill 正文中的 `allowed-tools` 不能视为用户或宿主授权；与启动工具白名单、既有 deny 的实际交集仍需独立 CLI 验证，模拟测试不能证明此边界。
 - [本机 headless 事件](https://code.claude.com/docs/en/headless) / 本机 help：使用原生 `assistant.message.content[].type=tool_use` 和后续 `user.message.content[].type=tool_result` 记录工具生命周期。仅接受 `Read,Glob,Grep,Skill` 的调用且校验对应结果完成；工具返回错误或结果缺失时任务失败。工具结果正文与 thinking 不进入用户可见事件。
-- Neo 通过每轮私有 MCP 配置接入，严格限定为 Athena 工具；`alwaysLoad` 与 `ENABLE_TOOL_SEARCH=false` 保证首轮可见，配置与连接在回合结束后关闭。只读内置工具与 Neo 工具分别记录，完整工具许可同时覆盖两者。
+- 网页工具通过每轮私有 MCP 配置接入，严格限定为 Athena 工具；`alwaysLoad` 与 `ENABLE_TOOL_SEARCH=false` 保证首轮可见，配置与连接在回合结束后关闭。只读内置工具与网页工具分别记录，完整工具许可同时覆盖两者。
 
 只对当前 assistant 消息内的模型字段发 `cli-message` 模型证据；初始化配置不算运行模型证明。usage 使用最终 result 的本轮累计数据；input 为明确给出的 uncached + cache-read + cache-write 之和，任一缺失则 input 未知；没有明确 total_tokens 时总 token 未知。不把 reasoning 或未报告 cache 字段填零。
 

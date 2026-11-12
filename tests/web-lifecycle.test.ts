@@ -28,9 +28,9 @@ test(
     const f = await webFixture('/plain');
     try {
       const task = await f.begin('audit-detail');
-      const snapshot = await f.call('neo_snapshot', { page: task.page });
+      const snapshot = await f.call('web_snapshot', { page: task.page });
       const ref = refOf(snapshot.text, 'Title');
-      await f.call('neo_act', {
+      await f.call('web_act', {
         page: task.page,
         kind: 'fill',
         ref,
@@ -49,16 +49,16 @@ test(
       assert.equal(action.targetId, f.browser.getState().activeTabId);
       assert.equal(action.title, 'Tasks');
       assert.equal(audit.session.site, new URL(f.origin).host);
-      await f.call('neo_act', {
+      await f.call('web_act', {
         page: task.page,
         kind: 'fill',
         fields: [{ ref, value: 'never-store-batch-input' }],
       });
-      await f.call('neo_navigate', {
+      await f.call('web_navigate', {
         page: task.page,
         url: f.origin + '/next?token=never-store-url-token#never-store-fragment',
       });
-      const invalid = await f.runtime.callTool('neo_act', {
+      const invalid = await f.runtime.callTool('web_act', {
         page: task.page,
         kind: 'click',
         ref: 'never-log-invalid-ref',
@@ -94,7 +94,7 @@ test('ending a recording does not wait for or cancel a read-only wait', options,
     f.browser.startRecording();
     const task = await f.begin('recording-with-read');
     let completed = false;
-    const pending = f.runtime.callTool('neo_wait', never(task.page)).then((result) => {
+    const pending = f.runtime.callTool('web_wait', never(task.page)).then((result) => {
       completed = true;
       return result;
     });
@@ -122,7 +122,7 @@ test(
       const firstTab = f.browser.getState().activeTabId!;
       const pid = first.worker.daemon.pid;
       assert(pid);
-      await f.call('neo_snapshot', { page: first.page });
+      await f.call('web_snapshot', { page: first.page });
       await f.runtime.finishTask('first');
       const firstRecord = await f.runtime.server.detail(first.sessionId);
       assert.equal(firstRecord.session.status, 'done');
@@ -140,8 +140,8 @@ test(
         /已停止/,
       );
       assert(alive(pid), 'a finished task cannot stop the daemon it handed on');
-      const snap = await f.call('neo_snapshot', { page: second.page });
-      await f.call('neo_act', {
+      const snap = await f.call('web_snapshot', { page: second.page });
+      await f.call('web_act', {
         page: second.page,
         kind: 'fill',
         ref: refOf(snap.text, 'Title'),
@@ -158,16 +158,16 @@ test(
       assert.deepEqual(await f.runtime.server.detail(first.sessionId), firstRecord);
       const readonly = await f.begin('readonly', true);
       assert.equal(readonly.worker.daemon.pid, pid);
-      const refused = await f.runtime.callTool('neo_act', {
+      const refused = await f.runtime.callTool('web_act', {
         page: readonly.page,
         kind: 'press',
         key: 'Enter',
       });
       assert(refused.isError);
       assert.match(refused.text, /只允许读取/);
-      assert((await f.runtime.callTool('neo_tabs', { action: 'new' })).isError);
-      await f.call('neo_tabs', { action: 'list' });
-      await f.call('neo_read', { page: readonly.page, format: 'text' });
+      assert((await f.runtime.callTool('web_tabs', { action: 'new' })).isError);
+      await f.call('web_tabs', { action: 'list' });
+      await f.call('web_read', { page: readonly.page, format: 'text' });
       await f.runtime.finishTask('readonly');
       assert.equal((await f.runtime.server.records()).length, 3);
       const directory = first.worker.directory;
@@ -192,15 +192,15 @@ test(
     const title = () => f.state(`document.querySelector('#title').value`);
     try {
       const primed = await f.begin('prime');
-      const staleRef = refOf((await f.call('neo_snapshot', { page: primed.page })).text, 'Title');
+      const staleRef = refOf((await f.call('web_snapshot', { page: primed.page })).text, 'Title');
       const initialPid = primed.worker.daemon.pid;
       await f.runtime.finishTask('prime');
       const cancel = await f.begin('cancel');
       assert.equal(cancel.worker.daemon.pid, initialPid);
-      const snap = await f.call('neo_snapshot', { page: cancel.page });
-      const pending = f.runtime.callTool('neo_wait', never(cancel.page));
+      const snap = await f.call('web_snapshot', { page: cancel.page });
+      const pending = f.runtime.callTool('web_wait', never(cancel.page));
       await until(() => cancel.worker.sockets.size, 'the wait to reach the daemon');
-      const queued = f.runtime.callTool('neo_act', {
+      const queued = f.runtime.callTool('web_act', {
         page: cancel.page,
         kind: 'fill',
         ref: refOf(snap.text, 'Title'),
@@ -222,27 +222,27 @@ test(
       const takeover = await f.begin('takeover');
       assert.equal(takeover.worker.daemon.pid, replacementPid);
       const selected = (await f.browser.queryElements({ selector: '#title' })).elements[0];
-      const observing = f.runtime.callTool('neo_wait', never(takeover.page));
+      const observing = f.runtime.callTool('web_wait', never(takeover.page));
       await until(() => takeover.worker.sockets.size, 'the wait to reach the daemon');
       const takeoverStart = performance.now();
       await f.browser.selectElement(selected.ref);
       assert((await observing).isError);
       assert(!alive(replacementPid));
       const takeoverMs = Math.round(performance.now() - takeoverStart);
-      const blocked = await f.runtime.callTool('neo_act', {
+      const blocked = await f.runtime.callTool('web_act', {
         page: takeover.page,
         kind: 'press',
         key: 'Enter',
       });
       assert.match(blocked.text, /重新观察/);
       const resumeStart = performance.now();
-      const fresh = await f.call('neo_snapshot', { page: takeover.page });
+      const fresh = await f.call('web_snapshot', { page: takeover.page });
       const resumeMs = Math.round(performance.now() - resumeStart);
       const resumedClient = (f.runtime as any).current.client;
       const resumedPid = resumedClient.worker.daemon.pid;
       assert.notEqual(resumedPid, replacementPid);
       assert.notEqual(resumedClient.id, takeover.sessionId);
-      const stale = await f.runtime.callTool('neo_act', {
+      const stale = await f.runtime.callTool('web_act', {
         page: takeover.page,
         kind: 'fill',
         ref: staleRef,
@@ -250,7 +250,7 @@ test(
       });
       assert(stale.isError);
       assert.match(stale.text, /引用已失效/);
-      const barred = await f.runtime.callTool('neo_act', {
+      const barred = await f.runtime.callTool('web_act', {
         page: takeover.page,
         kind: 'fill',
         ref: refOf(fresh.text, 'Title'),
@@ -305,12 +305,12 @@ test(
       assert.equal(server.sessions.size, 0);
       assert.equal(server.worker, undefined);
       assert.equal(f.runtime.getState().status, 'stopped');
-      assert((await f.runtime.callTool('neo_snapshot', { page: 1 })).isError);
+      assert((await f.runtime.callTool('web_snapshot', { page: 1 })).isError);
 
       await f.runtime.start();
       const fresh = await f.begin('after-shutdown');
       const attachedPid = fresh.worker.daemon.pid;
-      await f.call('neo_snapshot', { page: fresh.page });
+      await f.call('web_snapshot', { page: fresh.page });
       await f.runtime.finishTask('after-shutdown');
       assert(alive(attachedPid));
       await f.browser.dispose();
@@ -319,8 +319,8 @@ test(
       assert(!alive(attachedPid), 'a daemon bound to the old browser is not kept');
       const rebound = await f.begin('after-browser-restart');
       assert.notEqual(rebound.worker.daemon.pid, attachedPid);
-      const snapshot = await f.call('neo_snapshot', { page: rebound.page });
-      await f.call('neo_act', {
+      const snapshot = await f.call('web_snapshot', { page: rebound.page });
+      await f.call('web_act', {
         page: rebound.page,
         kind: 'fill',
         ref: refOf(snapshot.text, 'Title'),
@@ -338,11 +338,11 @@ test('a daemon that dies between steps is replaced and its refs are refused', op
   const f = await webFixture('/plain');
   try {
     const task = await f.begin('crash');
-    const snapshot = await f.call('neo_snapshot', { page: task.page });
+    const snapshot = await f.call('web_snapshot', { page: task.page });
     const pid = task.worker.daemon.pid;
     process.kill(pid, 'SIGKILL');
     await until(() => !task.worker.alive, 'the daemon to exit');
-    const stale = await f.runtime.callTool('neo_act', {
+    const stale = await f.runtime.callTool('web_act', {
       page: task.page,
       kind: 'fill',
       ref: refOf(snapshot.text, 'Title'),
@@ -352,9 +352,9 @@ test('a daemon that dies between steps is replaced and its refs are refused', op
     assert.match(stale.text, /引用已失效/);
     assert.equal(await f.state(`document.querySelector('#title').value`), '');
     await f.recover(task.page, 'Nothing saved');
-    const again = await f.call('neo_snapshot', { page: task.page });
+    const again = await f.call('web_snapshot', { page: task.page });
     assert.notEqual(task.client.worker.daemon.pid, pid);
-    await f.call('neo_act', {
+    await f.call('web_act', {
       page: task.page,
       kind: 'fill',
       ref: refOf(again.text, 'Title'),
@@ -375,8 +375,8 @@ test(
     const f = await webFixture('/plain');
     try {
       const task = await f.begin('help');
-      assert.match((await f.call('neo_await_human_help', {})).text, /没有人工协助请求/);
-      const help = await f.call('neo_request_human_help', {
+      assert.match((await f.call('web_await_human_help', {})).text, /没有人工协助请求/);
+      const help = await f.call('web_request_human_help', {
         page: task.page,
         reason: 'Sign in for me',
         kind: 'login',
@@ -384,15 +384,15 @@ test(
       assert.match(help.text, /交回控制权/);
       assert.equal(f.approvals.at(-1)!.action, 'browser-help');
       assert.match(f.approvals.at(-1)!.detail, /Sign in for me/);
-      assert.match((await f.call('neo_await_human_help', {})).text, /"status":"resolved"/);
-      const early = await f.runtime.callTool('neo_act', {
+      assert.match((await f.call('web_await_human_help', {})).text, /"status":"resolved"/);
+      const early = await f.runtime.callTool('web_act', {
         page: task.page,
         kind: 'press',
         key: 'Tab',
       });
       assert(early.isError, 'the page the human touched must be read again first');
       await f.recover(task.page, 'Nothing saved');
-      await f.call('neo_act', { page: task.page, kind: 'press', key: 'Tab' });
+      await f.call('web_act', { page: task.page, kind: 'press', key: 'Tab' });
       await f.runtime.finishTask('help');
     } finally {
       await f.cleanup();

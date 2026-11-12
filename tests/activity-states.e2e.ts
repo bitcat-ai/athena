@@ -119,7 +119,7 @@ const turns: Record<string, ChatMessage> = {
     tools: [
       {
         id: 'click',
-        name: 'neo_act',
+        name: 'web_act',
         input: { page: 1 },
         status: 'done',
         startedAt: now - 20_000,
@@ -193,7 +193,7 @@ const snapshot = {
     recording: false,
     inspecting: false,
   },
-  neo: { status: 'stopped' },
+  web: { status: 'stopped' },
   feishu: { status: 'disconnected', paired: false },
   recordings: [],
   conversations: Object.entries(turns).map(([id, message], index) => ({
@@ -265,7 +265,7 @@ window.workbench={
   if(action==='conversation:prepare')return {status:'ready',conversationId:payload.conversationId};
   if(action==='share:state')return {active:false,participants:[]};
   if(action==='usage:snapshot')return {records:[],since:Date.now(),updatedAt:Date.now()};
-  if(action==='neo:records')return [];
+  if(action==='web:records')return [];
   if(action==='browser:resize')return {width:payload.width,height:payload.height,tabId:payload.tabId};
   return true;
  },

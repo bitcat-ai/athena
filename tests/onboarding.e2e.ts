@@ -100,7 +100,7 @@ try {
   await expect
     .poll(async () => (await snapshot()).onboarding?.browser.status, { timeout: 150000 })
     .toBe('ready');
-  await expect.poll(async () => (await snapshot()).neo?.status, { timeout: 150000 }).toBe('ready');
+  await expect.poll(async () => (await snapshot()).web?.status, { timeout: 150000 }).toBe('ready');
   await expect.poll(async () => (await snapshot()).browser.title).toBe('Athena · 从想法开始');
   await page!.screenshot({ path: path.join(output, 'ready.png'), animations: 'disabled' });
   await expect(page!.locator('.onboarding')).toHaveCount(0, { timeout: 30000 });
@@ -172,10 +172,10 @@ try {
     .poll(async () => (await snapshot()).codexConnection?.status, { timeout: 60000 })
     .toBe('ready');
   assert.equal((await snapshot()).browser.status, 'missing');
-  assert.equal((await snapshot()).neo?.status, 'stopped');
+  assert.equal((await snapshot()).web?.status, 'stopped');
   assert.equal((await snapshot()).onboarding?.browser.status, 'deferred');
   checks.push(
-    'Project-free setup uses the private workspace; skipping the optional browser keeps Neo stopped while a new conversation can prepare the real Codex connection',
+    'Project-free setup uses the private workspace; skipping the optional browser keeps the web executor stopped while a new conversation can prepare the real Codex connection',
   );
   await close();
 

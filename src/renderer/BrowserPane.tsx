@@ -23,12 +23,12 @@ import type {
   BrowserInput,
   BrowserState,
   BrowserViewport,
-  NativeNeoState,
+  WebExecutorState,
   RecordedStep,
   Recording,
 } from '../shared/types';
 import type { GlyphKind } from '../shared/phase';
-import { NeoHistory } from './NeoHistory';
+import { WebHistory } from './WebHistory';
 import { PhaseGlyph } from './PhaseGlyph';
 import { SharePanel } from './SharePanel';
 import type { ShareState } from '../shared/share';
@@ -47,7 +47,7 @@ interface Props {
   initialFrame?: BrowserFrame;
   /** What the running turn is doing, echoed next to the page it works on. */
   agentStatus?: { text: string; glyph: GlyphKind };
-  neo?: NativeNeoState;
+  web?: WebExecutorState;
   nativeRecordId?: string;
 }
 function modifiers(event: {
@@ -75,7 +75,7 @@ export function BrowserPane({
   onToggleInspector,
   initialFrame,
   agentStatus,
-  neo,
+  web,
   nativeRecordId,
 }: Props) {
   const [share, setShare] = useState<ShareState>();
@@ -100,7 +100,7 @@ export function BrowserPane({
     };
   }, []);
   const [url, setUrl] = useState(state.url);
-  const [mode, setMode] = useState<'page' | 'recordings' | 'neo'>('page');
+  const [mode, setMode] = useState<'page' | 'recordings' | 'tasks'>('page');
   const [recordingId, setRecordingId] = useState<string>();
   const [frameLoading, setFrameLoading] = useState(!initialFrame?.data);
   const [viewportPending, setViewportPending] = useState(false);
@@ -218,7 +218,7 @@ export function BrowserPane({
     if (mode !== 'page' && state.inspecting) void onAction('browser:inspect', { enabled: false });
   }, [mode, state.inspecting, onAction]);
   useEffect(() => {
-    if (nativeRecordId) setMode('neo');
+    if (nativeRecordId) setMode('tasks');
   }, [nativeRecordId]);
   useEffect(() => () => cancelAnimationFrame(pointerFrame.current), []);
   useEffect(() => {
@@ -485,19 +485,19 @@ export function BrowserPane({
       setTabBusy(false);
     }
   };
-  const neoStatus =
-    neo?.status === 'ready' ? '已连接' : neo?.status === 'starting' ? '连接中' : '未连接';
+  const webStatus =
+    web?.status === 'ready' ? '已连接' : web?.status === 'starting' ? '连接中' : '未连接';
   return (
     <section className="browser-pane" aria-label="浏览器">
       <header className="browser-heading">
         <span
           className="engine-label"
           title={
-            neo?.error || (neo?.version ? `agent-browser ${neo.version}` : `网页执行器${neoStatus}`)
+            web?.error || (web?.version ? `agent-browser ${web.version}` : `网页执行器${webStatus}`)
           }
         >
-          <span aria-hidden className={`status-dot ${neo?.status === 'ready' ? 'online' : ''}`} />
-          网页执行器{neoStatus}
+          <span aria-hidden className={`status-dot ${web?.status === 'ready' ? 'online' : ''}`} />
+          网页执行器{webStatus}
         </span>
         <Tabs
           className="browser-tabstrip"
@@ -648,7 +648,7 @@ export function BrowserPane({
             操作记录
             {recordings.length > 0 && <span className="record-count">{recordings.length}</span>}
           </Segment.Item>
-          <Segment.Item id="neo">网页任务</Segment.Item>
+          <Segment.Item id="tasks">网页任务</Segment.Item>
         </Segment>
         <div className="tool-buttons">
           <ActionButton
@@ -906,8 +906,8 @@ export function BrowserPane({
             ) : null}
           </div>
         </div>
-      ) : mode === 'neo' ? (
-        <NeoHistory state={neo} selectedId={nativeRecordId} onAction={onAction} />
+      ) : mode === 'tasks' ? (
+        <WebHistory state={web} selectedId={nativeRecordId} onAction={onAction} />
       ) : (
         <div className="recordings-view">
           {!recording ? (

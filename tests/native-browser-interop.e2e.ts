@@ -1,4 +1,4 @@
-/** Real Electron + installed Claude/Pi/OpenCode + Neo; local model responses, zero remote model calls. */
+/** Real Electron + installed Claude/Pi/OpenCode + web executor; local model responses, zero remote model calls. */
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
@@ -34,7 +34,7 @@ const server = createServer(async (request, response) => {
   if (request.method !== 'POST') {
     response.setHeader('content-type', 'text/html;charset=utf-8');
     response.end(
-      `<!doctype html><meta charset="utf-8"><title>Neo native fixture</title><style>body{font:16px sans-serif;margin:24px}h1{font-size:24px}main{min-height:400px}input{padding:10px;width:200px}section{margin:12px 0;padding:18px}a{display:block;margin:12px 0}</style><main id="workspace"><h1>Native browser fixture</h1><p id="retained">Original content stays</p></main>`,
+      `<!doctype html><meta charset="utf-8"><title>Web native fixture</title><style>body{font:16px sans-serif;margin:24px}h1{font-size:24px}main{min-height:400px}input{padding:10px;width:200px}section{margin:12px 0;padding:18px}a{display:block;margin:12px 0}</style><main id="workspace"><h1>Native browser fixture</h1><p id="retained">Original content stays</p></main>`,
     );
     return;
   }
@@ -47,11 +47,11 @@ const server = createServer(async (request, response) => {
     return;
   }
   const tools = (data.tools || []).map((tool: any) => tool.name);
-  const cli = tools.includes('mcp__athena__neo_snapshot')
+  const cli = tools.includes('mcp__athena__web_snapshot')
     ? 'claude'
-    : tools.includes('athena_neo_snapshot')
+    : tools.includes('athena_web_snapshot')
       ? 'opencode'
-      : tools.includes('neo_snapshot')
+      : tools.includes('web_snapshot')
         ? 'pi'
         : 'unknown';
   const prefix = cli === 'claude' ? 'mcp__athena__' : cli === 'opencode' ? 'athena_' : '';
@@ -72,18 +72,18 @@ const server = createServer(async (request, response) => {
   let reply = `${cli.toUpperCase()}_BROWSER_DONE [Open next page](${origin}/next)`;
   try {
     if (!tools.length) throw new Error('TITLE_ONLY');
-    assert.notEqual(cli, 'unknown', 'Native CLI must receive the actual Neo tool catalog');
+    assert.notEqual(cli, 'unknown', 'Native CLI must receive the actual web tool catalog');
     while (result(step) !== undefined) step++;
     const source = messages.map((message: any) => textContent(message.content)).join('\n');
-    const context = source.match(/<neo_browser_context>\n([^\n]+)/)?.[1];
-    assert.ok(context, 'Host must attach the current visible Neo page');
+    const context = source.match(/<web_browser_context>\n([^\n]+)/)?.[1];
+    assert.ok(context, 'Host must attach the current visible web page');
     const pageId = JSON.parse(context).currentPage.pageId;
     const invoke = (name: string, input: Record<string, unknown>) => {
       call = { name: prefix + name, input };
       assert.ok(tools.includes(call.name));
     };
     const parsed = (index: number) => JSON.parse(result(index)!);
-    if (step === 0) invoke('neo_snapshot', { page: pageId });
+    if (step === 0) invoke('web_snapshot', { page: pageId });
     if (step === 1) invoke('workbench_browser_query', { selector: '#workspace' });
     if (step === 2)
       invoke('workbench_browser_edit', {
@@ -114,21 +114,21 @@ const server = createServer(async (request, response) => {
         ref: parsed(2).element.ref,
         styles: { 'border-radius': '16px', 'background-color': '#e8f0ff' },
       });
-    if (step === 4) invoke('neo_snapshot', { page: pageId });
+    if (step === 4) invoke('web_snapshot', { page: pageId });
     if (step === 5) {
       const line = result(4)!
         .split('\n')
         .find((line) => line.includes(`${cli} search`) && line.includes('[ref='));
       const ref = line?.match(/\[ref=(e\d+)\]/)?.[1];
       assert.ok(ref, `No native ref for new ${cli} input: ${result(4)!.slice(0, 1200)}`);
-      invoke('neo_act', { page: pageId, kind: 'fill', ref, value: `typed-${cli}` });
+      invoke('web_act', { page: pageId, kind: 'fill', ref, value: `typed-${cli}` });
     }
-    if (step === 6) invoke('neo_snapshot', { page: pageId });
+    if (step === 6) invoke('web_snapshot', { page: pageId });
     if (step === 7) {
       const observationId = result(6)!.match(/Athena observationId: ([a-f0-9-]+)/)?.[1];
       assert.ok(observationId);
       assert.ok(result(6)!.includes(`typed-${cli}`));
-      invoke('neo_checkpoint', {
+      invoke('web_checkpoint', {
         observationId,
         summary: 'Created and operated the new page controls',
         evidence: `typed-${cli}`,
@@ -351,7 +351,7 @@ try {
   assert.ok((await snapshot()).browser.tabs.length >= 2);
   assert.equal(await app.evaluate(() => (globalThis as any).__externalLinks.length), 0);
   checks.push(
-    'A conversation link starts real Neo, opens a visible new tab and preserves the previous tab without opening the system browser',
+    'A conversation link starts the real browser, opens a visible new tab and preserves the previous tab without opening the system browser',
   );
   for (const cli of ['claude', 'pi', 'opencode']) {
     const info = (await snapshot()).agents.find((agent) => agent.id === cli);
@@ -423,7 +423,7 @@ try {
     assert.match(protectedUndo, /newer changes/);
     assert.equal((await query(`#search-${cli}`)).elements[0].value, `typed-${cli}`);
     checks.push(
-      `${cli}: real CLI -> host tools -> visible Neo -> nested element creation, restyling, native fill, page checkpoint, conversation result and protected undo`,
+      `${cli}: real CLI -> host tools -> visible browser -> nested element creation, restyling, native fill, page checkpoint, conversation result and protected undo`,
     );
     const sessionId = state.conversations.find((c) => c.id === `${cli}-run`)!.agentSessionId;
     assert.ok(sessionId);
@@ -456,7 +456,7 @@ try {
   assert.notEqual((await snapshot()).browser.activeTabId, oldTab);
   assert.equal(await app.evaluate(() => (globalThis as any).__externalLinks.length), 0);
   checks.push(
-    'A link returned through the native Agent response opens in a new right-side Neo tab',
+    'A link returned through the native Agent response opens in a new right-side browser tab',
   );
   assert.deepEqual(fixtureErrors, []);
   assert.deepEqual(errors, []);

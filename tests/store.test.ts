@@ -22,7 +22,7 @@ test('workspace persists and interrupted responses do not look live after restar
           createdAt: 1,
           status: 'streaming',
           plan: [{ step: '核对回执', status: 'inProgress' }],
-          tools: [{ id: 'submit', name: 'neo_act', input: {}, status: 'running', startedAt: 1 }],
+          tools: [{ id: 'submit', name: 'web_act', input: {}, status: 'running', startedAt: 1 }],
           execution: [{ id: 'op', taskId: 'message', at: 1, kind: 'operation', status: 'running' }],
         },
       ],

@@ -13,7 +13,7 @@ import {
   type WebToolResult,
 } from './agent-browser-tools';
 import { runWebScript } from './web-script';
-import type { NeoSessionDetail } from '../shared/types';
+import type { WebSessionDetail } from '../shared/types';
 
 const REF = /^ab[a-f0-9]{8}:e\d+$/;
 const SAFE_KEY =
@@ -131,7 +131,7 @@ export class AgentBrowserSession {
   private help?: () => void;
   private helps = new Map<string, 'waiting' | 'resolved' | 'cancelled'>();
   private lastHelp = '';
-  private record: NeoSessionDetail = {
+  private record: WebSessionDetail = {
     session: { sessionId: this.id, startedAt: Date.now(), dispatchCount: 0, status: 'live' },
     dispatches: [],
   };
