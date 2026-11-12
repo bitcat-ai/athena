@@ -288,11 +288,9 @@ test(
       );
       assert(moving.sitePresent && moving.siteState === 'running');
       assert(moving.owned[0].keyframes.some((frame) => String(frame.transform).includes('-6px')));
-      await new Promise((resolve) => setTimeout(resolve, 100));
-      const later = await stats();
-      assert(
-        Number(later.owned[0].time) > Number(moving.owned[0].time),
-        'Native WAAPI time must actually advance',
+      const later = await waitFor(
+        stats,
+        (value) => Number(value.owned[0]?.time) > Number(moving.owned[0].time),
       );
       assert.notEqual(later.transform, 'none');
       const recorded = await waitFor(
@@ -1310,7 +1308,13 @@ test(
         () => read(target, 'feedback'),
         (value) => value?.visible,
       );
+      runtime.revokeAgentControl();
+      await until(
+        () => read(target, 'feedback'),
+        (value) => !value?.visible,
+      );
       runtime.allowAgentControl();
+      await runtime.setElementFeedback(target.ref, 'working');
       assert(
         !(
           await runtime.callTool('workbench_browser_edit', {

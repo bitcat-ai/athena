@@ -5,6 +5,9 @@ import { ActivityRow } from './ActivityRow';
 import { ActivityTimeline } from './ActivityTimeline';
 import { OutcomeCard } from './OutcomeCard';
 import { RequestCard } from './RequestCard';
+import { IntegrationActivity } from './IntegrationActivity';
+import { PrdArtifact } from './PrdArtifact';
+import { isPrdArtifact } from '../shared/activity';
 
 /**
  * Status of one assistant turn, laid out in reading order: what it is doing, what it needs from
@@ -85,6 +88,21 @@ export function AssistantTurn({
             onRespond={onAction}
             onStop={() => void onAction('conversation:stop')}
             onShowBrowser={onShowBrowser}
+          />
+        ))}
+      <IntegrationActivity message={message} />
+      {message.execution
+        ?.filter(
+          (event) =>
+            event.kind === 'artifact' && event.artifact && isPrdArtifact(event.artifact.path),
+        )
+        .map((event) => (
+          <PrdArtifact
+            key={event.id}
+            conversationId={conversationId}
+            messageId={message.id}
+            eventId={event.id}
+            onAction={onAction}
           />
         ))}
       {children}

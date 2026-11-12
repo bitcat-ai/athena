@@ -164,10 +164,7 @@ export class OnboardingRuntime {
     return Boolean(this.operation && this.operation.kind !== 'detect');
   }
   get allowsBrowserStartup() {
-    return (
-      !this.progress?.browserDeferred &&
-      (!this.state.requiresSetup || this.state.browser.status === 'ready')
-    );
+    return !this.state.requiresSetup || this.state.coreReady;
   }
   private publish() {
     const selected = this.options.settings().agent;
@@ -302,6 +299,30 @@ export class OnboardingRuntime {
       await this.readWorkspace();
     this.state.browser.path = await this.options.discoverBrowser();
     if (this.options.browserReady()) this.state.browser.status = 'ready';
+    this.publish();
+  }
+  async refreshBrowser() {
+    if (this.disposed) return;
+    const revision = this.state.revision;
+    const binary = await this.options.discoverBrowser();
+    if (this.disposed || this.operation || this.state.revision !== revision) return;
+    const previous = this.state.browser;
+    const status = this.options.browserReady()
+      ? 'ready'
+      : previous.status === 'deferred'
+        ? 'deferred'
+        : !binary
+          ? 'missing'
+          : binary !== previous.path || previous.status === 'missing' || previous.status === 'ready'
+            ? 'unchecked'
+            : previous.status;
+    if (binary === previous.path && status === previous.status) return;
+    this.state.browser = {
+      path: binary,
+      status,
+      error: status === 'error' ? previous.error : undefined,
+    };
+    if (previous.error && this.state.error === previous.error) this.state.error = undefined;
     this.publish();
   }
   private async readWorkspace() {

@@ -404,6 +404,50 @@ export async function discoverChrome(explicit?: string): Promise<string | undefi
     const binary = await brandedBinary(candidate);
     if (binary) return binary;
   }
+  if (process.platform === 'darwin') {
+    try {
+      const { stdout } = await execFileAsync(
+        '/usr/bin/osascript',
+        [
+          '-l',
+          'JavaScript',
+          '-e',
+          "ObjC.import('AppKit'); const app = $.NSWorkspace.sharedWorkspace.URLForApplicationWithBundleIdentifier('com.google.Chrome'); JSON.stringify(app.isNil() ? null : ObjC.unwrap(app.path));",
+        ],
+        { timeout: 2000, maxBuffer: 64 * 1024 },
+      );
+      const candidate = JSON.parse(stdout);
+      if (
+        typeof candidate === 'string' &&
+        !candidate.startsWith('/Volumes/') &&
+        !/\/\.Trashes?\//.test(candidate)
+      ) {
+        const binary = await brandedBinary(candidate);
+        if (binary) return binary;
+      }
+    } catch {
+      /* Launch Services may not yet know about a newly copied application. */
+    }
+    try {
+      const { stdout } = await execFileAsync(
+        '/usr/bin/mdfind',
+        ['-0', "kMDItemCFBundleIdentifier == 'com.google.Chrome'"],
+        { timeout: 2000, maxBuffer: 1024 * 1024 },
+      );
+      for (const candidate of stdout.split('\0')) {
+        if (
+          !candidate.endsWith('.app') ||
+          candidate.startsWith('/Volumes/') ||
+          /\/\.Trashes?\//.test(candidate)
+        )
+          continue;
+        const binary = await brandedBinary(candidate);
+        if (binary) return binary;
+      }
+    } catch {
+      /* Spotlight can be disabled; the next probe still checks known locations. */
+    }
+  }
   return undefined;
 }
 
@@ -2183,6 +2227,9 @@ export class BrowserRuntime {
     this.leaseGeneration++;
     this.agentAllowed = false;
     this.agentNeedsObservation = false;
+    const feedback = this.workingFeedback;
+    this.workingFeedback = undefined;
+    if (feedback) void this.serialize(() => this.clearWorkingFeedback(feedback)).catch(() => {});
   }
   private humanTakeover(source: string): void {
     this.revokeAgentControl();

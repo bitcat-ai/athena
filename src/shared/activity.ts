@@ -12,6 +12,8 @@ import {
 } from './phase';
 import type { AgentId, ChatMessage, ToolCall } from './types';
 
+export const isPrdArtifact = (name: string) => /(?:^|\/)PRD-[^/]+\.md$/.test(name);
+
 export type ActivityItem =
   | { kind: 'plan'; id: string; text: string; state: 'done' | 'now' | 'todo' }
   | {

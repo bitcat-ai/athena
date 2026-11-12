@@ -43,6 +43,7 @@
     "files": [
       "dist/**/*",
       "resources/**/*",
+      "packages/athena-sandbox/athena-sandbox.mjs",
       "THIRD_PARTY_NOTICES.md",
       "package.json",
       "!dist/**/*.map",

@@ -1,0 +1,101 @@
+.integration-activity {
+  display: grid;
+  gap: 10px;
+  margin: 14px 0 18px;
+  min-width: 0;
+}
+.integration-card {
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: var(--surface-secondary);
+  color: var(--foreground);
+  min-width: 0;
+}
+.integration-card header {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+.integration-mark {
+  flex: 0 0 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  background: var(--surface);
+  color: var(--foreground);
+}
+.integration-card .integration-heading {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+.integration-label {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--secondary);
+}
+.integration-card .integration-heading strong {
+  font-size: 13px;
+  line-height: 1.5;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.integration-status {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  color: var(--secondary);
+  font-size: 10px;
+}
+.integration-status i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.integration-card[data-state='running'] .integration-status {
+  color: var(--warning);
+}
+.integration-card[data-state='error'] .integration-status {
+  color: var(--danger);
+}
+.integration-card[data-state='done'] .integration-status {
+  color: var(--success);
+}
+.integration-description {
+  margin: 12px 0 0;
+  color: var(--secondary);
+  font-size: 12px;
+  line-height: 1.75;
+}
+.integration-facts {
+  display: grid;
+  gap: 6px;
+  margin: 13px 0 0;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.integration-facts > div {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 8px;
+}
+.integration-facts dt {
+  color: var(--secondary);
+}
+.integration-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.integration-error {
+  margin: 12px 0 0;
+  color: var(--danger);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}

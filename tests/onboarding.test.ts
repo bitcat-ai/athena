@@ -66,6 +66,7 @@ async function fixture(
     probe: undefined as (() => Promise<AgentInfo[]>) | undefined,
     download: undefined as ((url: string, options?: RequestInit) => Promise<Response>) | undefined,
     prepare: undefined as ((signal: AbortSignal) => Promise<void>) | undefined,
+    discover: undefined as (() => Promise<string | undefined>) | undefined,
   };
   const runtime = new OnboardingRuntime({
     directory,
@@ -88,7 +89,7 @@ async function fixture(
       data.progress = value;
       data.saved.push(value);
     },
-    discoverBrowser: async () => data.browserPath,
+    discoverBrowser: async () => (data.discover ? data.discover() : data.browserPath),
     browserReady: () => data.browserReady,
     prepareBrowser: async (_binary, signal) => {
       data.browserCalls++;
@@ -306,7 +307,7 @@ test('fresh defer keeps the task gate; core completion can defer optional browse
     assert.equal(state.browser.status, 'deferred');
     assert.equal(state.requiresSetup, false);
     assert.equal(f.data.progress?.browserDeferred, true);
-    assert.equal(f.runtime.allowsBrowserStartup, false);
+    assert.equal(f.runtime.allowsBrowserStartup, true);
     const restored = await fixture({ existingData: true, progress: f.data.progress });
     try {
       assert.equal(restored.runtime.getState().status, 'complete');
@@ -600,6 +601,68 @@ test('browser preparation is optional and a missing Chrome is reported without a
     assert.equal(f.data.browserCalls, 1);
     assert.equal(f.runtime.getState().browser.status, 'ready');
     assert.equal(f.data.downloadCalls.length, 0);
+  } finally {
+    await f.close();
+  }
+});
+
+test('external Chrome installation clears the missing state without launching or downloading', async () => {
+  const f = await fixture();
+  try {
+    await confirmProject(f);
+    f.runtime.prepareBrowser();
+    await f.runtime.settled();
+    assert.equal(f.runtime.getState().browser.status, 'missing');
+    assert.equal(f.runtime.getState().plan, undefined);
+    f.data.browserPath = '/fixture/Google Chrome.app';
+    await f.runtime.refreshBrowser();
+    const state = f.runtime.getState();
+    assert.equal(state.browser.path, f.data.browserPath);
+    assert.equal(state.browser.status, 'unchecked');
+    assert.equal(state.plan, undefined);
+    assert.equal(f.data.browserCalls, 0);
+    assert.deepEqual(f.data.downloadCalls, []);
+    const revision = state.revision;
+    await f.runtime.refreshBrowser();
+    assert.equal(f.runtime.getState().revision, revision);
+  } finally {
+    await f.close();
+  }
+});
+
+test('browser detection works during tasks and deferral does not block installed browsers', async () => {
+  const f = await fixture({
+    existingData: true,
+    progress: {
+      version: 1,
+      status: 'complete',
+      stage: 'ready',
+      required: false,
+      browserDeferred: true,
+    },
+  });
+  try {
+    f.data.browserPath = '/fixture/Google Chrome.app';
+    f.data.busy = true;
+    await f.runtime.refreshBrowser();
+    assert.equal(f.runtime.getState().browser.path, f.data.browserPath);
+    f.data.busy = false;
+    await f.runtime.refreshBrowser();
+    assert.equal(f.runtime.getState().browser.path, f.data.browserPath);
+    assert.equal(f.runtime.getState().browser.status, 'deferred');
+    assert.equal(f.runtime.allowsBrowserStartup, true);
+    let finish!: (value: string) => void;
+    f.data.discover = () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      });
+    const pending = f.runtime.refreshBrowser();
+    await f.runtime.open();
+    const state = f.runtime.getState();
+    finish('/fixture/obsolete.app');
+    await pending;
+    assert.deepEqual(f.runtime.getState(), state);
+    assert.equal(f.data.browserCalls, 0);
   } finally {
     await f.close();
   }

@@ -12,6 +12,35 @@ const tool = {
   inputSchema: { type: 'object', properties: {} },
 };
 
+test('tool execution errors preserve actionable validation without leaking credentials', async (t) => {
+  const events: ToolCall[] = [];
+  const server = new AgentMcpServer(
+    [tool],
+    async () => {
+      throw new Error('Use a relative /workspace path; token=private-value Bearer private-bearer');
+    },
+    (event) => events.push(event),
+  );
+  t.after(() => server.close());
+  await server.start();
+  const env = server.definition().env;
+  const response = await fetch(env.ATHENA_MCP_URL, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${env.ATHENA_MCP_TOKEN}`, 'x-athena-client': 'test' },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 'validation',
+      method: 'tools/call',
+      params: { name: tool.name, arguments: {} },
+    }),
+  });
+  const packet = await response.json();
+  assert.equal(packet.result.isError, true);
+  assert.match(packet.result.content[0].text, /relative \/workspace path/);
+  assert.doesNotMatch(JSON.stringify([packet, events]), /private-value|private-bearer/);
+  assert.equal(events.at(-1)?.status, 'error');
+});
+
 test('private MCP authenticates, limits tool names, redacts UI inputs and refuses duplicate operations', async (t) => {
   const events: ToolCall[] = [];
   let calls = 0;

@@ -289,7 +289,7 @@ test(
       animation: { ...breathing, duration: 100, iterations: 1 },
     });
     await page.locator('#visual-button').evaluate(async (el) => {
-      await el.getAnimations().find((item) => item.id.startsWith('workbench-preview:'))!.finished;
+      await el.getAnimations().find((item) => item.id.startsWith('workbench-preview:'))?.finished;
     });
     assert.equal((await bridge<Details>(page, 'inspect', button.ref)).animationState, 'finished');
     await bridge(page, 'undo', finite.editId);
@@ -903,6 +903,8 @@ test('element feedback is temporary, respects reduced motion, and preserves webs
   const effect = await readOverlay(page, 'feedback');
   assert.equal(effect.visible, true);
   assert.equal(effect.sweep, 'sweep');
+  assert.match(effect.label ?? '', /^span · \d+ × \d+$/);
+  assert.equal((await readCursor(page)).label, 'Athena · 处理中');
   assert.equal(await page.locator('#leaf').getAttribute('style'), before);
   assert.equal(
     await page.evaluate(() => (globalThis as any).__websiteAnimation.playState),
@@ -917,8 +919,17 @@ test('element feedback is temporary, respects reduced motion, and preserves webs
   );
   await page.emulateMedia({ reducedMotion: 'reduce' });
   assert.equal((await readOverlay(page, 'feedback')).sweep, 'none');
+  await page.waitForFunction(
+    () => !(globalThis as any).__overlayRoot.querySelector('.agent-cursor').getAnimations().length,
+  );
+  await bridge(page, 'setSource', 'agent');
   const edit = await bridge<EditResult>(page, 'edit', { ref: leaf.ref, text: '修改完成' });
   assert.equal((await readOverlay(page, 'feedback')).visible, true);
+  await page.waitForFunction(
+    () =>
+      (globalThis as any).__overlayRoot.querySelector('.agent-cursor .label').textContent ===
+      'Athena · 已执行',
+  );
   await page.waitForFunction(
     () =>
       (globalThis as any).__overlayRoot.querySelector('[data-kind="feedback"]').style.display ===
@@ -932,7 +943,92 @@ test('element feedback is temporary, respects reduced motion, and preserves webs
   );
   const snapshot = await bridge<{ text: string }>(page, 'snapshot');
   assert(!snapshot.text.includes('span ·'));
+  assert(!snapshot.text.includes('Athena ·'));
 });
+
+test('agent cursor follows actual targets and layout, clears on removal, and stays out of manual edits', async (t) => {
+  if (!browser) return t.skip('Browser binary unavailable');
+  const { page, find } = await fixture(t);
+  await captureOverlayRoot(page);
+  const leaf = await find('#leaf');
+  const heading = await find('#heading');
+  await bridge(page, 'feedback', leaf.ref, 'working');
+  await page.waitForFunction(
+    () =>
+      !(globalThis as any).__overlayRoot
+        .querySelector('.agent-cursor')
+        .getAnimations()
+        .some((a: Animation) => a.playState === 'running'),
+  );
+  let cursor = await readCursor(page);
+  assert.equal(cursor.visible, true);
+  assert(Math.abs(cursor.x - (leaf.bounds.x + leaf.bounds.width * 0.7)) < 1);
+  assert(Math.abs(cursor.y - (leaf.bounds.y + Math.min(24, leaf.bounds.height * 0.5))) < 1);
+  await bridge(page, 'setSource', 'agent');
+  await bridge(page, 'edit', { ref: heading.ref, text: '今天的计划' });
+  await page.waitForFunction(
+    () =>
+      (globalThis as any).__overlayRoot.querySelector('.agent-cursor .label').textContent ===
+      'Athena · 已执行',
+  );
+  assert.equal(await page.locator('#heading').textContent(), '今天的计划');
+  assert.match((await readOverlay(page, 'feedback')).label ?? '', /^h1 ·/);
+  await bridge(page, 'feedback', heading.ref, 'working');
+  await page.evaluate(() => {
+    document.body.style.minHeight = '2000px';
+    document.body.style.paddingTop = '180px';
+    scrollTo(0, 80);
+  });
+  await page.waitForFunction(() => {
+    const target = document.querySelector('#heading')!.getBoundingClientRect();
+    const cursor = (globalThis as any).__overlayRoot
+      .querySelector('.agent-cursor')
+      .getBoundingClientRect();
+    return Math.abs(cursor.y - (target.y + Math.min(24, target.height * 0.5))) < 1;
+  });
+  await page.locator('#heading').evaluate((el) => el.remove());
+  await page.waitForFunction(
+    () => (globalThis as any).__overlayRoot.querySelector('.agent-cursor').style.display === 'none',
+  );
+  await bridge(page, 'setSource', 'human');
+  await bridge(page, 'edit', { ref: leaf.ref, text: '手动预览' });
+  cursor = await readCursor(page);
+  assert.equal(cursor.visible, false, 'manual edits must not impersonate the agent');
+  await page.locator('#leaf').evaluate((el) => {
+    el.style.cssText =
+      'position:fixed;right:0;bottom:0;width:10px;height:10px;padding:0;overflow:hidden';
+  });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await bridge(page, 'feedback', leaf.ref, 'working');
+  await page.waitForFunction(() => {
+    const cursor = (globalThis as any).__overlayRoot.querySelector('.agent-cursor');
+    const label = cursor.querySelector('.label').getBoundingClientRect();
+    const pointer = cursor.querySelector('svg').getBoundingClientRect();
+    return (
+      cursor.style.display === 'block' &&
+      label.left >= 0 &&
+      label.right <= innerWidth &&
+      label.bottom <= innerHeight &&
+      pointer.right <= innerWidth &&
+      pointer.bottom <= innerHeight
+    );
+  });
+  await bridge(page, 'clearOverlays');
+  assert.equal(await page.locator('[data-workbench-overlay]').count(), 0);
+});
+
+async function readCursor(page: Page) {
+  return page.evaluate(() => {
+    const cursor = (globalThis as any).__overlayRoot.querySelector('.agent-cursor') as HTMLElement;
+    const rect = cursor.getBoundingClientRect();
+    return {
+      visible: getComputedStyle(cursor).display !== 'none',
+      x: rect.x,
+      y: rect.y,
+      label: cursor.textContent,
+    };
+  });
+}
 
 async function captureOverlayRoot(page: Page) {
   await page.evaluate(() => {
@@ -955,7 +1051,7 @@ async function readOverlay(page: Page, kind: string) {
       x: rect.x,
       y: rect.y,
       label: box.querySelector('span')?.textContent,
-      sweep: getComputedStyle(box, '::after').animationName,
+      sweep: getComputedStyle(box.querySelector('.scan') || box, '::after').animationName,
     };
   }, kind);
 }

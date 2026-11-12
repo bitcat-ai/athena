@@ -41,6 +41,7 @@ export const browserPageSource = String.raw`(() => {
   let inspecting = false;
   let overlayHost, overlayRoot, overlayFrame = 0;
   let hoverElement, selectedElement, feedbackElement, feedbackPhase, feedbackTimer;
+  let feedbackAgent = false, agentCursor, cursorTarget, cursorMotion;
   let hoverPoint;
   const overlayBoxes = {};
   const clean = (text, limit=180) => String(text ?? '').replace(/Bearer\s+\S+/gi, 'Bearer [hidden]').replace(/(?:sk-|ghp_|github_pat_)[A-Za-z0-9_-]+/g, '[hidden]').replace(/\b(password|secret|token|api[_-]?key)\s*[:=]\s*[^\s,;]+/gi, '$1=[hidden]').slice(0, limit);
@@ -216,13 +217,26 @@ export const browserPageSource = String.raw`(() => {
       overlayHost.style.cssText='all:initial!important;position:fixed!important;inset:0!important;pointer-events:none!important;z-index:2147483647!important;contain:layout style!important;';
       overlayRoot=overlayHost.attachShadow({mode:'closed'});
       const css=document.createElement('style');
-      css.textContent=':host{pointer-events:none}.box{position:absolute;box-sizing:border-box;pointer-events:none;border-radius:4px;display:none}.hover{border:1px solid #8291ed;background:#7e8dfa18;box-shadow:0 0 0 1px #fff9}.selected{border:2px solid #7e8dfa;box-shadow:0 0 0 1px #151b3480}.label{position:absolute;left:0;bottom:calc(100% + 5px);max-width:min(320px,90vw);box-sizing:border-box;padding:4px 7px;background:#202639;color:#fff;border:1px solid #6471b1;border-radius:5px;font:500 11px/16px ui-monospace,SFMono-Regular,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.feedback{overflow:hidden;border:1px solid #b6bcff;background:#969fff13;box-shadow:0 0 0 1px #7e8dfa66,0 0 18px #9ba5ff55}.feedback::after{content:"";position:absolute;inset:-60% -80%;background:linear-gradient(110deg,transparent 35%,#e6e9ff80 49%,transparent 63%);transform:translateX(-60%);animation:sweep 1.4s ease-in-out infinite}.feedback.applied{animation:finish 560ms ease-out both}.feedback.applied::after{animation:sweep 500ms ease-out both}@keyframes sweep{to{transform:translateX(60%)}}@keyframes finish{0%{opacity:1;box-shadow:0 0 0 1px #bac2ff,0 0 22px #a5b2ff88}100%{opacity:0;box-shadow:0 0 0 5px #bac2ff00,0 0 8px #a5b2ff00}}@media(prefers-reduced-motion:reduce){.feedback,.feedback::after{animation:none!important}.feedback::after{display:none}.feedback.applied{background:#b5bfff22}}';
+      css.textContent=[
+        ':host{pointer-events:none}.box{position:absolute;box-sizing:border-box;pointer-events:none;border-radius:4px;display:none}.hover{border:1px solid #8291ed;background:#7e8dfa18;box-shadow:0 0 0 1px #fff9}.selected{border:2px solid #7e8dfa;box-shadow:0 0 0 1px #151b3480}',
+        '.label{position:absolute;left:0;bottom:calc(100% + 5px);max-width:min(320px,90vw);box-sizing:border-box;padding:4px 7px;background:#202639;color:#fff;border:1px solid #6471b1;border-radius:5px;font:500 11px/16px ui-monospace,SFMono-Regular,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+        '.feedback{border:1px solid #8291ed;box-shadow:0 0 0 1px #fff9}.handle{position:absolute;width:5px;height:5px;background:#fff;border:1px solid #8291ed;border-radius:1px}.handle:nth-of-type(1){left:-4px;top:-4px}.handle:nth-of-type(2){right:-4px;top:-4px}.handle:nth-of-type(3){right:-4px;bottom:-4px}.handle:nth-of-type(4){left:-4px;bottom:-4px}',
+        '.scan{position:absolute;inset:0;overflow:hidden;border-radius:inherit}.scan::after{content:"";position:absolute;inset:0;background:linear-gradient(100deg,transparent 30%,#969fff30 50%,transparent 70%);transform:translateX(-100%);animation:sweep 1.4s ease-in-out infinite}.applied .scan::after{animation:sweep 250ms cubic-bezier(0.23,1,0.32,1) both}',
+        '.agent-cursor{position:absolute;left:0;top:0;width:0;height:0;pointer-events:none}.agent-cursor svg{position:absolute;width:18px;height:24px;overflow:visible;filter:drop-shadow(0 1px 2px #151b3466)}.agent-cursor .label{left:15px;top:20px;bottom:auto;border-radius:3px 8px 8px 8px;font-family:system-ui,sans-serif}.agent-cursor.flip .label{left:auto;right:5px}.agent-cursor.above .label{top:auto;bottom:5px}',
+        '.feedback.applied,.agent-cursor.applied{animation:finish 900ms linear both}@keyframes sweep{to{transform:translateX(100%)}}@keyframes finish{0%,75%{opacity:1}100%{opacity:0}}',
+        '@media(prefers-reduced-motion:reduce){.feedback,.agent-cursor,.scan::after{animation:none!important}.scan{display:none}}',
+      ].join('\n');
       overlayRoot.appendChild(css); document.documentElement.appendChild(overlayHost);
+      cursorMotion?.cancel();agentCursor=null;cursorTarget=null;
       for(const name of Object.keys(overlayBoxes)) delete overlayBoxes[name];
     }
     if(!overlayBoxes[kind]) {
       const box=document.createElement('div'); box.className='box '+kind; box.dataset.kind=kind;
-      if(kind!=='feedback') { const label=document.createElement('span');label.className='label';box.appendChild(label); }
+      const label=document.createElement('span');label.className='label';box.appendChild(label);
+      if(kind==='feedback') {
+        const scan=document.createElement('span');scan.className='scan';box.appendChild(scan);
+        for(let i=0;i<4;i++) {const handle=document.createElement('i');handle.className='handle';box.appendChild(handle);}
+      }
       overlayRoot.appendChild(box);overlayBoxes[kind]=box;
     }
     return overlayBoxes[kind];
@@ -235,14 +249,39 @@ export const browserPageSource = String.raw`(() => {
     const box=overlayBox(kind);
     const css='display:block;left:'+left+'px;top:'+top+'px;width:'+(right-left)+'px;height:'+(bottom-top)+'px;';
     if(box.lastBounds!==css) {box.style.cssText=css;box.lastBounds=css;}
-    if(kind!=='feedback') {
-      const label=box.firstChild;
-      const text=el.localName+' · '+Math.round(rect.width)+' × '+Math.round(rect.height);
-      if(label.textContent!==text) label.textContent=text;
-      label.style.bottom=top<30 ? 'auto' : 'calc(100% + 5px)';
-      label.style.top=top<30 ? 'calc(100% + 5px)' : 'auto';
-      label.style.maxWidth=Math.max(30,innerWidth-left-6)+'px';
+    const label=box.firstChild;
+    const text=el.localName+' · '+Math.round(rect.width)+' × '+Math.round(rect.height);
+    if(label.textContent!==text) label.textContent=text;
+    label.style.bottom=top<30 ? 'auto' : 'calc(100% + 5px)';
+    label.style.top=top<30 ? 'calc(100% + 5px)' : 'auto';
+    label.style.maxWidth=Math.max(30,innerWidth-left-6)+'px';
+  }
+  function drawAgentCursor() {
+    const box=overlayBoxes.feedback;
+    if(!feedbackAgent || !feedbackElement || box?.style.display!=='block') {
+      if(agentCursor) agentCursor.style.display='none';
+      cursorMotion?.cancel();cursorTarget=null;return;
     }
+    if(!agentCursor) {
+      agentCursor=document.createElement('div');agentCursor.className='agent-cursor';
+      agentCursor.innerHTML='<svg viewBox="0 0 18 24" aria-hidden="true"><path d="M1 1L16 14L9 15L6 22Z" fill="#7e8dfa" stroke="white" stroke-width="1.5" stroke-linejoin="round"/></svg><span class="label"></span>';
+      overlayRoot.appendChild(agentCursor);
+    }
+    const x=Math.max(0,Math.min(innerWidth-20,parseFloat(box.style.left)+parseFloat(box.style.width)*0.7));
+    const y=Math.max(0,Math.min(innerHeight-26,parseFloat(box.style.top)+Math.min(24,parseFloat(box.style.height)*0.5)));
+    const transform='translate('+x+'px,'+y+'px)';
+    const changed=cursorTarget!==feedbackElement;
+    const from=changed && cursorTarget ? getComputedStyle(agentCursor).transform : 'translate('+(x+18)+'px,'+(y+24)+'px)';
+    if(changed || agentCursor.lastTransform!==transform || reducedMotion.matches) cursorMotion?.cancel();
+    if(agentCursor.lastTransform!==transform) {agentCursor.style.transform=transform;agentCursor.lastTransform=transform;}
+    agentCursor.style.display='block';
+    const className='agent-cursor'+(feedbackPhase==='applied' ? ' applied' : '')+(x>innerWidth-150 ? ' flip' : '')+(y>innerHeight-55 ? ' above' : '');
+    if(agentCursor.className!==className) agentCursor.className=className;
+    const label=agentCursor.lastChild;
+    const text=feedbackPhase==='applied' ? 'Athena · 已执行' : 'Athena · 处理中';
+    if(label.textContent!==text) label.textContent=text;
+    if(changed && !reducedMotion.matches) cursorMotion=agentCursor.animate([{transform:from},{transform}],{duration:200,easing:'cubic-bezier(0.77,0,0.175,1)'});
+    cursorTarget=feedbackElement;
   }
   function paintOverlays() {
     overlayFrame=0;
@@ -256,6 +295,7 @@ export const browserPageSource = String.raw`(() => {
     drawOverlay('selected',selectedElement);
     drawOverlay('hover',inspecting && hoverElement!==selectedElement ? hoverElement : null);
     drawOverlay('feedback',feedbackElement);
+    drawAgentCursor();
     if(hoverPoint || selectedElement || feedbackElement) overlayFrame=requestAnimationFrame(paintOverlays);
   }
   function refreshOverlays() { if(!overlayFrame) paintOverlays(); }
@@ -264,10 +304,13 @@ export const browserPageSource = String.raw`(() => {
     if(phase===null && ref && feedbackElement!==elements.get(ref)) return;
     clearTimeout(feedbackTimer);
     feedbackElement=phase && ref ? resolve(ref) : null;feedbackPhase=phase;
+    feedbackAgent=!!phase && (phase==='working' || source==='agent');
     if(feedbackElement) {
       const box=overlayBox('feedback');box.className='box feedback'+(phase==='applied' ? ' applied' : '');
       for(const player of box.getAnimations({subtree:true})) {player.currentTime=0;player.play();}
-      if(phase==='applied') feedbackTimer=setTimeout(()=>{feedbackElement=null;feedbackPhase=null;refreshOverlays();},560);
+      for(const player of agentCursor?.getAnimations() || []) if(player instanceof CSSAnimation) {player.currentTime=0;player.play();}
+      // A completed action stays legible briefly; it never delays the actual edit.
+      if(phase==='applied') feedbackTimer=setTimeout(()=>{feedbackElement=null;feedbackPhase=null;refreshOverlays();},900);
     }
     refreshOverlays();
   }
@@ -502,6 +545,7 @@ export const browserPageSource = String.raw`(() => {
     clearOverlays() {
       inspecting=false;hoverPoint=null;hoverElement=null;selectedElement=null;feedbackElement=null;feedbackPhase=null;clearTimeout(feedbackTimer);
       cancelAnimationFrame(overlayFrame);overlayFrame=0;overlayHost?.remove();
+      cursorMotion?.cancel();cursorTarget=null;feedbackAgent=false;
     },
     snapshot() {
       const {found,truncated}=scan();

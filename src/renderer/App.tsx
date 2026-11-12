@@ -31,6 +31,7 @@ import {
   ArrowLeft01Icon,
   ArrowUpRight01Icon,
   ChartNoAxesCombinedIcon,
+  CloudIcon,
   CommandIcon,
   CopyIcon,
   Cursor01Icon,
@@ -54,6 +55,8 @@ import {
   XIcon,
 } from '@hugeicons-pro/core-stroke-rounded';
 import { BrowserPane } from './BrowserPane';
+import { SandboxPip } from './SandboxPip';
+import type { SandboxPipState } from '../shared/sandbox';
 import { ElementInspector } from './ElementInspector';
 import { AssistantTurn } from './AssistantTurn';
 import { PhaseGlyph } from './PhaseGlyph';
@@ -299,6 +302,8 @@ export default function App() {
   const [codexConnection, setCodexConnection] = useState<CodexConnectionState>({ status: 'idle' });
   const [browser, setBrowser] = useState<BrowserState>(emptyBrowser);
   const [web, setWeb] = useState<WebExecutorState>({ status: 'stopped' });
+  const [sandboxPips, setSandboxPips] = useState<SandboxPipState[]>([]);
+  const [sandboxEnabled, setSandboxEnabled] = useState(false);
   const [nativeRecordId, setNativeRecordId] = useState<string>();
   const [feishu, setFeishu] = useState<FeishuState>(emptyFeishu);
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -326,6 +331,8 @@ export default function App() {
   const [connecting, setConnecting] = useState(false);
   const [manualAppId, setManualAppId] = useState('');
   const [manualSecret, setManualSecret] = useState('');
+  const [knowledgeRoot, setKnowledgeRoot] = useState('');
+  useEffect(() => setKnowledgeRoot(settings.knowledgeRoot ?? ''), [settings.knowledgeRoot]);
   const composer = useRef<HTMLDivElement>(null);
   const panels = useRef<HTMLDivElement>(null);
   const resizeStart = useRef<{ x: number; width: number } | undefined>(undefined);
@@ -683,6 +690,8 @@ export default function App() {
     let disposed = false;
     let browserUpdated = false;
     let webUpdated = false;
+    let browserError: string | undefined;
+    let webError: string | undefined;
     let feishuUpdated = false;
     type RequestChange = (previous: PendingAgentRequest[]) => PendingAgentRequest[];
     let beforeSnapshot: RequestChange[] | undefined = [];
@@ -691,8 +700,12 @@ export default function App() {
       setPendingRequests(change);
     };
     let codexUpdated = false;
+    let sandboxUpdated = false;
     const handle = (event: AppEvent) => {
-      if (event.type === 'onboarding:state') {
+      if (event.type === 'sandbox:pip') {
+        sandboxUpdated = true;
+        setSandboxPips(event.states ?? (event.state ? [event.state] : []));
+      } else if (event.type === 'onboarding:state') {
         acceptOnboardingState(event.state);
       } else if (event.type === 'mcp:connections') {
         setPendingExternalConnections(event.connections ?? []);
@@ -707,12 +720,24 @@ export default function App() {
         setCodexConnection(event.state);
       } else if (event.type === 'web:state') {
         webUpdated = true;
+        const previousError = webError;
+        webError = event.state.error;
+        if (event.state.status === 'ready' && previousError)
+          setToast((current) =>
+            current?.error && current.text === previousError ? undefined : current,
+          );
         setWeb(event.state);
       } else if (event.type === 'browser:frame') {
         if (!event.frame.tabId || event.frame.tabId === activeBrowserTab.current)
           lastFrame.current = event.frame;
       } else if (event.type === 'browser:state') {
         browserUpdated = true;
+        const previousError = browserError;
+        browserError = event.state.error;
+        if (event.state.binaryPath && !event.state.error && previousError)
+          setToast((current) =>
+            current?.error && current.text === previousError ? undefined : current,
+          );
         activeBrowserTab.current = event.state.activeTabId;
         setBrowser((previous) => {
           if (event.state.recording && !previous.recording) setLiveSteps([]);
@@ -848,7 +873,10 @@ export default function App() {
         lastFrame.current ??= snapshot.browserFrame;
         setSettings(snapshot.settings);
         setLocalUserName(snapshot.localUser?.name || '');
-        if (!webUpdated) setWeb(snapshot.web ?? { status: 'stopped' });
+        if (!webUpdated) {
+          webError = snapshot.web?.error;
+          setWeb(snapshot.web ?? { status: 'stopped' });
+        }
         setAgents(snapshot.agents);
         setSkills(snapshot.skills ?? []);
         setProviderSkills(snapshot.providerSkills ?? []);
@@ -856,6 +884,7 @@ export default function App() {
         setPendingExternalConnections(snapshot.pendingExternalConnections ?? []);
         if (!codexUpdated) setCodexConnection(snapshot.codexConnection ?? { status: 'idle' });
         if (!browserUpdated) {
+          browserError = snapshot.browser.error;
           activeBrowserTab.current = snapshot.browser.activeTabId;
           setBrowser(snapshot.browser);
         }
@@ -880,6 +909,11 @@ export default function App() {
             scoped[0]?.id,
         );
         if (snapshot.onboarding) acceptOnboardingState(snapshot.onboarding);
+        if (!sandboxUpdated)
+          setSandboxPips(
+            snapshot.sandboxPips ?? (snapshot.sandboxPip ? [snapshot.sandboxPip] : []),
+          );
+        setSandboxEnabled(Array.isArray(snapshot.sandboxViews));
         const setup = onboardingStateRef.current;
         const firstUse = Boolean(
           setup?.requiresSetup && (setup.status === 'new' || setup.status === 'in-progress'),
@@ -1692,12 +1726,18 @@ export default function App() {
                   <h3>Chrome</h3>
                   <p>在当前工作区中浏览、操作和记录网页。</p>
                 </div>
-                <span className={`small-badge ${browser.status === 'ready' ? 'success' : ''}`}>
-                  {browser.status === 'ready'
+                <span
+                  className={`small-badge ${browser.status === 'ready' && web.status === 'ready' ? 'success' : ''}`}
+                >
+                  {browser.status === 'ready' && web.status === 'ready'
                     ? '已连接'
-                    : browser.status === 'starting'
+                    : browser.status === 'starting' || web.status === 'starting'
                       ? '连接中'
-                      : '未连接'}
+                      : browser.status === 'ready'
+                        ? '网页工具未连接'
+                        : browser.binaryPath
+                          ? '已安装，未连接'
+                          : '未连接'}
                 </span>
               </div>
               <div className="setting-detail">
@@ -1711,6 +1751,12 @@ export default function App() {
                 </ActionButton>
               </div>
               {browser.error && <div className="inline-error">{browser.error}</div>}
+              {web.error && <div className="inline-error">{web.error}</div>}
+              {web.status === 'error' && (
+                <ActionButton className="secondary-button" onPress={() => void openOnboarding()}>
+                  继续准备
+                </ActionButton>
+              )}
               <div className="settings-note">
                 网页使用本机已安装的 Chrome 和 Athena
                 独立的浏览器配置，不会读取日常浏览器中的账号。需要访问受保护页面时，可以在侧边浏览器中自行登录。
@@ -1726,6 +1772,39 @@ export default function App() {
           )}
           {settingsTab === 'feishu' && (
             <Tabs.Panel id="feishu" className="integration-settings-panel">
+              <section className="settings-section" aria-label="知识库资料">
+                <h3>知识库资料</h3>
+                <p>保存资料入口后，可以直接让我检索规范、准备项目和构建应用。</p>
+                <form
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void action<Settings>('settings:knowledge', { root_url: knowledgeRoot }).then(
+                      (next) => {
+                        if (next) {
+                          setSettings(next);
+                          showToast('知识库入口已保存');
+                        }
+                      },
+                    );
+                  }}
+                >
+                  <label>
+                    飞书知识库或文档链接
+                    <Input
+                      aria-label="飞书知识库入口"
+                      value={knowledgeRoot}
+                      onChange={(event) => setKnowledgeRoot(event.target.value)}
+                      placeholder="https://…feishu.cn/wiki/…"
+                    />
+                  </label>
+                  <ActionButton type="submit" className="secondary-button">
+                    保存知识库入口
+                  </ActionButton>
+                </form>
+                <p className="settings-note">
+                  资料读取使用本机 lark-cli 的用户授权；机器人配对不会授予文档访问权限。
+                </p>
+              </section>
               <div className="integration-heading">
                 <div className="integration-icon large">
                   <Icon icon={Link02Icon} size={24} />
@@ -2111,6 +2190,35 @@ export default function App() {
               className={`workspace-panels ${resizingBrowser ? 'is-resizing' : ''}`}
               style={{ '--browser-drawer-width': `${drawerWidth}px` } as React.CSSProperties}
             >
+              {sandboxPips
+                .filter((pip) => pip.conversationId === conversation?.id)
+                .map((sandboxPip, index) => (
+                  <SandboxPip
+                    key={`${sandboxPip.conversationId}:${sandboxPip.target}`}
+                    index={index}
+                    state={sandboxPip}
+                    onClose={() =>
+                      void action('sandbox:pip/close', {
+                        conversationId: sandboxPip.conversationId,
+                        target: sandboxPip.target,
+                      })
+                    }
+                    onExpand={() => selectConversation(sandboxPip.conversationId)}
+                    onConnect={() =>
+                      void action('sandbox:connect', {
+                        conversationId: sandboxPip.conversationId,
+                        target: sandboxPip.target,
+                      })
+                    }
+                    onOpenPreview={() => {
+                      setBrowserVisible(true);
+                      void action('sandbox:preview/open', {
+                        conversationId: sandboxPip.conversationId,
+                        target: sandboxPip.target,
+                      });
+                    }}
+                  />
+                ))}
               <div className="work-area">
                 <header className="topbar window-drag">
                   <div className={`topbar-title ${sidebar ? '' : 'with-traffic-lights'}`}>
@@ -2158,6 +2266,20 @@ export default function App() {
                             )}
                             <span>{currentAgent?.name || '本机 Agent'}</span>
                             <span className="agent-status-caption">{agentStatus}</span>
+                          </ActionButton>
+                        )}
+                        {sandboxEnabled && (
+                          <ActionButton
+                            className="connection-button sandbox-pip-toggle"
+                            aria-label="独立沙箱"
+                            onPress={() =>
+                              void action('sandbox:pip/open', {
+                                conversationId: conversation?.id,
+                              })
+                            }
+                          >
+                            <Icon icon={CloudIcon} size={16} />
+                            <span>独立沙箱</span>
                           </ActionButton>
                         )}
                         <ActionButton

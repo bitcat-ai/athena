@@ -1,6 +1,6 @@
 import { Button } from '@heroui/react';
 import { FolderOpenIcon } from '@hugeicons-pro/core-stroke-rounded';
-import { activityItems, type ActivityItem } from '../shared/activity';
+import { activityItems, isPrdArtifact, type ActivityItem } from '../shared/activity';
 import type { AgentId, ChatMessage } from '../shared/types';
 import { PhaseGlyph } from './PhaseGlyph';
 import { Icon } from './ui';
@@ -117,6 +117,7 @@ export function ActivityTimeline({
         </li>
       );
     }
+    if (isPrdArtifact(item.name)) return null;
     return (
       <li key={item.id} data-kind="artifact">
         <div className="tl-line">

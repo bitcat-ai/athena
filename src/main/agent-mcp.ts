@@ -2,6 +2,7 @@ import { createServer, type Server } from 'node:http';
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import type { BrowserTool, ToolCall, ToolResult } from '../shared/types';
 import { imageUrl, toolEventInput } from './agents';
+import { redact } from './sandbox-client';
 
 // The CLI owns a stdio child; the capability never enters the prompt or project configuration.
 const bridge = String.raw`
@@ -137,15 +138,19 @@ export class AgentMcpServer {
               output: output.text.slice(0, 8000),
               durationMs: Date.now() - startedAt,
             });
-          } catch {
-            if (this.activeCalls.delete(event.id))
-              this.onTool({
-                ...event,
-                status: 'error',
-                output: '浏览器操作未完成，请重新观察页面后继续。',
-                durationMs: Date.now() - startedAt,
-              });
-            throw new Error();
+          } catch (error) {
+            if (!this.activeCalls.delete(event.id) || this.closed) throw new Error();
+            const message = redact(error instanceof Error ? error.message : '工具执行失败').slice(
+              0,
+              1800,
+            );
+            this.onTool({
+              ...event,
+              status: 'error',
+              output: message,
+              durationMs: Date.now() - startedAt,
+            });
+            result = { content: [{ type: 'text', text: message }], isError: true };
           } finally {
             this.pending--;
           }

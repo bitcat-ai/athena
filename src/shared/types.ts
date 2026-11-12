@@ -587,6 +587,7 @@ export interface Settings {
   /** Personal conversations use an app-owned directory, without selecting a project. */
   workspaceMode?: 'project' | 'personal';
   browserPath?: string;
+  knowledgeRoot?: string;
   agent: AgentId;
   modelSelection?: import('./usage').ModelSelection;
   modelSelections?: Partial<Record<AgentId, import('./usage').ModelSelection>>;
@@ -597,6 +598,9 @@ export interface CodexConnectionState {
   message?: string;
 }
 export interface AppSnapshot {
+  sandboxViews?: import('./sandbox').LocalSandboxView[];
+  sandboxPip?: import('./sandbox').SandboxPipState;
+  sandboxPips?: import('./sandbox').SandboxPipState[];
   onboarding?: import('./onboarding').OnboardingState;
   localUser?: { name: string };
   settings: Settings;
@@ -622,6 +626,12 @@ export interface AppSnapshot {
   share?: import('./share').ShareState;
 }
 export type AppEvent =
+  | { type: 'sandbox:state'; state: import('./sandbox').LocalSandboxView }
+  | {
+      type: 'sandbox:pip';
+      state?: import('./sandbox').SandboxPipState;
+      states?: import('./sandbox').SandboxPipState[];
+    }
   | { type: 'onboarding:state'; state: import('./onboarding').OnboardingState }
   | { type: 'codex:state'; state: CodexConnectionState }
   | { type: 'usage:updated' }
