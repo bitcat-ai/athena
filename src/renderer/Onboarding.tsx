@@ -171,7 +171,7 @@ function screenForState(state: OnboardingState, intent: Intent): Screen {
     if (state.operation.kind === 'prepare-browser') return 'browserPreparing';
   }
   if (intent === 'cancel') return 'cancelled';
-  if (state.plan && (intent === 'plan' || intent === 'browser')) return 'installPlan';
+  if (state.plan && intent === 'plan') return 'installPlan';
   if (state.workspace.candidate && (intent === 'pick' || intent === 'confirm'))
     return state.workspace.error ? 'folderError' : 'folderConfirm';
   if (state.workspace.status === 'error' && (intent === 'pick' || intent === 'confirm'))
