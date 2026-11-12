@@ -1,7 +1,9 @@
 /** Real pinned daemon and owned Chrome; no model requests or personal browser data. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { access } from 'node:fs/promises';
+import { spawn } from 'node:child_process';
+import { once } from 'node:events';
+import { access, rm } from 'node:fs/promises';
 import { performance } from 'node:perf_hooks';
 import { liveWeb, refOf, until, webFixture } from './web-fixture';
 
@@ -365,6 +367,39 @@ test('a daemon that dies between steps is replaced and its refs are refused', op
     await f.runtime.finishTask('crash');
   } finally {
     await f.cleanup();
+  }
+});
+
+test('a daemon does not outlive a host that is killed', options, async () => {
+  const host = spawn(process.execPath, ['--import', 'tsx', 'tests/web-host.ts'], {
+    stdio: ['ignore', 'pipe', 'inherit'],
+  });
+  let info: { daemon: number; directory: string; browser?: number; temp: string } | undefined;
+  try {
+    let output = '';
+    host.stdout.on('data', (chunk) => (output += chunk));
+    await until(() => output.includes('\n') || host.exitCode !== null, 'the host to start', 30000);
+    info = JSON.parse(output);
+    assert(alive(info!.daemon));
+    await access(info!.directory);
+    host.kill('SIGKILL');
+    await once(host, 'exit');
+    await until(() => !alive(info!.daemon), 'the daemon to stop with its host');
+    await until(
+      () =>
+        access(info!.directory).then(
+          () => false,
+          () => true,
+        ),
+      'its private directory to be removed',
+    );
+  } finally {
+    if (host.exitCode === null && host.signalCode === null) host.kill('SIGKILL');
+    // The killed host could not close its own browser.
+    for (const pid of [info?.daemon, info?.browser])
+      if (pid && alive(pid)) process.kill(pid, 'SIGKILL');
+    for (const directory of [info?.directory, info?.temp])
+      if (directory) await rm(directory, { recursive: true, force: true });
   }
 });
 

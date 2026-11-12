@@ -11,6 +11,7 @@
 | 完整性     | 开发副本、缓存和下载结果都按源码中固定的 SHA-256 校验；校验不通过不运行，版本不符也不运行                                                                                                                |
 | 连接       | 执行器只连接 Athena 启动的 Chrome 的本机回环调试端口；每个执行器进程有独立的私有目录和 socket，环境只保留 PATH 与临时目录，不带入模型服务密钥和个人的 agent-browser 配置，并关闭自动处理对话框和更新检查 |
 | 页面脚本   | `run` 的脚本在独立进程中运行：macOS Seatbelt 限制文件、网络和子进程，Node 权限模型和禁用代码生成的 vm 上下文作为第二层。脚本只能通过宿主逐项转发的页面方法操作                                           |
+| 进程回收   | 正常停止时宿主结束执行器并删除其私有目录。宿主被强制结束或崩溃时，随执行器启动的一个守护 shell 在宿主消失后结束该执行器并清理目录；Athena 启动的 Chrome 沿用原有的浏览器进程处理方式，不在此列           |
 | 任务记录   | `userData/agent-browser/ab-<id>.json`。输入值记为 `[hidden]`，网址的查询参数和片段不落盘                                                                                                                 |
 
 源码入口：`src/main/agent-browser-server.ts`（二进制、进程与任务记录）、`agent-browser-session.ts`（页面与引用）、`agent-browser-tools.ts`（工具到执行器命令的转换）、`agent-browser-diff.ts`、`web-script.ts`（脚本隔离）。授权、恢复屏障和人工接管仍在宿主的网页运行时与 `web-execution.ts`。
