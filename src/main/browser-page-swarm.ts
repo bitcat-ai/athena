@@ -50,6 +50,27 @@ export const browserSwarmSource = String.raw`
       +'<svg class="ibeam" viewBox="0 0 9 20">'+twin('M1.5 1.5H3Q4.5 1.5 4.5 3V17Q4.5 18.5 3 18.5H1.5M7.5 1.5H6Q4.5 1.5 4.5 3M7.5 18.5H6Q4.5 18.5 4.5 17')+'</svg>';
     const onscreen=rect=>rect.width>0 && rect.height>0 && rect.right>0 && rect.bottom>0 && rect.left<innerWidth && rect.top<innerHeight;
     const tint=()=>palette[tints++%palette.length];
+    const box=rect=>({x:rect.x,y:rect.y,width:rect.width,height:rect.height});
+    // Cursors stop at the viewport edge, so work on an element larger than the view stays in sight.
+    const within=(x,y)=>[clamp(x,4,innerWidth-24),clamp(y,4,innerHeight-28)];
+    // Scrolls an element to where its change can be watched. One that is in view stays put.
+    function reveal(el) {
+      if (env.reduced.matches || document.visibilityState!=='visible') return el;
+      const rect=el.getBoundingClientRect();
+      if (!rect.width && !rect.height) return el;
+      const high=Math.min(rect.bottom,innerHeight)-Math.max(rect.top,0), wide=Math.min(rect.right,innerWidth)-Math.max(rect.left,0);
+      // Inside this viewport it can still be scrolled away in a container or an outer frame.
+      if (high>=rect.height-0.5 && wide>=rect.width-0.5) el.scrollIntoView({block:'nearest',inline:'nearest',behavior:'instant'});
+      else if (high<0.6*Math.min(rect.height,innerHeight) || wide<0.6*Math.min(rect.width,innerWidth)) el.scrollIntoView({block:rect.height<=innerHeight*0.8 ? 'center' : 'start',inline:'nearest',behavior:'instant'});
+      return el;
+    }
+    // The element itself, or the closest ancestor that can be brought into view.
+    function watchable(el) {
+      for (let node=el; node; node=env.parent(node)) {
+        if (onscreen(reveal(node).getBoundingClientRect())) return node;
+      }
+      return null;
+    }
     function mount() {
       const root=env.root();
       if (!stage?.isConnected || stage.getRootNode()!==root) { stage=make('div','swarm'); root.appendChild(stage); }
@@ -134,9 +155,12 @@ export const browserSwarmSource = String.raw`
           node.style.width=width.toFixed(1)+'px'; node.style.height=height.toFixed(1)+'px';
           const text=Math.round(width)+' × '+Math.round(height);
           if (badge.textContent!==text) badge.textContent=text;
-          badge.classList.toggle('up',y+height>innerHeight-30);
+          const low=y+height>innerHeight-30, high=y<30;
+          badge.classList.toggle('up',low && !high);
+          badge.style.top=low && high ? Math.round(innerHeight-28-y)+'px' : '';
+          badge.style.left=((Math.max(x,0)+Math.min(x+width,innerWidth))/2-x).toFixed(1)+'px';
         },
-        corner(fx,fy) { return ()=>me.rect && [me.rect.x+me.rect.width*fx,me.rect.y+me.rect.height*fy]; }};
+        corner(fx,fy) { return ()=>me.rect && within(me.rect.x+me.rect.width*fx,me.rect.y+me.rect.height*fy); }};
       add(show,node); show.live.add(me.place); me.place();
       return me;
     }
@@ -292,6 +316,8 @@ export const browserSwarmSource = String.raw`
       const corner=frame.corner(1,1);
       const ride=(pointer,ms)=>tween(show,ms,()=> { const at=corner(); if (at) pointer.to(at[0],at[1]); });
       await fly(show,lead,spec.text ? frame.corner(0.3,0.5) : corner,before?.origin ? 180 : 320);
+      // The size badge makes room for the caret and its name tag while text is typed.
+      if (spec.text) frame.node.classList.add('quiet');
       frame.node.style.visibility='';
       const work=[survey(show,el,1).catch(()=>{})];
       if (morph) {
@@ -303,7 +329,7 @@ export const browserSwarmSource = String.raw`
         const sizer=cursor(show,tint(),entry(now,2),false);
         work.push(fly(show,sizer,corner,240).then(()=>tween(show,300,p=> { frame.mix=p; frame.place(); const at=corner(); if (at) sizer.to(at[0],at[1]); })));
       }
-      if (spec.text) work.push(type(show,lead,color,spec.text,unveil,900,kept));
+      if (spec.text) work.push(type(show,lead,color,spec.text,unveil,900,kept).then(()=>frame.node.classList.remove('quiet')));
       else if (spec.animation) work.push(ride(lead,900));
       await Promise.all(work);
       await pause(show,420);
@@ -360,10 +386,17 @@ export const browserSwarmSource = String.raw`
       pointer.mode('arrow');
       dismiss(frame,240);
     }
+    // Where removed content was, carried along when the page around it has moved since.
+    function vacated(spec) {
+      const rect=spec.gone, from=spec.before?.rect;
+      if (!from || !spec.near?.isConnected) return rect;
+      const now=spec.near.getBoundingClientRect();
+      return new DOMRect(rect.x+now.x-from.x,rect.y+now.y-from.y,rect.width,rect.height);
+    }
     // An undone insertion: its outline is selected and collapses.
     async function erase(show,spec) {
-      const color=tint(), rect=spec.gone;
-      const frame=select(show,color,()=>rect);
+      const color=tint(), rect=vacated(spec);
+      const frame=select(show,color,()=>vacated(spec));
       frame.node.classList.add('ghost');
       const lead=cursor(show,color,spec.before?.origin || entry(rect,0),true,!spec.before?.origin);
       await fly(show,lead,frame.corner(0.5,0.5),300);
@@ -394,8 +427,9 @@ export const browserSwarmSource = String.raw`
         if (env.reduced.matches) return null;
         const rect=el.getBoundingClientRect(), computed=getComputedStyle(el), styles={};
         for (const name of names) if (name!=='display' && !name.startsWith('--')) styles[name]=computed.getPropertyValue(name);
-        return {rect:{x:rect.x,y:rect.y,width:rect.width,height:rect.height},styles,origin:env.origin()};
+        return {rect:box(rect),styles,origin:env.origin()};
       },
+      reveal,
       /** Inline properties that differ between the element and another inline style text. */
       inline(el,cssText) {
         const probe=document.createElement('i');
@@ -407,7 +441,14 @@ export const browserSwarmSource = String.raw`
         try {
           if (spec.el) this.settle(spec.el);
           if (env.reduced.matches || document.visibilityState!=='visible') return false;
-          if (!onscreen(spec.gone || spec.el.getBoundingClientRect())) return false;
+          if (!onscreen(spec.gone ? vacated(spec) : spec.el.getBoundingClientRect())) {
+            // A change with nothing to see in view is shown on the closest element that has.
+            const el=watchable(spec.el || spec.near);
+            if (!el) return false;
+            const rect=box(el.getBoundingClientRect());
+            spec=el===spec.el ? {...spec,before:spec.before && {...spec.before,rect}} : {el,before:{rect,styles:{},origin:spec.before?.origin}};
+            this.settle(el);
+          }
           while (shows.size>=4) settle(shows.values().next().value);
           if (!shows.size) tints=0;
           mount();

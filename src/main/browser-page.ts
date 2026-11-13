@@ -663,7 +663,7 @@ export const browserPageSource = String.raw`(() => {
       const created=hasText && textNodes.length===0;
       const beforeCssText=el.style.cssText;
       // What is on screen now, possibly mid-way through an earlier edit, is where this one starts.
-      const before=source==='agent' ? swarm.capture(el,Object.keys(styles)) : null;
+      const before=source==='agent' ? swarm.capture(swarm.reveal(el),Object.keys(styles)) : null;
       swarm.settle(el);
       if (created) { const node=document.createTextNode(''); el.appendChild(node); textNodes.push(node); }
       if (hasText) textNodes.forEach((node,index)=> { node.nodeValue=index===0 ? request.text : ''; });
@@ -688,13 +688,15 @@ export const browserPageSource = String.raw`(() => {
         const anchor=resolve(patch.anchorRef), nodes=treeNodes(el);
         if(anchor!==patch.anchor || el.parentNode!==patch.container || !el.isEqualNode(patch.after) || nodes.length!==patch.nodes.length || nodes.some((node,index)=>node!==patch.nodes[index]) || patch.fields.some(field=>field.node.value!==field.value || field.node.checked!==field.checked || field.node.selectedIndex!==field.selectedIndex)) throw new Error('Created content changed after this preview; refusing to remove newer changes');
         if(editOrder.slice(editOrder.indexOf(id)+1).some(key=>{const newer=patches.get(key);return newer && el.contains(newer.el);})) throw new Error('Undo newer changes to the created elements first');
-        const before=source==='agent' ? swarm.capture(anchor,[]) : null, gone=el.getBoundingClientRect();
+        if(source==='agent') swarm.reveal(el);
+        // The parent stays where it is when a child goes, so it tells how far the page moved.
+        const near=parent(el) || anchor, before=source==='agent' ? swarm.capture(near,[]) : null, gone=el.getBoundingClientRect();
         swarm.settle(el);
         el.remove();patches.delete(id);editOrder.splice(editOrder.indexOf(id),1);
         send({kind:'undo',target:describe(anchor),editId:id,value:JSON.stringify({editId:id})});
         feedback(patch.anchorRef,'applied');
         const result={editId:id,element:inspect(patch.anchorRef)};
-        if(source==='agent') swarm.play({gone,before});
+        if(source==='agent') swarm.play({gone,before,near});
         return result;
       }
       if (patch.hasText) {
@@ -709,7 +711,7 @@ export const browserPageSource = String.raw`(() => {
         checkAnimation(current);
         restoredAnimation=patch.beforeAnimation ? prepareAnimation(el,patch.beforeAnimation.config,patch.beforeAnimation,patch.beforeAnimation.token) : null;
       }
-      const before=source==='agent' ? swarm.capture(el,patch.hasStyles ? swarm.inline(el,patch.beforeCssText) : []) : null;
+      const before=source==='agent' ? swarm.capture(swarm.reveal(el),patch.hasStyles ? swarm.inline(el,patch.beforeCssText) : []) : null;
       swarm.settle(el);
       if (patch.hasText) {
         if (patch.created) patch.textNodes[0].remove();

@@ -1300,6 +1300,159 @@ test('choreography stays out of manual edits and reduced motion, and a newer edi
   await swarmDone(page);
 });
 
+test('agent edits out of view are scrolled to and played, and changes without a box play on their container', async (t) => {
+  if (!browser) return t.skip('Browser binary unavailable');
+  const { page, find } = await fixture(t);
+  await captureOverlayRoot(page);
+  await page.evaluate(() => {
+    document.body.insertAdjacentHTML(
+      'beforeend',
+      `<p id="far" style="margin-top:3000px">远处的文字</p><div id="far-box" style="height:40px;background:#ddd"></div>
+       <section id="tall" style="height:2600px;background:#f4f4f4"></section>`,
+    );
+    document.body.insertAdjacentHTML(
+      'afterbegin',
+      '<div id="scroller" style="height:90px;overflow:auto"><p style="margin-top:200px" id="nested">容器里的文字</p></div>',
+    );
+    document
+      .querySelector('#box')!
+      .insertAdjacentHTML('beforeend', '<span id="unseen">隐藏</span>');
+  });
+  const far = await find('#far');
+  const farBox = await find('#far-box');
+  const nested = await find('#nested');
+  const tall = await find('#tall');
+  const unseen = await find('#unseen');
+  const view = () =>
+    page.evaluate(() => {
+      const rect = document.querySelector('#far')!.getBoundingClientRect();
+      return { y: scrollY, seen: rect.top >= 0 && rect.bottom <= innerHeight };
+    });
+  const home = () => page.evaluate(() => scrollTo(0, 0));
+
+  await bridge(page, 'edit', { ref: far.ref, styles: { color: 'rgb(1, 2, 3)' } });
+  assert.deepEqual(await view(), { y: 0, seen: false }, 'manual edits never move the page');
+  await bridge(page, 'setSource', 'agent');
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await bridge(page, 'edit', { ref: far.ref, styles: { color: 'rgb(4, 5, 6)' } });
+  assert.deepEqual(await view(), { y: 0, seen: false }, 'nor does an edit that will not be played');
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+
+  const text = await bridge<EditResult>(page, 'edit', { ref: far.ref, text: '远处的文字改好了' });
+  assert.equal((await view()).seen, true, 'the target is brought into view before the show');
+  let swarm = await readSwarm(page);
+  assert.deepEqual([swarm.frames, swarm.veiled, swarm.cursors >= 1], [1, true, true]);
+  assert(
+    text.element.bounds.y >= 0 && text.element.bounds.y < 1000,
+    'the result reports where it is',
+  );
+  await swarmDone(page);
+
+  await home();
+  const style = await bridge<EditResult>(page, 'edit', {
+    ref: farBox.ref,
+    styles: { 'background-color': 'rgb(20, 120, 220)', height: '80px' },
+  });
+  assert.equal((await view()).seen, true);
+  assert.equal(
+    await page.locator('#far-box').evaluate((el) => getComputedStyle(el).backgroundColor),
+    'rgb(221, 221, 221)',
+    'the old look is held where it can now be seen',
+  );
+  assert.equal((await readSwarm(page)).frames, 1);
+  await swarmDone(page);
+
+  await home();
+  await bridge(page, 'undo', style.editId);
+  assert.equal((await view()).seen, true, 'undo is brought into view as well');
+  assert.equal((await readSwarm(page)).frames, 1);
+  await swarmDone(page);
+
+  const inserted = await bridge<EditResult>(page, 'edit', {
+    ref: farBox.ref,
+    insert: { position: 'after', node: { tag: 'p', text: '新段落' } },
+  });
+  await swarmDone(page);
+  await home();
+  await bridge(page, 'undo', inserted.editId);
+  assert.equal((await view()).seen, true, 'a removed insertion collapses where it was');
+  assert.equal(
+    await page.evaluate(
+      () => (globalThis as any).__overlayRoot.querySelectorAll('.swarm .sw-sel.ghost').length,
+    ),
+    1,
+  );
+  await swarmDone(page);
+
+  await home();
+  await bridge(page, 'edit', { ref: nested.ref, text: '容器里的文字改好了' });
+  const scrolled = await page.evaluate(() => {
+    const host = document.querySelector('#scroller')!.getBoundingClientRect();
+    const rect = document.querySelector('#nested')!.getBoundingClientRect();
+    return { page: scrollY, inside: rect.top >= host.top - 1 && rect.bottom <= host.bottom + 1 };
+  });
+  assert.deepEqual(scrolled, { page: 0, inside: true }, 'a container is scrolled, the page is not');
+  assert.equal((await readSwarm(page)).frames, 1);
+  await swarmDone(page);
+
+  // Removing the last content lets the page spring back; the outline goes with what surrounds it.
+  const last = await bridge<EditResult>(page, 'edit', {
+    ref: tall.ref,
+    insert: { position: 'after', node: { tag: 'p', text: '页面末尾的段落' } },
+  });
+  await swarmDone(page);
+  const sprung = await page.evaluate((editId) => {
+    scrollTo(0, document.documentElement.scrollHeight);
+    const section = document.querySelector('#tall')!;
+    const was = section.getBoundingClientRect().bottom;
+    (globalThis as any).__workbenchPage.undo(editId);
+    const ghost = (globalThis as any).__overlayRoot.querySelector('.swarm .sw-sel.ghost');
+    return {
+      moved: section.getBoundingClientRect().bottom - was,
+      gap: ghost.getBoundingClientRect().top - section.getBoundingClientRect().bottom,
+    };
+  }, last.editId);
+  assert(sprung.moved > 20, 'the page moved when its last content went');
+  assert(Math.abs(sprung.gap - 12) <= 1, 'the outline stays under the content it followed');
+  await swarmDone(page);
+
+  // An element taller than the view: the cursor and the size badge stay inside it.
+  await bridge(page, 'edit', {
+    ref: tall.ref,
+    styles: { 'background-color': 'rgb(230, 240, 255)' },
+  });
+  await page.waitForTimeout(450);
+  const kept = await page.evaluate(() => {
+    const stage = (globalThis as any).__overlayRoot.querySelector('.swarm');
+    const lead = stage.querySelector('.sw-cur').getBoundingClientRect();
+    const badge = stage.querySelector('.sw-sel b').getBoundingClientRect();
+    return {
+      lead: lead.x >= 0 && lead.x <= innerWidth && lead.y >= 0 && lead.y <= innerHeight,
+      badge: badge.top >= 0 && badge.bottom <= innerHeight && badge.left >= 0,
+      size: stage.querySelector('.sw-sel b').textContent,
+    };
+  });
+  assert.deepEqual([kept.lead, kept.badge], [true, true]);
+  assert.match(kept.size, / × 2600$/);
+  await swarmDone(page);
+
+  // No box of its own: the closest element that has one stands in.
+  await home();
+  await page.locator('#unseen').evaluate((el) => ((el as HTMLElement).hidden = true));
+  await bridge(page, 'edit', { ref: unseen.ref, styles: { color: 'rgb(7, 8, 9)' } });
+  const stood = await page.evaluate(() => {
+    const frame = (globalThis as any).__overlayRoot.querySelector('.swarm .sw-sel');
+    const box = document.querySelector('#box')!.getBoundingClientRect();
+    return {
+      frame: frame ? Math.round(frame.getBoundingClientRect().width) : 0,
+      box: Math.round(box.width),
+      players: document.querySelector('#unseen')!.getAnimations().length,
+    };
+  });
+  assert.deepEqual([stood.frame, stood.players], [stood.box, 0]);
+  await swarmDone(page);
+});
+
 test(
   'scroll debounce flushes the old participant at a control handoff',
   { skip: !executable },
