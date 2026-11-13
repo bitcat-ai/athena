@@ -7,6 +7,7 @@ import {
   ELEMENT_INSERT_TAGS,
   ELEMENT_INSERT_ATTRIBUTES,
 } from '../shared/types';
+import { browserSwarmCss, browserSwarmSource } from './browser-page-swarm';
 
 // Keep this as plain JavaScript: the isolated world must not depend on bundler helpers.
 export const browserPageSource = String.raw`(() => {
@@ -42,7 +43,7 @@ export const browserPageSource = String.raw`(() => {
   let overlayHost, overlayRoot, overlayFrame = 0;
   let hoverElement, selectedElement, feedbackElement, feedbackPhase, feedbackTimer;
   let feedbackAgent = false, agentCursor, cursorTarget, cursorMotion;
-  let hoverPoint;
+  let hoverPoint, overlayMute;
   const overlayBoxes = {};
   const clean = (text, limit=180) => String(text ?? '').replace(/Bearer\s+\S+/gi, 'Bearer [hidden]').replace(/(?:sk-|ghp_|github_pat_)[A-Za-z0-9_-]+/g, '[hidden]').replace(/\b(password|secret|token|api[_-]?key)\s*[:=]\s*[^\s,;]+/gi, '$1=[hidden]').slice(0, limit);
   const parent = el => el.parentElement || (el.getRootNode() instanceof ShadowRoot ? el.getRootNode().host : null);
@@ -210,7 +211,7 @@ export const browserPageSource = String.raw`(() => {
   function eventTarget(event) {
     return event.composedPath().find(node=>node instanceof Element && !overlays.has(node)) || null;
   }
-  function overlayBox(kind) {
+  function overlaySurface() {
     if (!overlayHost?.isConnected) {
       overlayHost=document.createElement('div'); overlays.add(overlayHost);
       overlayHost.setAttribute('data-workbench-overlay',''); overlayHost.setAttribute('aria-hidden','true');
@@ -225,11 +226,16 @@ export const browserPageSource = String.raw`(() => {
         '.agent-cursor{position:absolute;left:0;top:0;width:0;height:0;pointer-events:none}.agent-cursor svg{position:absolute;width:18px;height:24px;overflow:visible;filter:drop-shadow(0 1px 2px #151b3466)}.agent-cursor .label{left:15px;top:20px;bottom:auto;border-radius:3px 8px 8px 8px;font-family:system-ui,sans-serif}.agent-cursor.flip .label{left:auto;right:5px}.agent-cursor.above .label{top:auto;bottom:5px}',
         '.feedback.applied,.agent-cursor.applied{animation:finish 900ms linear both}@keyframes sweep{to{transform:translateX(100%)}}@keyframes finish{0%,75%{opacity:1}100%{opacity:0}}',
         '@media(prefers-reduced-motion:reduce){.feedback,.agent-cursor,.scan::after{animation:none!important}.scan{display:none}}',
+        ${JSON.stringify(browserSwarmCss)},
       ].join('\n');
       overlayRoot.appendChild(css); document.documentElement.appendChild(overlayHost);
       cursorMotion?.cancel();agentCursor=null;cursorTarget=null;
       for(const name of Object.keys(overlayBoxes)) delete overlayBoxes[name];
     }
+    return overlayRoot;
+  }
+  function overlayBox(kind) {
+    overlaySurface();
     if(!overlayBoxes[kind]) {
       const box=document.createElement('div'); box.className='box '+kind; box.dataset.kind=kind;
       const label=document.createElement('span');label.className='label';box.appendChild(label);
@@ -314,6 +320,19 @@ export const browserPageSource = String.raw`(() => {
     }
     refreshOverlays();
   }
+  ${browserSwarmSource}
+  // While cursors carry out an edit they are the feedback; the regular boxes keep their state unseen.
+  function muteOverlays(muted) {
+    overlayMute?.remove();overlayMute=null;
+    if(!muted || !overlayHost?.isConnected) return;
+    overlayMute=document.createElement('style');overlayMute.textContent='.selected,.feedback,.agent-cursor{visibility:hidden}';
+    overlayRoot.appendChild(overlayMute);
+  }
+  const swarm=createSwarm({root:overlaySurface,parent,reduced:reducedMotion,mute:muteOverlays,origin() {
+    if(!agentCursor?.isConnected || agentCursor.style.display!=='block') return null;
+    const rect=agentCursor.getBoundingClientRect();
+    return [rect.x,rect.y];
+  }});
   document.addEventListener('mousemove',event=>{
     if(!inspecting) return;
     if(!hoverPoint) send({kind:'hover-frame'});
@@ -427,7 +446,9 @@ export const browserPageSource = String.raw`(() => {
       applyAnimation(el,prepareAnimation(el,record.config,saved,record.token));
     }
   });
-  function inspect(ref) {
+  // Observations report the page as edited, never a frame of a running edit choreography.
+  const inspect = ref => swarm.truth(()=>details(ref));
+  function details(ref) {
     const el=resolve(ref);
     const attributes={};
     for (const attribute of el.attributes) if (attributeNames.has(attribute.name)) attributes[attribute.name]=sensitive(el) && !['type','role','disabled','readonly','tabindex'].includes(attribute.name) ? '[hidden]' : clean(attribute.value,512);
@@ -524,6 +545,7 @@ export const browserPageSource = String.raw`(() => {
       return el;
     };
     const el=build(insertion.node);
+    const before=source==='agent' ? swarm.capture(anchor,[]) : null;
     const next=position==='prepend' ? anchor.firstChild : position==='before' ? anchor : position==='after' ? anchor.nextSibling : null;
     container.insertBefore(el,next);
     const element=describe(el), editId=docId+':edit:'+(++nextEditId);
@@ -532,7 +554,9 @@ export const browserPageSource = String.raw`(() => {
     send({kind:'edit',target:element,editId,value:JSON.stringify({insert:insertion})});
     el.scrollIntoView({block:'nearest',inline:'nearest',behavior:'instant'});
     feedback(element.ref,'applied');
-    return {editId,element:inspect(element.ref)};
+    const result={editId,element:inspect(element.ref)};
+    if(source==='agent') swarm.play({el,inserted:true,before});
+    return result;
   }
   globalThis.__workbenchPage = {
     docId,
@@ -543,6 +567,7 @@ export const browserPageSource = String.raw`(() => {
     leave() { hoverPoint=null;hoverElement=null;refreshOverlays(); },
     feedback,
     clearOverlays() {
+      swarm.settle();
       inspecting=false;hoverPoint=null;hoverElement=null;selectedElement=null;feedbackElement=null;feedbackPhase=null;clearTimeout(feedbackTimer);
       cancelAnimationFrame(overlayFrame);overlayFrame=0;overlayHost?.remove();
       cursorMotion?.cancel();cursorTarget=null;feedbackAgent=false;
@@ -588,6 +613,7 @@ export const browserPageSource = String.raw`(() => {
     node(ref) { return resolve(ref); },
     previewStyles(request) {
       const el=resolve(request.ref);
+      swarm.settle(el);
       // Direct manipulation must show the real color, without a previous success wash.
       if(feedbackElement===el) { clearTimeout(feedbackTimer);feedbackElement=null;feedbackPhase=null;refreshOverlays(); }
       if (sensitive(el) || blockedEditTags.has(el.localName.toUpperCase())) throw new Error('Sensitive or executable elements cannot be edited');
@@ -636,6 +662,9 @@ export const browserPageSource = String.raw`(() => {
       const beforeText=textNodes.map(node=>node.nodeValue);
       const created=hasText && textNodes.length===0;
       const beforeCssText=el.style.cssText;
+      // What is on screen now, possibly mid-way through an earlier edit, is where this one starts.
+      const before=source==='agent' ? swarm.capture(el,Object.keys(styles)) : null;
+      swarm.settle(el);
       if (created) { const node=document.createTextNode(''); el.appendChild(node); textNodes.push(node); }
       if (hasText) textNodes.forEach((node,index)=> { node.nodeValue=index===0 ? request.text : ''; });
       for (const [name,value] of entries) value==='' ? el.style.removeProperty(name) : el.style.setProperty(name,value);
@@ -645,7 +674,9 @@ export const browserPageSource = String.raw`(() => {
       editOrder.push(editId);
       send({kind:'edit',target:describe(el),editId,value:JSON.stringify({...(hasText ? {text:request.text} : {}),...(entries.length ? {styles} : {}),...(hasAnimation ? {animation} : {})})});
       feedback(request.ref,'applied');
-      return {editId,element:inspect(request.ref)};
+      const result={editId,element:inspect(request.ref)};
+      if(source==='agent') swarm.play({el,before,text:hasText && request.text ? textNodes[0] : null,was:beforeText[0],animation:!!animation});
+      return result;
     },
     undo(editId) {
       const id=editId===undefined ? editOrder[editOrder.length-1] : editId;
@@ -657,10 +688,14 @@ export const browserPageSource = String.raw`(() => {
         const anchor=resolve(patch.anchorRef), nodes=treeNodes(el);
         if(anchor!==patch.anchor || el.parentNode!==patch.container || !el.isEqualNode(patch.after) || nodes.length!==patch.nodes.length || nodes.some((node,index)=>node!==patch.nodes[index]) || patch.fields.some(field=>field.node.value!==field.value || field.node.checked!==field.checked || field.node.selectedIndex!==field.selectedIndex)) throw new Error('Created content changed after this preview; refusing to remove newer changes');
         if(editOrder.slice(editOrder.indexOf(id)+1).some(key=>{const newer=patches.get(key);return newer && el.contains(newer.el);})) throw new Error('Undo newer changes to the created elements first');
+        const before=source==='agent' ? swarm.capture(anchor,[]) : null, gone=el.getBoundingClientRect();
+        swarm.settle(el);
         el.remove();patches.delete(id);editOrder.splice(editOrder.indexOf(id),1);
         send({kind:'undo',target:describe(anchor),editId:id,value:JSON.stringify({editId:id})});
         feedback(patch.anchorRef,'applied');
-        return {editId:id,element:inspect(patch.anchorRef)};
+        const result={editId:id,element:inspect(patch.anchorRef)};
+        if(source==='agent') swarm.play({gone,before});
+        return result;
       }
       if (patch.hasText) {
         const current=[...el.childNodes].filter(node=>node.nodeType===Node.TEXT_NODE);
@@ -674,6 +709,8 @@ export const browserPageSource = String.raw`(() => {
         checkAnimation(current);
         restoredAnimation=patch.beforeAnimation ? prepareAnimation(el,patch.beforeAnimation.config,patch.beforeAnimation,patch.beforeAnimation.token) : null;
       }
+      const before=source==='agent' ? swarm.capture(el,patch.hasStyles ? swarm.inline(el,patch.beforeCssText) : []) : null;
+      swarm.settle(el);
       if (patch.hasText) {
         if (patch.created) patch.textNodes[0].remove();
         else patch.textNodes.forEach((node,index)=> { node.nodeValue=patch.beforeText[index]; });
@@ -684,7 +721,9 @@ export const browserPageSource = String.raw`(() => {
       editOrder.splice(editOrder.indexOf(id),1);
       send({kind:'undo',target:describe(el),editId:id,value:JSON.stringify({editId:id})});
       feedback(patch.ref,'applied');
-      return {editId:id,element:inspect(patch.ref)};
+      const result={editId:id,element:inspect(patch.ref)};
+      if(source==='agent') swarm.play({el,before,text:patch.hasText && !patch.created ? patch.textNodes.find(node=>node.nodeValue) : null,was:patch.afterText[0],animation:!!restoredAnimation});
+      return result;
     },
     bounds(ref) {
       const el=resolve(ref); el.scrollIntoView({block:'center',inline:'nearest',behavior:'instant'});
@@ -815,6 +854,8 @@ export const browserPageSource = String.raw`(() => {
     mask(enabled) {
       maskNodes.forEach(node=>node.remove()); maskNodes=[];
       if (!enabled) return;
+      // A capture shows the page as edited, not a moment of the choreography.
+      swarm.settle();
       for (const el of scan().found) {
         if (!sensitive(el) || !visible(el)) continue;
         const rect=el.getBoundingClientRect();
@@ -824,4 +865,8 @@ export const browserPageSource = String.raw`(() => {
       }
     }
   };
+  for (const name of ['snapshot','query','reveal','atPoint','bounds','read']) {
+    const read=globalThis.__workbenchPage[name];
+    globalThis.__workbenchPage[name]=(...args)=>swarm.truth(()=>read(...args));
+  }
 })();`;

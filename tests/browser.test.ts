@@ -183,6 +183,117 @@ test(
   },
 );
 test(
+  'real Chrome: agent edits are carried out by cursors the website cannot reach, and captures show the result',
+  { skip: !binary, timeout: 40_000 },
+  async () => {
+    const storageDir = await mkdtemp(join(tmpdir(), 'workbench-cursors-test-'));
+    const server = createServer((_request, response) => {
+      response.setHeader('Content-Type', 'text/html; charset=utf-8');
+      response.end(
+        '<!doctype html><title>Cursor fixture</title><style>body{padding:60px;font:18px system-ui}</style><h1 id="title">Old title</h1><button id="cta" style="background-color:rgb(20,40,80);color:white;padding:16px 32px">Start</button>',
+      );
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const runtime = new BrowserRuntime({
+      storageDir,
+      binaryPath: binary,
+      onState() {},
+      onFrame() {},
+      onStep() {},
+      onSelected() {},
+      onHumanTakeover() {},
+    });
+    const waitFor = async <T>(
+      read: () => Promise<T>,
+      accept: (value: T) => boolean,
+    ): Promise<T> => {
+      for (let i = 0; i < 200; i++) {
+        const value = await read();
+        if (accept(value)) return value;
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      throw new Error('Expected cursor state did not arrive');
+    };
+    try {
+      await runtime.start(`http://127.0.0.1:${(server.address() as { port: number }).port}/`);
+      const tab = (runtime as any).tabs.get(runtime.getState().activeTabId);
+      await tab.page.call('Emulation.setEmulatedMedia', {
+        features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }],
+      });
+      const find = async (selector: string) =>
+        (
+          await waitFor(
+            () => runtime.queryElements({ selector }),
+            (result) => result.elements.length === 1,
+          )
+        ).elements[0];
+      const title = await find('#title');
+      const cta = await find('#cta');
+      const frame = tab.frames.get(title.frameId);
+      const isolated = (expression: string) => (runtime as any).bridge(tab, frame, expression);
+      const website = async (expression: string) =>
+        (await tab.page.call('Runtime.evaluate', { expression, returnByValue: true })).result.value;
+      await isolated(
+        `(()=>{const original=Element.prototype.attachShadow;Element.prototype.attachShadow=function(init){const root=original.call(this,init);if(this.hasAttribute('data-workbench-overlay'))globalThis.__testOverlayRoot=root;return root;};})()`,
+      );
+      const show = () =>
+        isolated(
+          `(()=>{const stage=globalThis.__testOverlayRoot?.querySelector('.swarm');return {cursors:stage?.querySelectorAll('.sw-cur').length||0,frames:stage?.querySelectorAll('.sw-sel').length||0,nodes:stage?.childElementCount||0,veiled:CSS.highlights.has('athena-swarm-pending')};})()`,
+        );
+      runtime.allowAgentControl();
+      const typed = await runtime.callTool('workbench_browser_edit', {
+        ref: title.ref,
+        text: 'Old title, made new',
+      });
+      assert(!typed.isError, typed.text);
+      assert.equal(JSON.parse(typed.text).element.textContent, 'Old title, made new');
+      const playing = await show();
+      assert(playing.cursors >= 1, 'the edit is carried out by a cursor');
+      assert.equal(playing.frames, 1);
+      assert.equal(playing.veiled, true);
+      assert.deepEqual(
+        await website(
+          `({text:document.querySelector('#title').textContent,inline:document.querySelector('#title').getAttribute('style'),reach:!!document.querySelector('[data-workbench-overlay]').shadowRoot})`,
+        ),
+        { text: 'Old title, made new', inline: null, reach: false },
+      );
+      const painted = await runtime.callTool('workbench_browser_edit', {
+        ref: cta.ref,
+        styles: { 'background-color': 'rgb(190, 40, 60)' },
+      });
+      assert(!painted.isError, painted.text);
+      const edit = JSON.parse(painted.text);
+      assert.equal(edit.element.computed['background-color'], 'rgb(190, 40, 60)');
+      const inspected = await runtime.callTool('workbench_browser_inspect', { ref: cta.ref });
+      assert.equal(JSON.parse(inspected.text).computed['background-color'], 'rgb(190, 40, 60)');
+      assert.equal((await show()).frames, 2);
+      const capture = await runtime.callTool('workbench_browser_screenshot', {});
+      assert(!capture.isError, capture.text);
+      assert.deepEqual(await show(), { cursors: 0, frames: 0, nodes: 0, veiled: false });
+      assert.deepEqual(
+        await website(
+          `(()=>{const el=document.querySelector('#cta');return {players:document.getAnimations().length,color:getComputedStyle(el).backgroundColor,sheets:document.adoptedStyleSheets.length};})()`,
+        ),
+        { players: 0, color: 'rgb(190, 40, 60)', sheets: 0 },
+      );
+      const undone = await runtime.callTool('workbench_browser_undo', { editId: edit.editId });
+      assert(!undone.isError, undone.text);
+      assert((await show()).cursors >= 1, 'undo is played as well');
+      assert.equal(
+        await website(`document.querySelector('#cta').style.backgroundColor`),
+        'rgb(20, 40, 80)',
+      );
+      await waitFor(show, (value: { nodes: number }) => value.nodes === 0);
+      assert.equal(await website('document.getAnimations().length'), 0);
+    } finally {
+      await runtime.dispose();
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      await rm(storageDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+  },
+);
+test(
   'real Chrome: gradients and owned motion are one reversible preview',
   { skip: !binary, timeout: 40_000 },
   async () => {

@@ -1056,6 +1056,250 @@ async function readOverlay(page: Page, kind: string) {
   }, kind);
 }
 
+async function readSwarm(page: Page) {
+  return page.evaluate(() => {
+    const root = (globalThis as any).__overlayRoot as ShadowRoot | undefined;
+    const stage = root?.isConnected ? root.querySelector('.swarm') : null;
+    return {
+      nodes: stage?.childElementCount ?? 0,
+      cursors: stage?.querySelectorAll('.sw-cur').length ?? 0,
+      frames: stage?.querySelectorAll('.sw-sel').length ?? 0,
+      muted: (root?.querySelectorAll('style').length ?? 0) > 1,
+      veiled: (CSS as any).highlights.has('athena-swarm-pending'),
+      sheets: document.adoptedStyleSheets.length,
+    };
+  });
+}
+const swarmDone = (page: Page) =>
+  page.waitForFunction(() => {
+    const root = (globalThis as any).__overlayRoot as ShadowRoot;
+    return (
+      !root.querySelector('.swarm')?.childElementCount && root.querySelectorAll('style').length < 2
+    );
+  });
+
+test('agent style edits play as cursors while the document and observations already hold the result', async (t) => {
+  if (!browser) return t.skip('Browser binary unavailable');
+  const { page, find } = await fixture(t);
+  await captureOverlayRoot(page);
+  const box = await find('#box');
+  await bridge(page, 'setSource', 'agent');
+  const styles = { 'background-color': 'rgb(200, 30, 30)', width: '400px' };
+  // One task: no frame is rendered between the edit and these reads.
+  const played = await page.evaluate(
+    ({ ref, styles }) => {
+      const api = (globalThis as any).__workbenchPage;
+      const el = document.querySelector('#box') as HTMLElement;
+      const result = api.edit({ ref, styles });
+      return {
+        result,
+        inline: el.getAttribute('style'),
+        painted: getComputedStyle(el).backgroundColor,
+        paintedWidth: el.getBoundingClientRect().width,
+        inspected: api.inspect(ref),
+        queried: api.query({ selector: '#box' }).elements[0].bounds.width,
+        players: el.getAnimations().length,
+      };
+    },
+    { ref: box.ref, styles },
+  );
+  assert.equal(played.inline, 'background-color: rgb(200, 30, 30); width: 400px;');
+  assert.equal(played.result.element.computed['background-color'], 'rgb(200, 30, 30)');
+  assert.equal(played.result.element.bounds.width, 440);
+  assert.equal(played.inspected.computed['background-color'], 'rgb(200, 30, 30)');
+  assert.equal(played.queried, 440);
+  assert.equal(played.painted, 'rgb(238, 238, 238)', 'the old look is held until a cursor arrives');
+  assert.equal(played.paintedWidth, 340);
+  assert.equal(played.players, 1);
+  let swarm = await readSwarm(page);
+  assert(swarm.cursors >= 1);
+  assert.equal(swarm.frames, 1);
+  assert.equal(swarm.muted, true, 'the regular feedback boxes stay unseen during the show');
+  await page.waitForFunction(
+    () => (globalThis as any).__overlayRoot.querySelectorAll('.swarm .sw-cur').length > 1,
+    undefined,
+    { timeout: 3000 },
+  );
+  await swarmDone(page);
+  assert.deepEqual(
+    await page.locator('#box').evaluate((el) => ({
+      players: el.getAnimations().length,
+      painted: getComputedStyle(el).backgroundColor,
+      inline: el.getAttribute('style'),
+    })),
+    { players: 0, painted: 'rgb(200, 30, 30)', inline: played.inline },
+  );
+  const undone = await page.evaluate((editId) => {
+    const api = (globalThis as any).__workbenchPage;
+    const el = document.querySelector('#box') as HTMLElement;
+    const result = api.undo(editId);
+    const held = getComputedStyle(el).backgroundColor;
+    api.mask(true);
+    const settled = {
+      painted: getComputedStyle(el).backgroundColor,
+      players: el.getAnimations().length,
+    };
+    api.mask(false);
+    return { result, inline: el.getAttribute('style'), held, settled };
+  }, played.result.editId);
+  assert.equal(undone.inline, '', 'the inline style is restored as written, with no extras');
+  assert.equal(undone.result.element.computed['background-color'], 'rgb(238, 238, 238)');
+  assert.equal(undone.held, 'rgb(200, 30, 30)', 'undo is played from the edited look');
+  assert.deepEqual(undone.settled, { painted: 'rgb(238, 238, 238)', players: 0 });
+  swarm = await readSwarm(page);
+  assert.equal(swarm.nodes, 0, 'a capture ends the show at once');
+});
+
+test('agent text edits type only the changed part behind a highlight and leave nothing behind', async (t) => {
+  if (!browser) return t.skip('Browser binary unavailable');
+  const { page, find } = await fixture(t);
+  await captureOverlayRoot(page);
+  const heading = await find('#heading');
+  await bridge(page, 'setSource', 'agent');
+  const played = await page.evaluate((ref) => {
+    const api = (globalThis as any).__workbenchPage;
+    const result = api.edit({ ref, text: '普通标题已经更新' });
+    const [range] = [...(CSS as any).highlights.get('athena-swarm-pending')] as Range[];
+    return {
+      editId: result.editId,
+      text: document.querySelector('#heading')!.textContent,
+      reported: result.element.textContent,
+      snapshot: api.snapshot().text,
+      pending: range.toString(),
+    };
+  }, heading.ref);
+  assert.equal(played.text, '普通标题已经更新');
+  assert.equal(played.reported, '普通标题已经更新');
+  assert(played.snapshot.includes('普通标题已经更新'));
+  assert.equal(played.pending, '已经更新', 'text both versions share is not retyped');
+  let swarm = await readSwarm(page);
+  assert.deepEqual([swarm.veiled, swarm.sheets, swarm.frames], [true, 1, 1]);
+  await page.waitForFunction(() => {
+    const [range] = [...(CSS as any).highlights.get('athena-swarm-pending')] as Range[];
+    const caret = (globalThis as any).__overlayRoot.querySelector('.swarm .sw-caret');
+    return caret && range.toString().length < 4 && range.toString().length > 0;
+  });
+  await swarmDone(page);
+  swarm = await readSwarm(page);
+  assert.deepEqual([swarm.veiled, swarm.sheets, swarm.nodes], [false, 0, 0]);
+  await bridge(page, 'undo', played.editId);
+  assert.equal(await page.locator('#heading').textContent(), '普通标题');
+  assert.equal(await page.locator('#heading').getAttribute('style'), null);
+  assert((await readSwarm(page)).cursors >= 1, 'undo is played as well');
+  await bridge(page, 'clearOverlays');
+  assert.equal(await page.locator('[data-workbench-overlay]').count(), 0);
+  assert.equal(await page.evaluate(() => (CSS as any).highlights.size), 0);
+  assert.equal(await page.evaluate(() => document.adoptedStyleSheets.length), 0);
+});
+
+test('agent insertions are drawn layer by layer and an undone insertion collapses', async (t) => {
+  if (!browser) return t.skip('Browser binary unavailable');
+  const { page, find } = await fixture(t);
+  await captureOverlayRoot(page);
+  const anchor = await find('#box');
+  await bridge(page, 'setSource', 'agent');
+  const insert = {
+    position: 'after',
+    node: {
+      tag: 'section',
+      attributes: { id: 'drawn' },
+      styles: { padding: '16px' },
+      children: [
+        { tag: 'h2', text: 'New section' },
+        { tag: 'p', text: 'Drawn by cursors' },
+        { tag: 'button', text: 'Continue' },
+      ],
+    },
+  };
+  const played = await page.evaluate(
+    ({ ref, insert }) => {
+      const api = (globalThis as any).__workbenchPage;
+      const result = api.edit({ ref, insert });
+      const el = document.querySelector('#drawn')!;
+      return {
+        editId: result.editId,
+        html: el.outerHTML,
+        painted: [el, ...el.children].map((node) => getComputedStyle(node).opacity),
+        reported: api.inspect(result.element.ref).computed.opacity,
+        snapshot: api.snapshot().text,
+      };
+    },
+    { ref: anchor.ref, insert },
+  );
+  assert.equal(
+    played.html,
+    '<section id="drawn" style="padding: 16px;"><h2>New section</h2><p>Drawn by cursors</p><button type="button">Continue</button></section>',
+  );
+  assert.deepEqual(played.painted, ['0', '0', '0', '0'], 'nothing is painted before it is drawn');
+  assert.equal(played.reported, '1');
+  assert(played.snapshot.includes('Drawn by cursors'));
+  let swarm = await readSwarm(page);
+  assert.equal(swarm.cursors, 4);
+  assert.equal(swarm.veiled, true);
+  await swarmDone(page);
+  assert.deepEqual(
+    await page.locator('#drawn').evaluate((el) => ({
+      html: el.outerHTML,
+      players: [el, ...el.children].flatMap((node) => node.getAnimations()).length,
+      painted: [el, ...el.children].map((node) => getComputedStyle(node).opacity),
+    })),
+    { html: played.html, players: 0, painted: ['1', '1', '1', '1'] },
+  );
+  swarm = await readSwarm(page);
+  assert.deepEqual([swarm.veiled, swarm.sheets], [false, 0]);
+  await bridge(page, 'undo', played.editId);
+  assert.equal(await page.locator('#drawn').count(), 0);
+  assert.equal(
+    await page.evaluate(
+      () => (globalThis as any).__overlayRoot.querySelectorAll('.swarm .sw-sel.ghost').length,
+    ),
+    1,
+  );
+  await swarmDone(page);
+});
+
+test('choreography stays out of manual edits and reduced motion, and a newer edit replaces the show on its element', async (t) => {
+  if (!browser) return t.skip('Browser binary unavailable');
+  const { page, find } = await fixture(t);
+  await captureOverlayRoot(page);
+  const box = await find('#box');
+  const heading = await find('#heading');
+  const players = () => page.locator('#box').evaluate((el) => el.getAnimations().length);
+  await bridge(page, 'edit', { ref: box.ref, styles: { 'background-color': 'rgb(1, 2, 3)' } });
+  let swarm = await readSwarm(page);
+  assert.deepEqual([swarm.nodes, swarm.muted, await players()], [0, false, 0]);
+  await bridge(page, 'setSource', 'agent');
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await bridge(page, 'edit', { ref: box.ref, styles: { 'background-color': 'rgb(4, 5, 6)' } });
+  swarm = await readSwarm(page);
+  assert.deepEqual([swarm.nodes, swarm.muted, await players()], [0, false, 0]);
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  const frames = await page.evaluate(
+    ({ box, heading }) => {
+      const api = (globalThis as any).__workbenchPage;
+      // Arrow helpers are not used here: the test transform would wrap them in a missing helper.
+      const stage = (globalThis as any).__overlayRoot;
+      const seen: number[] = [];
+      api.edit({ ref: box, styles: { 'background-color': 'rgb(7, 8, 9)' } });
+      seen.push(stage.querySelectorAll('.swarm .sw-sel').length);
+      api.edit({ ref: box, styles: { 'background-color': 'rgb(10, 11, 12)' } });
+      seen.push(stage.querySelectorAll('.swarm .sw-sel').length);
+      api.edit({ ref: heading, text: '另一个元素' });
+      seen.push(stage.querySelectorAll('.swarm .sw-sel').length);
+      return seen;
+    },
+    { box: box.ref, heading: heading.ref },
+  );
+  assert.deepEqual(frames, [1, 1, 2]);
+  assert.equal(await players(), 1);
+  await bridge(page, 'setSource', 'human');
+  await bridge(page, 'previewStyles', { ref: box.ref, styles: { color: 'rgb(9, 9, 9)' } });
+  assert.equal(await players(), 0, 'direct manipulation shows the real styles');
+  assert.equal((await readSwarm(page)).frames, 1, 'the show on another element continues');
+  await page.locator('#heading').evaluate((el) => el.remove());
+  await swarmDone(page);
+});
+
 test(
   'scroll debounce flushes the old participant at a control handoff',
   { skip: !executable },
