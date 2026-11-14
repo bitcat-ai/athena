@@ -100,13 +100,13 @@ export function UserMenu({
             if (key === 'workspace') onWorkspace();
           }}
         >
-          <Dropdown.Item id="settings" textValue="设置与连接">
+          <Dropdown.Item id="settings" textValue="设置">
             <Icon icon={Settings02Icon} size={16} />
-            <Label>设置与连接</Label>
+            <Label>设置</Label>
           </Dropdown.Item>
-          <Dropdown.Item id="usage" textValue="用量概览">
+          <Dropdown.Item id="usage" textValue="用量">
             <Icon icon={ChartNoAxesCombinedIcon} size={16} />
-            <Label>用量概览</Label>
+            <Label>用量</Label>
           </Dropdown.Item>
           <Dropdown.Item id="workspace" textValue="选择工作目录">
             <Icon icon={Folder01Icon} size={16} />

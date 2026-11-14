@@ -115,8 +115,8 @@ try {
     path: path.join(root, 'docs/screenshots/workspace.png'),
     animations: 'disabled',
   });
-  await page.getByRole('button', { name: '设置与连接', exact: true }).click();
-  await expect(page.getByRole('region', { name: '设置与连接', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '设置', exact: true }).click();
+  await expect(page.getByRole('region', { name: '设置', exact: true })).toBeVisible();
   await page.locator('.runtime-installations summary').click();
   await expect(
     page.locator('.agent-setting-row').filter({ has: page.getByText('Codex', { exact: true }) }),
@@ -124,7 +124,7 @@ try {
   await expect(page.locator('.agent-setting-row').filter({ hasText: 'Claude' })).toBeVisible();
   await page.screenshot({ path: path.join(root, 'test-results/agents.png') });
   await page.getByRole('button', { name: '返回对话', exact: true }).click();
-  await expect(page.getByRole('region', { name: '设置与连接', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: '设置', exact: true })).toHaveCount(0);
   checks.push('Actual CLI detection and runtime settings');
 
   const snapshot = async () =>

@@ -641,6 +641,7 @@ export interface AppSnapshot {
   }>;
   share?: import('./share').ShareState;
   learning?: import('./learning').LearningState;
+  queue?: import('./queue').MessageQueueState;
 }
 export type AppEvent =
   | { type: 'sandbox:state'; state: import('./sandbox').LocalSandboxView }
@@ -654,6 +655,7 @@ export type AppEvent =
   | { type: 'usage:updated' }
   | { type: 'share:state'; state: import('./share').ShareState }
   | { type: 'learning:state'; state: import('./learning').LearningState }
+  | { type: 'queue:state'; state: import('./queue').MessageQueueState }
   | { type: 'browser:state'; state: BrowserState }
   | { type: 'web:state'; state: WebExecutorState }
   | { type: 'browser:frame'; frame: BrowserFrame }

@@ -535,7 +535,7 @@ try {
       .evaluate((node) => getComputedStyle(node).flexDirection),
     'row',
   );
-  assert.equal(await page.getByRole('dialog', { name: '设置与连接' }).count(), 0);
+  assert.equal(await page.getByRole('dialog', { name: '设置' }).count(), 0);
   await page.screenshot({ path: path.join(output, 'settings-agent.png') });
   await page.getByRole('tab', { name: '浏览器', exact: true }).click();
   await expect(page.getByRole('button', { name: '选择 Chrome', exact: true })).toBeVisible();
@@ -830,7 +830,7 @@ try {
   const main = await page.getByRole('main').boundingBox();
   assert.ok(main);
   for (const [button, panel] of [
-    ['设置与连接', '设置与连接'],
+    ['设置', '设置'],
     ['用量', '独立用量面板'],
   ]) {
     await page.getByRole('button', { name: button, exact: true }).click();

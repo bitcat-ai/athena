@@ -55,6 +55,7 @@ import {
   type ElementRequirement,
 } from './element-requirements';
 import { TurnNotifications } from './notifications';
+import { MessageQueue } from './message-queue';
 import { Store } from './store';
 import {
   addPreparedConversation,
@@ -190,6 +191,12 @@ let preparingTurn:
   | { cancelled: boolean; conversationId: string; done: Promise<void>; resolve: () => void }
   | undefined;
 let externalTurnQueue = Promise.resolve();
+/** Desktop messages sent while a turn runs; each holds what starts its turn when it comes. */
+const queue = new MessageQueue<(conversation: Conversation) => Promise<unknown>>((state) =>
+  emit({ type: 'queue:state', state }),
+);
+/** True from taking a queued message until its turn is accepted or refused. */
+let dispatchingQueue = false;
 
 function queueExternalTurn<T>(operation: () => Promise<T>): Promise<T> {
   const result = externalTurnQueue.then(operation, operation);
@@ -1120,6 +1127,7 @@ async function runTurn(
     saveUsage();
     await store.save();
     emit({ type: 'conversation:updated', conversation });
+    turnSettled(conversation.id, false);
     return assistant.text;
   }
   let session: AgentSession;
@@ -1138,6 +1146,7 @@ async function runTurn(
     await store.save();
     emit({ type: 'conversation:updated', conversation });
     if (error && typeof error === 'object') inlineFailures.add(error);
+    turnSettled(conversation.id, false);
     throw error;
   }
   const notifications = new TurnNotifications(
@@ -1295,6 +1304,7 @@ async function runTurn(
     try {
       await store.save();
     } finally {
+      const finished = !active?.cancelled && assistant.status === 'done';
       active = undefined;
       if (
         !quitting &&
@@ -1309,8 +1319,41 @@ async function runTurn(
         messageId: assistant.id,
         event: { type: 'status', status: 'idle', phase: assistant.phase },
       });
+      turnSettled(conversation.id, finished);
     }
   }
+}
+/** A turn is over. Queued messages follow a clean finish; after a stop or a failure they wait. */
+function turnSettled(conversationId: string, finished: boolean) {
+  queue.settle(conversationId, finished);
+  void dispatchQueue();
+}
+/** Sends the oldest queued message that may go, once nothing else is running. */
+async function dispatchQueue() {
+  if (quitting || dispatchingQueue || active || startingTurn) return;
+  const next = queue.take((item) => {
+    const conversation = store.data.conversations.find(({ id }) => id === item.conversationId);
+    // Messages of another working directory wait until the user is back in it.
+    return !conversation?.workspace || conversation.workspace === store.data.settings.workspace;
+  });
+  if (!next) return;
+  dispatchingQueue = true;
+  try {
+    await next.payload(getConversation(next.item.conversationId));
+  } catch (error) {
+    // When another turn got in first, the message keeps its place and follows that turn.
+    const busy = Boolean(active || startingTurn);
+    queue.restore(next, !busy);
+    if (!busy)
+      notice(
+        `排队的消息没有发出：${error instanceof Error ? error.message : '任务未能开始'}`,
+        'error',
+      );
+  } finally {
+    dispatchingQueue = false;
+  }
+  // A turn that ended before its start was reported back found the dispatch still in progress.
+  if (!active && !startingTurn) void dispatchQueue();
 }
 async function stopTurn() {
   const preparing = preparingTurn;
@@ -1554,7 +1597,7 @@ async function handleFeishuMessage(message: FeishuMessage) {
     await feishu.sendReply(message, '已发送停止请求。请在 Athena 中查看任务状态。');
     return;
   }
-  if (active || startingTurn) {
+  if (active || startingTurn || dispatchingQueue) {
     await feishu.sendReply(
       message,
       '当前任务仍在进行。可以发送“停止”中止任务，或完成后再发送新请求。',
@@ -1745,6 +1788,7 @@ async function snapshot(): Promise<AppSnapshot> {
     pendingExternalConnections: athenaMcp?.connections() ?? [],
     share: sharing?.getState(),
     learning: await learningState(),
+    queue: queue.state(),
   };
 }
 async function invoke(action: string, payload: unknown) {
@@ -2077,21 +2121,49 @@ async function invoke(action: string, payload: unknown) {
       )
         throw new Error('Skill 元数据与选择不匹配');
       const displayText = data.displayText === undefined ? undefined : string(data.displayText);
-      const { mentions, elementContext, first } = await resolveMentions(data.mentions);
-      const conversation = existing ?? createConversation();
-      return startTurn(
-        conversation,
-        taskText,
-        [context, elementContext].filter(Boolean).join('\n\n') || undefined,
-        false,
-        first,
-        mentions,
-        explicitSkills,
-        selectedSkillExpectations,
-        displayText,
-        images,
-      );
+      const resolved = await resolveMentions(data.mentions);
+      const begin = (
+        conversation: Conversation,
+        { mentions, elementContext, first }: typeof resolved,
+      ) =>
+        startTurn(
+          conversation,
+          taskText,
+          [context, elementContext].filter(Boolean).join('\n\n') || undefined,
+          false,
+          first,
+          mentions,
+          explicitSkills,
+          selectedSkillExpectations,
+          displayText,
+          images,
+        );
+      // A turn is running: the message waits and is sent when the turns before it are done.
+      if (active || startingTurn || dispatchingQueue) {
+        if (existing) {
+          assertOpenConversation(store.data.conversations, existing);
+          if (existing.workspace && existing.workspace !== store.data.settings.workspace)
+            throw new Error('这段对话属于另一个工作目录。请切换回原目录，或新建对话。');
+        }
+        if (queue.full) throw new Error('排队的消息已满，请等前面的任务完成后再发送');
+        const conversation = existing ?? createConversation();
+        const queued = queue.add(
+          conversation.id,
+          displayText ?? taskText,
+          images.length,
+          // The page may have changed by then, so its elements are read again before sending.
+          async (target) => begin(target, await resolveMentions(data.mentions)),
+        );
+        return { conversationId: conversation.id, queued: queued.id };
+      }
+      return begin(existing ?? createConversation(), resolved);
     }
+    case 'queue:remove':
+      return queue.remove(string(record(payload).id, 100));
+    case 'queue:resume':
+      queue.resume(string(record(payload).conversationId, 100));
+      void dispatchQueue();
+      return queue.state();
     case 'conversation:stop':
       if (active && !active.cancelled) learning.signal(active.conversationId, '用户中途停止了任务');
       await stopTurn();
@@ -2105,7 +2177,10 @@ async function invoke(action: string, payload: unknown) {
         data.archived,
         runningConversationId(),
       );
-      if (data.archived) releaseConversation(conversation.id);
+      if (data.archived) {
+        releaseConversation(conversation.id);
+        queue.drop(conversation.id);
+      }
       emit({ type: 'conversation:updated', conversation });
       return conversation;
     }
@@ -2116,6 +2191,7 @@ async function invoke(action: string, payload: unknown) {
         runningConversationId(),
       );
       releaseConversation(conversation.id);
+      queue.drop(conversation.id);
       learning.forgetConversation(conversation.id);
       recordedPreviews.delete(conversation.id);
       return true;

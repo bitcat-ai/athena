@@ -50,6 +50,7 @@ import {
   Search01Icon,
   Settings02Icon,
   ShieldCheckIcon,
+  StopIcon,
   TerminalIcon,
   Tick02Icon,
   UnplugIcon,
@@ -67,6 +68,8 @@ import { effortName } from './ReasoningSlider';
 import { SkillPicker } from './SkillPicker';
 import { LearningPanel } from './LearningPanel';
 import type { LearningState } from '../shared/learning';
+import { MessageQueue } from './MessageQueue';
+import { emptyQueue, type MessageQueueState, type QueuedMessage } from '../shared/queue';
 import { UsagePanel } from './UsagePanel';
 import { AgentIcon } from './AgentIcon';
 import { WorkbenchNotices, useCodexUpdate } from './WorkbenchNotices';
@@ -314,6 +317,10 @@ export default function App() {
     items: [],
     repositories: [],
   });
+  const [queue, setQueue] = useState<MessageQueueState>(emptyQueue);
+  // The host keeps the words of a queued message; its tokens and images stay here for editing.
+  const queuedDrafts = useRef(new Map<string, DraftEntry>());
+  const sending = useRef(false);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedId, setConversationId] = useState<string>();
   const [showArchived, setShowArchived] = useState(false);
@@ -561,6 +568,7 @@ export default function App() {
     item.messages.some((message) => message.status === 'streaming'),
   );
   const currentBusy = messages.some((message) => message.status === 'streaming');
+  const queued = queue.items.filter((item) => item.conversationId === conversationId);
   /** Phase of the turn a conversation is on, read by every surface outside the message list. */
   const turnPhase = (item: { id?: string; messages: ChatMessage[] }) => {
     const requests = pendingRequests.filter((pending) => pending.conversationId === item.id);
@@ -601,6 +609,15 @@ export default function App() {
   };
   const currentAgentId = conversation ? conversationAgent(conversation) : settings.agent;
   const currentAgent = agents.find((item) => item.id === currentAgentId);
+  const sendable =
+    loaded &&
+    !setupRequired &&
+    Boolean(draft.trim() || images.length) &&
+    images.every((image) => image.data) &&
+    (!images.length || supportsImages(currentAgentId)) &&
+    Boolean(currentAgent?.available && currentAgent.supported);
+  /** A turn is running somewhere: what is in the field would join the queue. */
+  const queueable = busy && sendable;
   const defaultAgent = agents.find((item) => item.id === settings.agent);
   const currentSelection = conversation
     ? conversationModelSelection(settings, conversation)
@@ -702,6 +719,7 @@ export default function App() {
     let webError: string | undefined;
     let feishuUpdated = false;
     let learningUpdated = false;
+    let queueUpdated = false;
     type RequestChange = (previous: PendingAgentRequest[]) => PendingAgentRequest[];
     let beforeSnapshot: RequestChange[] | undefined = [];
     const changeRequests = (change: RequestChange) => {
@@ -774,6 +792,12 @@ export default function App() {
       } else if (event.type === 'learning:state') {
         learningUpdated = true;
         setLearning(event.state);
+      } else if (event.type === 'queue:state') {
+        queueUpdated = true;
+        setQueue(event.state);
+        const waiting = new Set(event.state.items.map((item) => item.id));
+        for (const id of queuedDrafts.current.keys())
+          if (!waiting.has(id)) queuedDrafts.current.delete(id);
       } else if (event.type === 'conversation:updated') upsert(event.conversation);
       else if (event.type === 'notice') showToast(event.message, event.level === 'error');
       else if (event.type === 'agent:event') {
@@ -902,6 +926,7 @@ export default function App() {
         }
         if (!feishuUpdated) setFeishu(snapshot.feishu);
         if (!learningUpdated && snapshot.learning) setLearning(snapshot.learning);
+        if (!queueUpdated && snapshot.queue) setQueue(snapshot.queue);
         // Events can arrive while the initial snapshot is in flight.
         setPendingRequests(
           (beforeSnapshot ?? []).reduce(
@@ -1133,11 +1158,12 @@ export default function App() {
     workbenchMounted,
     onboardingVisible,
   ]);
+  /** While a turn runs, a message is not refused: the host queues it and sends it in turn. */
   const send = async () => {
     if (
       (!draft.trim() && !images.length) ||
       images.some((image) => !image.data) ||
-      busy ||
+      sending.current ||
       !loaded ||
       setupRequired ||
       !currentAgent?.available ||
@@ -1161,8 +1187,10 @@ export default function App() {
       showToast(submission.error, true);
       return;
     }
+    // A second Enter before the host has answered would queue the same message twice.
+    sending.current = true;
     // The host resolves each token against the live page and builds the element context.
-    const result = await action<{ conversationId: string }>('conversation:send', {
+    const result = await action<{ conversationId: string; queued?: string }>('conversation:send', {
       id: conversationId,
       ...submission,
       images: images.length ? parseImages(images) : undefined,
@@ -1170,8 +1198,11 @@ export default function App() {
       mentions: mentions.length
         ? mentions.map(({ token, ref, edit }) => ({ token, ref, ...(edit ? { edit } : {}) }))
         : undefined,
+    }).finally(() => {
+      sending.current = false;
     });
     if (!result?.conversationId) return;
+    if (result.queued && draftEntry) queuedDrafts.current.set(result.queued, draftEntry);
     setDrafts((previous) => {
       const remaining = previous[draftKey];
       if (!remaining || (conversationId && remaining !== draftEntry)) return previous;
@@ -1189,6 +1220,30 @@ export default function App() {
       setConversationId(result.conversationId);
       stickToBottom.current = true;
     }
+  };
+  /** Takes a queued message back into the field it came from. */
+  const editQueued = async (item: QueuedMessage) => {
+    if (draft.trim() || images.length) {
+      showToast('输入框里还有内容，发送或清空后再取回这条消息', true);
+      return;
+    }
+    const saved = queuedDrafts.current.get(item.id);
+    const removed = await action<boolean>('queue:remove', { id: item.id });
+    if (removed === undefined) return;
+    if (!removed) {
+      showToast('这条消息已经发出');
+      return;
+    }
+    setDrafts((previous) => ({
+      ...previous,
+      [JSON.stringify([settings.workspace, item.conversationId])]: saved ?? {
+        text: item.text,
+        field: fieldFromText(item.text),
+      },
+    }));
+    // After a reload only the words are left.
+    if (!saved && item.images) showToast('图片没有一起取回，请重新添加', true);
+    requestAnimationFrame(focusComposer);
   };
   const analyze = async (id: string) => {
     const result = await action<{ conversationId: string }>('recording:analyze', { id });
@@ -1423,7 +1478,7 @@ export default function App() {
   };
 
   const settingsWorkspace = settingsTab ? (
-    <section className="settings-workspace" aria-label="设置与连接">
+    <section className="settings-workspace" aria-label="设置">
       <Tabs
         variant="secondary"
         orientation={panelWidth < 600 ? 'horizontal' : 'vertical'}
@@ -1900,8 +1955,9 @@ export default function App() {
                   <h4>{feishu.paired ? '飞书已准备好' : '连接已建立，再完成一次配对'}</h4>
                   {feishu.paired ? (
                     <p>
-                      可在私聊中发起任务。桌面和飞书任务结束、失败或需要你回答、审核时，
-                      机器人会通知你。请保持 Mac 在线；回答与审批在 Athena 中完成。
+                      可在私聊中向机器人发起任务，结果回复到同一私聊；飞书任务需要你回答或审核时，
+                      机器人会提醒你。在这里进行的对话不会发到飞书。请保持 Mac 在线；回答与审批在
+                      Athena 中完成。
                     </p>
                   ) : (
                     <>
@@ -2200,7 +2256,7 @@ export default function App() {
                   onPress={() => openSettings('agent')}
                 >
                   <Icon icon={Settings02Icon} size={16} />
-                  <span>设置与连接</span>
+                  <span>设置</span>
                 </ActionButton>
                 <UserMenu
                   name={localUserName}
@@ -2259,11 +2315,7 @@ export default function App() {
                       </ActionButton>
                     )}
                     <span>
-                      {settingsTab
-                        ? '设置与连接'
-                        : showUsage
-                          ? '用量'
-                          : conversation?.title || '新对话'}
+                      {settingsTab ? '设置' : showUsage ? '用量' : conversation?.title || '新对话'}
                     </span>
                   </div>
                   <div className="topbar-actions">
@@ -2546,6 +2598,7 @@ export default function App() {
                         className={`composer ${busy ? 'is-busy' : ''}`}
                         status={busy ? 'streaming' : 'ready'}
                         lockInputOnRun={false}
+                        allowSubmitWhileRunning={queueable}
                         maxHeight={160}
                         onSubmit={() => {
                           // Skills can arrive after the slash was typed, so the menu shows with
@@ -2559,6 +2612,13 @@ export default function App() {
                         onStop={() => void action('conversation:stop')}
                         onPasteCapture={pasteImages}
                       >
+                        <MessageQueue
+                          items={queued}
+                          paused={Boolean(conversationId && queue.paused.includes(conversationId))}
+                          onEdit={(item) => void editQueued(item)}
+                          onRemove={(item) => void action('queue:remove', { id: item.id })}
+                          onResume={() => void action('queue:resume', { conversationId })}
+                        />
                         <PromptInput.Shell>
                           {/* Only the field and its Skill menu sit in Tokens: a toolbar menu
                               inside it would join the suggestions. */}
@@ -2754,21 +2814,30 @@ export default function App() {
                                 </span>
                               ) : (
                                 <span className="composer-hint">
-                                  {busy && !currentBusy ? '另一任务进行中' : '↵ 发送'}
+                                  {!busy
+                                    ? '↵ 发送'
+                                    : queueable || currentBusy
+                                      ? '↵ 加入队列'
+                                      : '另一任务进行中'}
                                 </span>
                               )}
+                              {queueable && (
+                                <ActionButton
+                                  className="composer-stop"
+                                  aria-label="停止任务"
+                                  isIconOnly
+                                  size="md"
+                                  variant="secondary"
+                                  onPress={() => void action('conversation:stop')}
+                                >
+                                  <Icon icon={StopIcon} size={16} />
+                                </ActionButton>
+                              )}
+                              {/* With something to send, the button queues it; the library
+                                  shows its stop button only while the field is empty. */}
                               <PromptInput.Send
-                                aria-label={busy ? '停止任务' : '发送任务'}
-                                isDisabled={
-                                  !busy &&
-                                  (!loaded ||
-                                    setupRequired ||
-                                    (!draft.trim() && !images.length) ||
-                                    images.some((image) => !image.data) ||
-                                    (images.length > 0 && !supportsImages(currentAgentId)) ||
-                                    !currentAgent?.available ||
-                                    !currentAgent.supported)
-                                }
+                                aria-label={queueable ? '加入队列' : busy ? '停止任务' : '发送任务'}
+                                isDisabled={busy ? (queueable ? false : undefined) : !sendable}
                               />
                             </PromptInput.ToolbarEnd>
                           </PromptInput.Toolbar>

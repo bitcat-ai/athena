@@ -164,7 +164,7 @@ try {
   assert.ok(catalogs.some((names) => names.includes('web_snapshot')));
 
   await page.getByRole('button', { name: '本机用户菜单', exact: true }).click();
-  await page.getByRole('menuitem', { name: '设置与连接', exact: true }).click();
+  await page.getByRole('menuitem', { name: '设置', exact: true }).click();
   await page.getByRole('tab', { name: '浏览器', exact: true }).click();
   const browserSettings = page.getByRole('tabpanel', { name: '浏览器', exact: true });
   await expect(browserSettings.getByText('已连接', { exact: true })).toBeVisible();

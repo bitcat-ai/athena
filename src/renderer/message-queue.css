@@ -1,0 +1,56 @@
+/* The library clips the field horizontally once a queue sits above it; the field's shadow and
+   focus ring reach past its box. */
+.composer.prompt-input:has(> .message-queue) {
+  overflow: visible;
+}
+.composer .message-queue {
+  border: 0;
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: var(--surface-shadow);
+}
+.message-queue-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 36px;
+  padding: 4px 8px 4px 14px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--muted);
+}
+.message-queue.is-paused .message-queue-heading {
+  color: var(--secondary);
+}
+.message-queue-heading .button {
+  height: 28px;
+  min-height: 28px;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.message-queue [data-slot='prompt-input-queue-item'] {
+  min-height: 36px;
+  padding: 2px 8px 2px 14px;
+}
+.message-queue [data-slot='prompt-input-queue-item-content'] {
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--foreground);
+  white-space: pre-wrap;
+}
+.message-queue [data-slot='prompt-input-queue-item-description'] {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.message-queue [data-slot='prompt-input-queue-item-actions'] .button {
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  color: var(--muted);
+}
+/* Stopping stays one press away while the send button queues what is in the field. */
+.composer .composer-stop {
+  flex: 0 0 auto;
+}

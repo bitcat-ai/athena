@@ -195,8 +195,8 @@ export async function checkAppNotices(page: Page) {
 
   await start(true);
   await expect(notice).toHaveCount(0);
-  await page.getByRole('button', { name: '设置与连接', exact: true }).click();
-  const settings = page.getByRole('region', { name: '设置与连接' });
+  await page.getByRole('button', { name: '设置', exact: true }).click();
+  const settings = page.getByRole('region', { name: '设置' });
   await settings.getByRole('button', { name: '查看更新说明' }).click();
   await expect(notice).toHaveCount(0);
   await expect

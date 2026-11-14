@@ -16,6 +16,8 @@ function excerpt(text: string, length = 1000) {
 }
 
 // Each instance belongs to one turn; delivery never blocks or changes the Agent result.
+// Only a task that came from Feishu is told there that it needs attention. A conversation held on
+// the desktop stays on the desktop: the bot is the user's way in, not a copy of their work.
 export class TurnNotifications {
   private sent = new Set<string>();
   private requests = new Set<string>();
@@ -64,21 +66,14 @@ export class TurnNotifications {
         event.request.id,
       );
     } else if (event.type === 'complete' || event.type === 'error') {
+      // The result itself goes back as the reply to the Feishu message that asked for it.
       this.ended = true;
       this.requests.clear();
-      // Feishu-origin turns already receive a full result through their original message.
-      if (this.task.source === 'feishu') return;
-      this.enqueue(
-        'result',
-        event.type === 'complete'
-          ? `Agent 已回复，本轮已结束\n${excerpt(!this.containsSecretInput && event.text ? event.text : '请在 Athena 查看结果。')}\n如有待确认的问题，请回到 Athena 继续对话。`
-          : `任务未完成\n${this.containsSecretInput ? '' : excerpt(event.message)}\n请在 Athena 查看详情。`,
-      );
     }
   }
 
   private enqueue(key: string, body: string, requestId?: string) {
-    if (this.sent.has(key)) return;
+    if (this.task.source !== 'feishu' || this.sent.has(key)) return;
     this.sent.add(key);
     const text = `Athena · ${excerpt(this.task.title, 120)}\n${body}`;
     this.queue = this.queue.then(async () => {
