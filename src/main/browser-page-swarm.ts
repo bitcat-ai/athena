@@ -7,8 +7,9 @@
  *
  * The page is always edited first. What plays afterwards only withholds pixels: opacity and
  * interpolated styles through script animations, pending text through a custom highlight, and for
- * page scripts the snapshot a view transition keeps of the page as it was. The DOM, styles and
- * the accessibility tree already hold the result.
+ * page scripts the snapshot a view transition keeps of the page as it was, with a clip on what
+ * lies out of view until the view gets there. The DOM, styles and the accessibility tree already
+ * hold the result.
  */
 export const browserSwarmCss = [
   '.swarm{position:absolute;inset:0;overflow:hidden;pointer-events:none}',
@@ -35,7 +36,7 @@ export const browserSwarmCss = [
 // Plain JavaScript for the isolated world, like the bridge that embeds it.
 export const browserSwarmSource = String.raw`
   function createSwarm(env) {
-    const palette=['#7e8dfa','#f2664b','#19b47c','#e3a008','#e25fb4','#27a9d8'];
+    const palette=['#7e8dfa','#f2664b','#19b47c','#e3a008','#e25fb4','#27a9d8','#a06cf0','#74b816'];
     const veilName='athena-swarm-pending';
     const shows=new Set();
     const canVeil=typeof Highlight==='function' && !!globalThis.CSS?.highlights && typeof CSSStyleSheet==='function';
@@ -61,6 +62,34 @@ export const browserSwarmSource = String.raw`
     const box=rect=>({x:rect.x,y:rect.y,width:rect.width,height:rect.height});
     // Cursors stop at the viewport edge, so work on an element larger than the view stays in sight.
     const within=(x,y)=>[clamp(x,4,innerWidth-24),clamp(y,4,innerHeight-28)];
+    // As many cursors as the work calls for: one for each part while they are few, past that
+    // as many as get through the parts in the time there is.
+    const team=(count,room=1400)=>count<=4 ? count : Math.max(4,Math.ceil(count*700/room));
+    const area=item=>item.rect.width*item.rect.height;
+    const under=(el,among)=> { for (let node=env.parent(el); node; node=env.parent(node)) if (among.has(node)) return true; return false; };
+    const outer=list=> { const among=new Set(list.map(item=>item.el)); return list.filter(item=>!under(item.el,among)); };
+    // A large part that holds several changes is taken change by change.
+    const spread=(item,fit,view)=> {
+      if (area(item)<=view*0.2) return [item];
+      const inner=outer(fit.filter(other=>other.own && under(other.el,new Set([item.el]))));
+      return inner.length>1 ? inner.flatMap(other=>spread(other,fit,view)) : [item];
+    };
+    const nearest=(rect,parts)=> {
+      let near=null, best=Infinity;
+      for (const part of parts) {
+        const distance=Math.hypot(rect.x+rect.width/2-part.rect.x-part.rect.width/2,rect.y+rect.height/2-part.rect.y-part.rect.height/2);
+        if (distance<best) { best=distance; near=part; }
+      }
+      return near;
+    };
+    const scroller=()=>document.scrollingElement || document.documentElement;
+    // How far the document's own scroller moves, and whether the page lets it.
+    const span=()=>scroller().scrollHeight-scroller().clientHeight;
+    const scrolls=()=>span()>1 && ![document.documentElement,document.body].some(el=>el && /hidden|clip/.test(getComputedStyle(el).overflowY));
+    // Out of view, where scrolling a document of that height up or down gets to it.
+    const beside=(rect,height)=>rect.width>0 && rect.height>0 && rect.right>0 && rect.left<innerWidth && rect.bottom+scrollY>0 && rect.top+scrollY<height;
+    // The room a stop leaves above its first part.
+    const lead=()=>Math.min(96,innerHeight*0.15);
     // Scrolls an element to where its change can be watched. One that is in view stays put.
     function reveal(el) {
       if (env.reduced.matches || document.visibilityState!=='visible') return el;
@@ -89,21 +118,22 @@ export const browserSwarmSource = String.raw`
     function loop(show) {
       if (show.over) return;
       if (!stage?.isConnected) return settle(show);
-      for (const frame of [...show.live]) {
+      // What moves the page goes first, so everything that follows the page reads where it is.
+      for (const frame of [...show.first,...show.live]) {
         try { frame(); } catch { return settle(show); }
         if (show.over) return;
       }
       show.frame=requestAnimationFrame(()=>loop(show));
     }
-    function tween(show,ms,frame,easing=ease) {
+    function tween(show,ms,frame,easing=ease,frames=show.live) {
       return new Promise(resolve=> {
         const total=Math.max(1,ms*show.speed), started=performance.now();
         const step=()=> {
           const p=Math.min(1,(performance.now()-started)/total);
           frame(easing(p));
-          if (p>=1) { show.live.delete(step); resolve(); }
+          if (p>=1) { frames.delete(step); resolve(); }
         };
-        show.live.add(step);
+        frames.add(step);
       });
     }
     const pause=(show,ms)=>tween(show,ms,()=>{});
@@ -361,7 +391,7 @@ export const browserSwarmSource = String.raw`
         layer.held=keep(show,layer.el,[{opacity:0},{opacity:0}],{duration:1e8,fill:'both'});
         layer.unveil=layer.text ? veil(show,layer.text) : null;
       }
-      const crew=Math.min(4,layers.length), home=spec.el.getBoundingClientRect();
+      const crew=team(layers.length), home=spec.el.getBoundingClientRect();
       show.speed=clamp(2600/(Math.ceil(layers.length/crew)*640),0.45,1);
       const builder=async(pointer,color)=> {
         while (layers.length) {
@@ -430,31 +460,33 @@ export const browserSwarmSource = String.raw`
       }
       return ends;
     }
-    // What is in view, as it looks before a script runs.
+    // The page as it looks before a script runs: what is in view, and from the top down what the
+    // document's scroller gets to.
     function census() {
-      const seen=new Map(), every=document.body.getElementsByTagName('*');
-      let pool;
-      if (every.length<=4000) pool=[document.documentElement,document.body,...every];
+      const seen=new Map(), every=document.body.getElementsByTagName('*'), tall=scrolls(), height=scroller().scrollHeight;
+      let pool, near=0, far=0;
+      if (every.length<=6000) pool=[document.documentElement,document.body,...every];
       else {
         // Too much to walk: what lies under a grid of points stands for the view.
         pool=new Set();
         for (let row=0; row<14; row++) for (let column=0; column<10; column++) for (const el of document.elementsFromPoint((column+0.5)*innerWidth/10,(row+0.5)*innerHeight/14)) pool.add(el);
       }
       for (const el of pool) {
-        if (seen.size>=500) break;
+        if (near>=500 && (far>=1500 || !tall)) break;
         if (env.ours(el)) continue;
-        const rect=el.getBoundingClientRect();
-        if (!onscreen(rect)) continue;
+        const rect=el.getBoundingClientRect(), inside=onscreen(rect);
+        if (inside ? near>=500 : far>=1500 || !tall || !beside(rect,height)) continue;
+        if (inside) near++; else far++;
         const computed=getComputedStyle(el), styles={};
         for (const name of looks) styles[name]=computed.getPropertyValue(name);
         seen.set(el,{rect:box(rect),styles,text:ownText(el)});
       }
       return seen;
     }
-    // What a script changed in view since the census: the parts cursors will uncover, each with
-    // the changes around it that follow along.
+    // What a script changed since the census. In view: the parts cursors will uncover, each with
+    // the changes around it that follow along. Out of view: the stops the view will make for them.
     function changes(watch) {
-      const ends=landings(), found=new Map(), view=innerWidth*innerHeight;
+      const ends=landings(), found=new Map(), beyond=[], view=innerWidth*innerHeight, tall=scrolls(), height=scroller().scrollHeight;
       // The region in view, widened where a shadow reaches past its box.
       const region=(rect,cast)=> {
         const pad=cast ? 8 : 0, x=Math.max(0,Math.floor(rect.x-pad)), y=Math.max(0,Math.floor(rect.y-pad));
@@ -472,6 +504,14 @@ export const browserSwarmSource = String.raw`
         if (canvas(el)) rect={x:0,y:0,width:innerWidth,height:innerHeight};
         if (rect) found.set(el,{el,rect,own,members:[],open:0});
       };
+      // A change of its own that only scrolling the document shows. New content that is too large
+      // to draw as one is taken by what it holds.
+      const afar=(el,depth)=> {
+        const now=el.getBoundingClientRect();
+        if (!tall || canvas(el) || onscreen(now) || !beside(now,height)) return;
+        if (depth<4 && now.width*now.height>view*0.3 && el.children.length) for (const child of el.children) afar(child,depth+1);
+        else beyond.push({el,rect:box(now),own:true,others:[]});
+      };
       let lost=0;
       for (const [el,was] of watch.seen) {
         const cast=was.styles['box-shadow']!=='none';
@@ -488,44 +528,66 @@ export const browserSwarmSource = String.raw`
         }
         const wrote=ownText(el)!==was.text;
         const shifted=[was.rect.x-now.x,was.rect.y-now.y,was.rect.width-now.width,was.rect.height-now.height].some(delta=>Math.abs(delta)>0.5);
-        if ((!styled && !wrote && !shifted) || moving(el)) continue;
+        // The page's own box only follows what it holds.
+        if ((!styled && !wrote && (!shifted || canvas(el))) || moving(el)) continue;
         const shade=cast || computed.getPropertyValue('box-shadow')!=='none';
         // A wrapper that only passes a look on, or only moved, is not a part of its own.
-        note(el,join(region(was.rect,shade),region(now,shade)),boxy || wrote || (styled && !!ownText(el).trim()));
+        const own=boxy || wrote || (styled && !!ownText(el).trim());
+        note(el,join(region(was.rect,shade),region(now,shade)),own);
+        if (own) afar(el,4);
       }
       // A page that was mostly replaced has moved on rather than been edited.
-      if (lost>watch.seen.size/2) return [];
+      if (lost>watch.seen.size/2) return {parts:[],stops:[]};
       for (const el of watch.fresh) {
-        if (el.isConnected && !found.has(el) && !watch.seen.has(el) && !env.ours(el)) note(el,region(el.getBoundingClientRect(),false),true);
+        if (!el.isConnected || found.has(el) || watch.seen.has(el) || env.ours(el)) continue;
+        note(el,region(el.getBoundingClientRect(),false),true);
+        afar(el,0);
       }
-      const size=item=>item.rect.width*item.rect.height;
-      const under=(el,among)=> { for (let node=env.parent(el); node; node=env.parent(node)) if (among.has(node)) return true; return false; };
-      const outer=list=> { const among=new Set(list.map(item=>item.el)); return list.filter(item=>!under(item.el,among)); };
-      const all=[...found.values()], fit=all.filter(item=>size(item)<=view*0.6);
-      // A large part that holds several changes is uncovered change by change.
-      const spread=item=> {
-        if (size(item)<=view*0.2) return [item];
-        const inner=outer(fit.filter(other=>other.own && under(other.el,new Set([item.el]))));
-        return inner.length>1 ? inner.flatMap(spread) : [item];
-      };
-      let parts=outer(fit.filter(item=>item.own)).flatMap(spread);
+      const all=[...found.values()], fit=all.filter(item=>area(item)<=view*0.6);
+      let parts=outer(fit.filter(item=>item.own)).flatMap(item=>spread(item,fit,view));
       if (!parts.length) parts=outer(fit);
       // Only something that fills most of the view changed: it is uncovered as one.
-      if (!parts.length) parts=all.sort((a,b)=>size(a)-size(b)).slice(0,1);
-      parts=parts.sort((a,b)=>size(b)-size(a)).slice(0,12).sort((a,b)=>a.rect.y-b.rect.y || a.rect.x-b.rect.x);
+      if (!parts.length) parts=all.sort((a,b)=>area(a)-area(b)).slice(0,1);
+      parts=parts.sort((a,b)=>area(b)-area(a)).slice(0,14).sort((a,b)=>a.rect.y-b.rect.y || a.rect.x-b.rect.x);
       // Everything else comes into view with the part closest to it.
       const chosen=new Set(parts.map(item=>item.el)), above=new Set();
       for (const part of parts) for (let node=env.parent(part.el); node; node=env.parent(node)) above.add(node);
-      const rest=outer(fit.filter(item=>!chosen.has(item.el) && !above.has(item.el) && !under(item.el,chosen))).sort((a,b)=>size(b)-size(a)).slice(0,24);
-      for (const item of rest) {
-        let near=null, best=Infinity;
-        for (const part of parts) {
-          const distance=Math.hypot(item.rect.x+item.rect.width/2-part.rect.x-part.rect.width/2,item.rect.y+item.rect.height/2-part.rect.y-part.rect.height/2);
-          if (distance<best) { best=distance; near=part; }
-        }
-        near.members.push(item.rect);
+      const rest=outer(fit.filter(item=>!chosen.has(item.el) && !above.has(item.el) && !under(item.el,chosen))).sort((a,b)=>area(b)-area(a)).slice(0,24);
+      for (const item of rest) nearest(item.rect,parts).members.push(item.rect);
+      return {parts,stops:route(beyond)};
+    }
+    // Out of view only by the document's scroll: not hidden, fixed in place or cut off by a box around it.
+    function reachable(el) {
+      if (el.checkVisibility && !el.checkVisibility({checkOpacity:true,checkVisibilityCSS:true})) return false;
+      const rect=el.getBoundingClientRect();
+      for (let node=el; node && node!==document.documentElement; node=env.parent(node)) {
+        const style=getComputedStyle(node);
+        if (style.position==='fixed') return false;
+        if (node===el || node===document.body || (style.overflowX==='visible' && style.overflowY==='visible')) continue;
+        const frame=node.getBoundingClientRect();
+        if (Math.min(rect.right,frame.right)-Math.max(rect.left,frame.left)<rect.width/2 || Math.min(rect.bottom,frame.bottom)-Math.max(rect.top,frame.top)<rect.height/2) return false;
       }
-      return parts;
+      return true;
+    }
+    // Changes out of view as stops from the top of the page down, each a view's worth of parts.
+    function route(items) {
+      const view=innerWidth*innerHeight, fit=items.filter(item=>area(item)<=view*0.6), stops=[];
+      const parts=outer(items).flatMap(item=>spread(item,fit,view)).filter(item=>reachable(item.el)).sort((a,b)=>a.rect.y-b.rect.y || a.rect.x-b.rect.x);
+      for (const part of parts) {
+        const stop=stops[stops.length-1];
+        if (stop && part.rect.y+Math.min(part.rect.height,innerHeight*0.6)<=stop.y+innerHeight-24) stop.parts.push(part);
+        else stops.push({y:clamp(part.rect.y-lead(),-scrollY,span()-scrollY),parts:[part]});
+      }
+      // A page longer than the show has time for is drawn as far as it gets.
+      stops.length=Math.min(stops.length,16);
+      for (const stop of stops) {
+        if (stop.parts.length<=14) continue;
+        // Small parts of a crowded stop appear with the larger one next to them.
+        const kept=[...stop.parts].sort((a,b)=>area(b)-area(a)).slice(0,14), chosen=new Set(kept);
+        for (const part of stop.parts) if (!chosen.has(part)) nearest(part.rect,kept).others.push(part.el);
+        stop.parts=stop.parts.filter(part=>chosen.has(part));
+      }
+      return stops;
     }
     // Rectangles as rows that do not overlap, so each is cut out of the snapshot exactly once.
     function rows(rects) {
@@ -540,6 +602,20 @@ export const browserSwarmSource = String.raw`
         for (const run of runs) cut.push('M'+run[0]+' '+top+'H'+run[1]+'V'+bottom+'H'+run[0]+'Z');
       }
       return cut.join('');
+    }
+    // Whether the view has moved since the census, as when a script or someone scrolls. Where
+    // content above the view changed, the page moves its scroll position to keep the view in place.
+    function carried(watch) {
+      const slide=scrollY-watch.scroll[1];
+      if (scrollX!==watch.scroll[0]) return true;
+      if (Math.abs(slide)<1) return false;
+      let moved=0, stayed=0;
+      for (const [el,was] of watch.seen) {
+        if (!el.isConnected || was.rect.y>=innerHeight || was.rect.y+was.rect.height<=0) continue;
+        if (Math.abs(was.rect.y-el.getBoundingClientRect().y-slide)<1) moved++; else stayed++;
+        if (moved+stayed>=60) break;
+      }
+      return moved>stayed;
     }
     // Keeps the page as it looks on top of itself: a view transition that captures the document
     // for its old state only. Underneath, the document is painted, hit tested and scripted as usual.
@@ -560,9 +636,14 @@ export const browserSwarmSource = String.raw`
         document.adoptedStyleSheets=document.adoptedStyleSheets.filter(item=>item!==page);
         host.style.setProperty('view-transition-name','initial','important');
       });
-      // Someone using the page sees it as it is.
+      // Someone using the page sees it as it is, and so does a view that is no longer the one
+      // the snapshot was taken of or the show was planned for.
       const types=['pointerdown','keydown','wheel','scroll'];
-      const used=event=> { if (event.isTrusted && (event.type!=='scroll' || event.target===document)) drop(watch); };
+      const used=event=> {
+        if (!event.isTrusted) return;
+        if (event.type!=='scroll') drop(watch);
+        else if (event.target===document && (watch.show ? scrollX!==watch.scroll[0] || scrollY!==watch.scroll[1] : carried(watch))) drop(watch);
+      };
       for (const type of types) addEventListener(type,used,{capture:true,passive:true});
       watch.undo.push(()=> { for (const type of types) removeEventListener(type,used,{capture:true}); });
       const transition=document.startViewTransition(()=> { page.cssRules[0].style.setProperty('view-transition-name','none','important'); });
@@ -588,40 +669,123 @@ export const browserSwarmSource = String.raw`
       for (const show of [...shows]) if (show.script) settle(show);
     }
     // A change by script: cursors drag the new look open part by part, then the rest follows.
-    async function uncover(show,watch,parts) {
-      let path='';
-      show.live.add(()=> {
-        const open=[];
-        for (const part of parts) {
-          if (!part.open) continue;
-          for (const rect of [part.rect,...part.members]) {
-            const width=Math.round(rect.width*part.open), height=Math.round(rect.height*part.open);
-            if (width>0 && height>0) open.push({x:rect.x,y:rect.y,width,height});
-          }
+    // What changed out of view is held back first and drawn once the view travels there.
+    async function uncover(show,watch,plan) {
+      const parts=plan.parts, stops=plan.stops, hands=[];
+      // Cursors stay for the whole show. More join where there is more to do, and those with
+      // nothing to do step out until there is.
+      const staff=(count,rect)=> {
+        const home=new DOMRect(rect.x,rect.y,rect.width,rect.height);
+        const from=index=> { const spot=entry(home,index); return index<5 ? spot : [spot[0],clamp(spot[1]+index*17,-24,innerHeight+24)]; };
+        while (hands.length<count) {
+          const index=hands.length, color=tint();
+          hands.push({color,out:false,pointer:cursor(show,color,(!index && watch.origin) || from(index),!index,!!index || !watch.origin)});
         }
-        const next='path(evenodd,"M-9 -9H'+(innerWidth+9)+'V'+(innerHeight+9)+'H-9Z'+rows(open)+'")';
-        if (next!==path) watch.rule.style.setProperty('clip-path',path=next,'important');
-      });
-      const queue=[...parts], crew=Math.min(4,queue.length), first=queue[0].rect;
-      const home={left:first.x,top:first.y,right:first.x+first.width,bottom:first.y+first.height,width:first.width,height:first.height};
-      show.speed=clamp(2400/(Math.ceil(queue.length/crew)*700),0.5,1);
-      const worker=async(pointer,color)=> { while (queue.length) await drag(show,pointer,color,queue.shift()); };
-      await Promise.all(Array.from({length:crew},(_,index)=> {
-        const color=tint();
-        return worker(cursor(show,color,(!index && watch.origin) || entry(home,index),!index,!!index || !watch.origin),color);
-      }));
-      await pause(show,160);
-      await tween(show,300,p=>watch.rule.style.setProperty('opacity',String(1-p),'important'));
+        hands.forEach((hand,index)=> {
+          const out=index>=count;
+          if (out===hand.out) return;
+          hand.out=out;
+          if (!out) { const spot=from(index); hand.pointer.to(spot[0],spot[1]); }
+          hand.fade?.cancel();
+          hand.fade=hand.pointer.node.animate([{opacity:out ? 1 : 0},{opacity:out ? 0 : 1}],{duration:160,fill:out ? 'forwards' : 'none'});
+        });
+        return hands.slice(0,count);
+      };
+      const hide=el=> {
+        const player=keep(show,el,[{clipPath:'inset(-24px calc(100% + 24px) calc(100% + 24px) -24px)'},{clipPath:'inset(-24px)'}],{duration:1000,fill:'both'});
+        player.playbackRate=0;
+        return player;
+      };
+      for (const stop of stops) for (const part of stop.parts) {
+        const held=hide(part.el), others=part.others.map(el=>[el,hide(el)]);
+        part.read=()=>part.el.isConnected ? part.el.getBoundingClientRect() : null;
+        part.show=p=> {
+          if (p<1) { held.currentTime=p*1000; return; }
+          held.cancel();
+          for (const [el,player] of others) { player.cancel(); keep(show,el,[{opacity:0},{opacity:getComputedStyle(el).opacity}],{duration:200}); }
+        };
+      }
+      if (parts.length) {
+        let path='';
+        const cut=()=> {
+          const open=[];
+          for (const part of parts) {
+            if (!part.open) continue;
+            for (const rect of [part.rect,...part.members]) {
+              const width=Math.round(rect.width*part.open), height=Math.round(rect.height*part.open);
+              if (width>0 && height>0) open.push({x:rect.x,y:rect.y,width,height});
+            }
+          }
+          const next='path(evenodd,"M-9 -9H'+(innerWidth+9)+'V'+(innerHeight+9)+'H-9Z'+rows(open)+'")';
+          if (next!==path) watch.rule.style.setProperty('clip-path',path=next,'important');
+        };
+        show.live.add(cut);
+        for (const part of parts) { part.read=()=>part.rect; part.show=p=> { part.open=p; }; }
+        const queue=[...parts], crew=staff(team(queue.length,1200),queue[0].rect);
+        show.speed=clamp(2400/(Math.ceil(queue.length/crew.length)*700),0.5,1);
+        await Promise.all(crew.map(async hand=> { while (queue.length) await drag(show,hand.pointer,hand.color,queue.shift()); }));
+        await pause(show,160);
+        await tween(show,300,p=>watch.rule.style.setProperty('opacity',String(1-p),'important'));
+        show.live.delete(cut);
+      }
       release(watch);
+      if (stops.length) await tour(show,stops,staff);
     }
-    async function drag(show,pointer,color,part) {
-      const frame=select(show,color,()=>part.rect);
+    // The view travels down the page from stop to stop while cursors draw what was held back,
+    // and returns to where it was.
+    async function tour(show,stops,staff) {
+      const home=[scrollX,scrollY], share=7000/stops.length;
+      show.speed=clamp(share/1820,0.5,1);
+      const room=clamp(share/show.speed-420,700,1400);
+      // Someone using the page takes it over where it is; otherwise it ends where it was.
+      const types=['pointerdown','keydown','wheel'], taken=()=> { show.taken=true; settle(show); };
+      const used=event=> { if (event.isTrusted) taken(); };
+      for (const type of types) addEventListener(type,used,{capture:true,passive:true});
+      // So does a scroll that is not the show's. One that keeps the part in place is the page
+      // making up for content that loaded above it.
+      let at=scrollY, seat=null, top=0;
+      show.live.add(()=> {
+        const now=seat?.isConnected ? seat.getBoundingClientRect().top : top;
+        if (!show.gliding && Math.abs(scrollY-at)>2 && Math.abs(now-top)>2) return taken();
+        at=scrollY; top=now;
+      });
+      show.undo.push(()=> {
+        for (const type of types) removeEventListener(type,used,{capture:true});
+        if (!show.taken && (scrollX!==home[0] || Math.abs(scrollY-home[1])>=1)) scrollTo({left:home[0],top:home[1],behavior:'instant'});
+      });
+      for (const stop of stops) {
+        const queue=stop.parts.filter(part=>part.read());
+        if (!queue.length) continue;
+        const first=queue[0].read(), move=glide(show,first.top+scrollY-lead());
+        seat=queue[0].el;
+        await Promise.all(staff(team(queue.length,room),first).map(async hand=> { while (queue.length) await drag(show,hand.pointer,hand.color,queue.shift(),move); }));
+      }
+      await pause(show,240);
+      await glide(show,home[1]);
+    }
+    // Moves the document's own scroller, frame by frame like everything else in a show.
+    async function glide(show,top) {
+      const from=scrollY, to=clamp(top,0,span());
+      if (Math.abs(to-from)<1) return;
+      show.gliding=true;
+      await tween(show,clamp(180+Math.abs(to-from)*0.35,260,520),p=>scrollTo({left:scrollX,top:from+(to-from)*p,behavior:'instant'}),ease,show.first);
+      show.gliding=false;
+    }
+    async function drag(show,pointer,color,part,ready) {
+      const frame=select(show,color,part.read);
       frame.grow=0; frame.place();
       frame.node.style.visibility='hidden';
-      await fly(show,pointer,frame.corner(0,0),260);
+      const corner=frame.corner(0,0);
+      await fly(show,pointer,corner,260);
+      if (ready) {
+        // The view is still on its way: the cursor stays on the corner it will draw from.
+        const ride=()=> { const at=corner(); if (at) pointer.to(at[0],at[1]); };
+        show.live.add(ride); await ready; show.live.delete(ride);
+      }
+      const rect=part.read();
       pointer.mode('cross'); frame.node.style.visibility='';
-      await tween(show,clamp(160+Math.hypot(part.rect.width,part.rect.height)*0.4,260,460),p=> {
-        frame.grow=part.open=p; frame.place();
+      await tween(show,rect ? clamp(160+Math.hypot(rect.width,rect.height)*0.4,260,460) : 1,p=> {
+        frame.grow=p; part.show(p); frame.place();
         const at=frame.corner(1,1)();
         if (at) pointer.to(at[0],at[1]);
       });
@@ -636,7 +800,7 @@ export const browserSwarmSource = String.raw`
     }
     function settle(show) {
       if (!shows.delete(show)) return;
-      show.over=true; show.live.clear();
+      show.over=true; show.first.clear(); show.live.clear();
       cancelAnimationFrame(show.frame); clearTimeout(show.guard); clearTimeout(show.fade);
       for (const player of show.players) player.cancel();
       for (const undo of show.undo.splice(0)) { try { undo(); } catch {} }
@@ -678,7 +842,7 @@ export const browserSwarmSource = String.raw`
           while (shows.size>=4) settle(shows.values().next().value);
           if (!shows.size) tints=0;
           mount();
-          const show={el:spec.el,speed:1,over:false,live:new Set(),players:new Set(),roots:new Set(),nodes:[],cursors:[],undo:[]};
+          const show={el:spec.el,speed:1,over:false,first:new Set(),live:new Set(),players:new Set(),roots:new Set(),nodes:[],cursors:[],undo:[]};
           shows.add(show);
           mutedUntil=performance.now()+950; clearTimeout(unmuteTimer); env.mute(true);
           // Frames may never come, for instance in a hidden tab; the page must not stay withheld.
@@ -710,7 +874,7 @@ export const browserSwarmSource = String.raw`
         }
       },
       /**
-       * Notes what is in view before a page script of the agent runs and keeps it on screen.
+       * Notes how the page looks before a page script of the agent runs and keeps the view on screen.
        * Resolves true once the page is covered by its own snapshot.
        */
       watch() {
@@ -734,25 +898,26 @@ export const browserSwarmSource = String.raw`
           try { cover(watch).then(held,()=> { drop(watch); resolve(false); }); } catch { drop(watch); resolve(false); }
         });
       },
-      /** Plays what changed in view since watch(), or only uncovers the page. Returns the number of shows it started. */
+      /** Plays what changed since watch(), in view and down the page, or only uncovers the page. Returns the number of shows it started. */
       replay(play=true) {
         const watch=armed;
         if (!watch) return 0;
         armed=null; clearTimeout(watch.timer);
         for (const record of watch.observer.takeRecords()) for (const node of record.addedNodes) if (node.nodeType===1) watch.fresh.add(node);
         watch.observer.disconnect();
-        let parts=[];
+        let plan={parts:[],stops:[]};
         try {
-          if (play && watch.held && !env.reduced.matches && document.visibilityState==='visible' && scrollX===watch.scroll[0] && scrollY===watch.scroll[1]) parts=changes(watch);
+          if (play && watch.held && !env.reduced.matches && document.visibilityState==='visible' && !carried(watch)) plan=changes(watch);
         } catch {}
-        if (!parts.length) { release(watch); return 0; }
+        if (!plan.parts.length && !plan.stops.length) { release(watch); return 0; }
+        watch.scroll=[scrollX,scrollY];
         tints=0;
         mount();
-        const show=watch.show={el:null,script:true,speed:1,over:false,live:new Set(),players:new Set(),roots:new Set(),nodes:[],cursors:[],undo:[()=>release(watch)]};
+        const show=watch.show={el:null,script:true,speed:1,over:false,first:new Set(),live:new Set(),players:new Set(),roots:new Set(),nodes:[],cursors:[],undo:[()=>release(watch)]};
         shows.add(show);
         mutedUntil=performance.now()+950; clearTimeout(unmuteTimer); env.mute(true);
-        show.guard=setTimeout(()=>settle(show),8000);
-        uncover(show,watch,parts).then(()=>finish(show),()=>settle(show));
+        show.guard=setTimeout(()=>settle(show),plan.stops.length ? 15000 : 8000);
+        uncover(show,watch,plan).then(()=>finish(show),()=>settle(show));
         loop(show);
         return 1;
       },

@@ -1635,6 +1635,155 @@ test('text, new content and removals made by an agent script are uncovered where
   assert.equal((await readCover(page)).kept, 0);
 });
 
+test('what an agent script changes down the page is held back and drawn from the top down by as many cursors as it takes, and the view returns', async (t) => {
+  if (!browser) return t.skip('Browser binary unavailable');
+  const { page } = await fixture(t);
+  await captureOverlayRoot(page);
+  // Eight rows of tiles below the first screen.
+  await page.evaluate(() => {
+    document.body.insertAdjacentHTML(
+      'beforeend',
+      '<style>.tiles{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin:0 0 60px}.tile{height:120px;background:#ddd}</style>' +
+        '<div style="height:1000px"></div>' +
+        Array.from(
+          { length: 8 },
+          (_, row) =>
+            `<h2>Row ${row}</h2><div class="tiles">${Array.from({ length: 6 }, (_, tile) => `<div class="tile">${row}.${tile}</div>`).join('')}</div>`,
+        ).join(''),
+    );
+    (globalThis as any).__seen = [];
+    addEventListener('scroll', () => (globalThis as any).__seen.push(Math.round(scrollY)));
+  });
+  await bridge(page, 'setSource', 'agent');
+  const restyle = (rules: string) =>
+    page.evaluate((rules) => {
+      const style = document.createElement('style');
+      style.textContent = rules;
+      document.head.appendChild(style);
+    }, rules);
+  const begin = () =>
+    page.evaluate(() => {
+      (globalThis as any).__seen.length = 0;
+      (globalThis as any).__replayed = (globalThis as any).__workbenchPage.replayScript();
+      const tiles = [...document.querySelectorAll('.tile')];
+      return {
+        cursors: (globalThis as any).__overlayRoot.querySelectorAll('.swarm .sw-cur').length,
+        held: tiles.filter((tile) => tile.getAnimations().length).length,
+        clipped: getComputedStyle(tiles[0]).clipPath.startsWith('inset('),
+        colour: getComputedStyle(tiles[0]).backgroundColor,
+        scroll: scrollY,
+      };
+    });
+  const touring = () => page.waitForFunction(() => scrollY > 600, undefined, { timeout: 8000 });
+
+  assert.equal(await bridge(page, 'watchScript'), true);
+  await restyle(
+    '#box{background:rgb(29, 29, 31) !important}.tile{background:rgb(0, 113, 227) !important;border-radius:18px}',
+  );
+  const started = await begin();
+  assert.deepEqual(
+    started,
+    { cursors: 1, held: 48, clipped: true, colour: 'rgb(0, 113, 227)', scroll: 0 },
+    'one cursor for the one change in view; the tiles are restyled and withheld until the view gets to them',
+  );
+  await touring();
+  const most = await page.evaluate(
+    () =>
+      new Promise<number>((resolve) => {
+        let most = 0;
+        const timer = setInterval(() => {
+          const root = (globalThis as any).__overlayRoot as ShadowRoot;
+          most = Math.max(most, root.querySelectorAll('.swarm .sw-cur').length);
+          if (!root.querySelector('.swarm')?.childElementCount) {
+            clearInterval(timer);
+            resolve(most);
+          }
+        }, 50);
+      }),
+  );
+  assert(most >= 5, `rows of tiles are drawn by more cursors than the first change, got ${most}`);
+  assert.equal(await page.evaluate(() => (globalThis as any).__replayed), true);
+  const ended = await page.evaluate(() => {
+    const seen = (globalThis as any).__seen as number[];
+    const peak = seen.indexOf(Math.max(...seen));
+    return {
+      down: seen.slice(0, peak + 1).every((y, index) => !index || y >= seen[index - 1]),
+      reached: seen[peak] > 1800,
+      scroll: scrollY,
+      players: document.getAnimations().length,
+      clip: getComputedStyle(document.querySelector('.tile')!).clipPath,
+    };
+  });
+  assert.deepEqual(ended, { down: true, reached: true, scroll: 0, players: 0, clip: 'none' });
+  await swarmDone(page);
+
+  // A capture on the way shows the page as edited, where it was.
+  assert.equal(await bridge(page, 'watchScript'), true);
+  await restyle('.tile{background:rgb(52, 199, 89) !important}');
+  assert.equal((await begin()).held, 48);
+  await touring();
+  await bridge(page, 'mask', true);
+  assert.deepEqual(
+    await page.evaluate(() => [
+      scrollY,
+      document.getAnimations().length,
+      (globalThis as any).__overlayRoot.querySelector('.swarm')?.childElementCount ?? 0,
+    ]),
+    [0, 0, 0],
+  );
+  await bridge(page, 'mask', false);
+  assert.equal(await page.evaluate(() => (globalThis as any).__replayed), true);
+  await swarmDone(page);
+
+  // Someone who scrolls on the way keeps the page where they took it.
+  assert.equal(await bridge(page, 'watchScript'), true);
+  await restyle('.tile{background:rgb(255, 149, 0) !important}');
+  assert.equal((await begin()).held, 48);
+  await touring();
+  await page.mouse.move(600, 500);
+  await page.mouse.wheel(0, 80);
+  await page.waitForFunction(
+    () => !(globalThis as any).__overlayRoot.querySelector('.swarm')?.childElementCount,
+  );
+  assert.deepEqual(await page.evaluate(() => [scrollY > 600, document.getAnimations().length]), [
+    true,
+    0,
+  ]);
+  assert.equal(await page.evaluate(() => (globalThis as any).__replayed), true);
+  await swarmDone(page);
+
+  // From the middle of the page: content that grows above the view moves the scroll position
+  // with it, not the view. The view is drawn first, then the page from its top, and it ends
+  // where it was.
+  const from = await page.evaluate(() => {
+    scrollTo(0, document.querySelectorAll('.tiles')[2].getBoundingClientRect().top + scrollY);
+    return scrollY;
+  });
+  await page.waitForTimeout(100);
+  assert.equal(await bridge(page, 'watchScript'), true);
+  await restyle('#box{height:300px !important}.tile{background:rgb(175, 82, 222) !important}');
+  // The page reports its new scroll position before the replay is asked for.
+  await page.waitForTimeout(100);
+  const middle = await begin();
+  assert.deepEqual([middle.scroll, middle.cursors > 4], [from + 240, true]);
+  assert.equal(await page.evaluate(() => (globalThis as any).__replayed), true);
+  assert.deepEqual(
+    await page.evaluate(() => {
+      const seen = (globalThis as any).__seen as number[];
+      const first = document.querySelector('.tile')!.getBoundingClientRect().top + scrollY;
+      return [
+        Math.min(...seen) < first,
+        Math.max(...seen) > scrollY,
+        document.getAnimations().length,
+      ];
+    }),
+    [true, true, 0],
+    'the rows above the view are drawn before the rows below it',
+  );
+  assert.equal(await page.evaluate(() => scrollY), middle.scroll);
+  await swarmDone(page);
+});
+
 test('scripts that change nothing in view, reduced motion, captures and someone using the page leave it as the script made it', async (t) => {
   if (!browser) return t.skip('Browser binary unavailable');
   const { page } = await fixture(t);

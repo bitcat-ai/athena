@@ -572,7 +572,7 @@ export const browserPageSource = String.raw`(() => {
     watchScript() { return source==='agent' && swarm.watch(); },
     replayScript(show=true) {
       const played=swarm.replay(source==='agent' && show)>0;
-      return played ? swarm.rest(4200).then(()=>true) : false;
+      return played ? swarm.rest(15500).then(()=>true) : false;
     },
     clearOverlays() {
       swarm.settle();

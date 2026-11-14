@@ -1917,7 +1917,7 @@ export class BrowserRuntime {
         await this.bridge(tab, frame, `globalThis.__workbenchPage.${phase}Script(${show})`);
     })().catch(() => undefined);
     // A renderer blocked by a dialog never answers.
-    await Promise.race([call, wait(phase === 'replay' && show ? 4800 : 500)]);
+    await Promise.race([call, wait(phase === 'replay' && show ? 16000 : 500)]);
   }
   /** Waits until loading, fresh requests and DOM changes stop. Resolves false when the page stays busy. */
   async nativeSettle(targetId: string, timeout = 3000): Promise<boolean> {
