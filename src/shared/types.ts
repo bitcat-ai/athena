@@ -597,6 +597,8 @@ export interface FeishuMessage {
   senderId: string;
   chatId: string;
   timestamp: number;
+  /** Written in a group chat with the bot mentioned; the reply goes to that group. */
+  group?: boolean;
 }
 export interface Settings {
   workspace: string;

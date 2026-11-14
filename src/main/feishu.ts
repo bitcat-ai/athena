@@ -42,6 +42,8 @@ export interface FeishuTransport {
   start: () => Promise<void>;
   close: () => void;
   send: (chatId: string, text: string, uuid: string) => Promise<void>;
+  /** The bot's own open_id. Without it no group message can be told to be addressed to the bot. */
+  botId?: () => Promise<string | undefined>;
 }
 
 export interface FeishuDependencies {
@@ -87,6 +89,14 @@ const sdkDependencies: FeishuDependencies = {
         if (response.code !== 0)
           throw new Error(`Feishu send failed (${response.code ?? 'unknown'})`);
       },
+      async botId() {
+        const response = await client.request<{ code?: number; bot?: { open_id?: unknown } }>({
+          method: 'GET',
+          url: '/open-apis/bot/v3/info',
+        });
+        const id = response?.code === 0 ? response.bot?.open_id : undefined;
+        return typeof id === 'string' && id ? id : undefined;
+      },
     };
   },
 };
@@ -127,10 +137,16 @@ function messageText(type: unknown, content: unknown): string | undefined {
   return lines.join('\n').trim();
 }
 
+interface Mention {
+  key: string;
+  openId: string;
+  name: string;
+}
+
 function parseMessage(
   event: unknown,
   appId: string,
-): { message: FeishuMessage; tenantKey: string } | undefined {
+): { message: FeishuMessage; tenantKey: string; mentions: Mention[] } | undefined {
   if (!isRecord(event) || !isRecord(event.sender) || !isRecord(event.message)) return;
   const sender = event.sender;
   const message = event.message;
@@ -144,10 +160,28 @@ function parseMessage(
     return;
   if (
     sender.sender_type !== 'user' ||
-    message.chat_type !== 'p2p' ||
+    (message.chat_type !== 'p2p' && message.chat_type !== 'group') ||
     (message.message_type !== 'text' && message.message_type !== 'post')
   )
     return;
+  const group = message.chat_type === 'group';
+  const mentions: Mention[] = [];
+  if (group && Array.isArray(message.mentions))
+    for (const mention of message.mentions.slice(0, 50))
+      if (
+        isRecord(mention) &&
+        typeof mention.key === 'string' &&
+        mention.key &&
+        isRecord(mention.id) &&
+        typeof mention.id.open_id === 'string'
+      )
+        mentions.push({
+          key: mention.key,
+          openId: mention.id.open_id,
+          name: typeof mention.name === 'string' ? mention.name.slice(0, 80) : '',
+        });
+  // A group message that mentions nobody cannot be addressed to the bot.
+  if (group && !mentions.length) return;
   if (!isRecord(sender.sender_id) || typeof sender.sender_id.open_id !== 'string') return;
   if (
     typeof message.message_id !== 'string' ||
@@ -174,14 +208,26 @@ function parseMessage(
   const time = Number(message.create_time);
   return {
     tenantKey: event.tenant_key,
+    mentions,
     message: {
       id: message.message_id,
       text,
       senderId: sender.sender_id.open_id,
       chatId: message.chat_id,
       timestamp: Number.isFinite(time) && time > 0 ? time : Date.now(),
+      ...(group ? { group: true } : {}),
     },
   };
+}
+
+/** What the operator wrote to the bot in a group: without the bot's own mention. */
+function addressedText(text: string, mentions: Mention[], botId: string) {
+  let result = text;
+  for (const mention of mentions)
+    result = result
+      .split(mention.key)
+      .join(mention.openId === botId ? '' : mention.name ? `@${mention.name}` : '');
+  return result.trim();
 }
 
 function validCredentials(value: unknown): value is Credentials {
@@ -421,7 +467,13 @@ export class FeishuConnector {
         appPreset: { name: 'Athena Demo', desc: '连接本机 Athena，协作浏览与执行任务' },
         addons: {
           preset: false,
-          scopes: { tenant: ['im:message.p2p_msg:readonly', 'im:message:send_as_bot'] },
+          scopes: {
+            tenant: [
+              'im:message.p2p_msg:readonly',
+              'im:message.group_at_msg:readonly',
+              'im:message:send_as_bot',
+            ],
+          },
           events: { items: { tenant: ['im.message.receive_v1'] } },
         },
         onQRCodeReady: (info) => {
@@ -655,13 +707,14 @@ export class FeishuConnector {
     const credentials = this.credentials;
     const binding = credentials?.binding;
     const entry = credentials && this.inbox.get(this.itemKey(credentials.appId, message.id));
+    // Where the reply goes is decided by the received message as it was stored, not by the caller.
     if (
       !binding ||
       !entry ||
       binding.senderId !== message.senderId ||
-      binding.chatId !== message.chatId ||
       entry.message.senderId !== message.senderId ||
-      entry.message.chatId !== message.chatId
+      entry.message.chatId !== message.chatId ||
+      (binding.chatId !== entry.message.chatId && entry.message.group !== true)
     ) {
       throw new Error('只能回复已配对操作者的原始会话。');
     }
@@ -669,7 +722,15 @@ export class FeishuConnector {
     if (!transport || this.state.status !== 'connected')
       throw new Error('飞书尚未连接，结果已保留在本机。');
     if (typeof text !== 'string' || !text.trim()) return;
-    await this.sendBoundMessage('reply', message.id, text, credentials, binding, transport);
+    await this.sendBoundMessage(
+      'reply',
+      message.id,
+      text,
+      credentials,
+      binding,
+      transport,
+      entry.message.chatId,
+    );
   }
 
   async sendNotification(id: string, text: string): Promise<boolean> {
@@ -700,6 +761,8 @@ export class FeishuConnector {
     credentials: Credentials,
     binding: NonNullable<Credentials['binding']>,
     transport: FeishuTransport,
+    // The group in which the paired operator mentioned the bot; otherwise the paired chat.
+    chatId = binding.chatId,
   ): Promise<void> {
     const generation = this.generation;
     const recipient = { ...binding };
@@ -751,7 +814,7 @@ export class FeishuConnector {
             JSON.stringify([
               appId,
               recipient.senderId,
-              recipient.chatId,
+              chatId,
               recipient.tenantKey ?? '',
               kind,
               id,
@@ -761,7 +824,7 @@ export class FeishuConnector {
           )
           .digest('hex')
           .slice(0, 32);
-        await transport.send(recipient.chatId, chunks[index], uuid);
+        await transport.send(chatId, chunks[index], uuid);
         checkRoute();
       }
     })();
@@ -931,6 +994,8 @@ export class FeishuConnector {
     if (this.inbox.has(key)) return;
     const credentials = this.credentials;
     if (!credentials.binding) {
+      // Pairing happens in the private chat only.
+      if (message.group) return;
       if (Date.now() > this.pairingExpiresAt || this.pairingAttempts >= 10) this.newPairingCode();
       this.pairingAttempts++;
       const code = message.text.replace(/^(?:\/pair|配对|绑定)\s+/i, '').toUpperCase();
@@ -957,16 +1022,45 @@ export class FeishuConnector {
     }
     if (
       credentials.binding.senderId !== message.senderId ||
-      credentials.binding.chatId !== message.chatId ||
+      (!message.group && credentials.binding.chatId !== message.chatId) ||
       (credentials.binding.tenantKey && credentials.binding.tenantKey !== tenantKey)
     )
       return;
+    if (message.group) {
+      // In a group only the paired operator is heard, and only when the bot itself is mentioned.
+      const botId = this.transport && (await this.botId(this.transport));
+      if (generation !== this.generation || this.disposed || this.credentials !== credentials)
+        return;
+      if (!botId || !received.mentions.some((mention) => mention.openId === botId)) return;
+      message.text = addressedText(message.text, received.mentions, botId);
+      if (!message.text || this.inbox.has(key)) return;
+    }
     const item: InboxItem = { appId, message, kind: 'command', status: 'pending' };
     await this.saveItem(item);
     this.inbox.set(key, item);
     if (generation !== this.generation || this.disposed) return;
     this.update({ lastMessageAt: Date.now() });
     this.schedule(item);
+  }
+
+  private botIds = new WeakMap<FeishuTransport, Promise<string | undefined>>();
+  /** Asked once per connection; a failed answer is asked again with the next group message. */
+  private botId(transport: FeishuTransport) {
+    let id = this.botIds.get(transport);
+    if (!id) {
+      const deadline = new Promise<undefined>((resolve) => {
+        const timer = setTimeout(() => resolve(undefined), 10_000);
+        timer.unref();
+      });
+      id = Promise.race([Promise.resolve().then(() => transport.botId?.()), deadline]).catch(
+        () => undefined,
+      );
+      this.botIds.set(transport, id);
+      void id.then((value) => {
+        if (!value && this.botIds.get(transport) === id) this.botIds.delete(transport);
+      });
+    }
+    return id;
   }
 
   private resumePending() {
@@ -987,7 +1081,10 @@ export class FeishuConnector {
       )
         return;
       const binding = this.credentials.binding;
-      if (binding?.senderId !== item.message.senderId || binding.chatId !== item.message.chatId)
+      if (
+        binding?.senderId !== item.message.senderId ||
+        (binding.chatId !== item.message.chatId && item.message.group !== true)
+      )
         return;
       try {
         item.status = 'running';

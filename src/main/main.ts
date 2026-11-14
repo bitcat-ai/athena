@@ -1614,7 +1614,11 @@ async function handleFeishuMessage(message: FeishuMessage) {
       (await runTurn(
         conversation,
         message.text,
-        `任务来自已配对的飞书用户。当前页面：${pageSource(browser.getState().url)}。仅在当前项目与浏览器范围内工作。`,
+        `任务来自已配对的飞书用户${
+          message.group
+            ? '在群聊中 @ 机器人的消息，回复会发到该群并被群成员看到，回复里不要包含不宜公开的内容'
+            : ''
+        }。当前页面：${pageSource(browser.getState().url)}。仅在当前项目与浏览器范围内工作。`,
         'feishu',
       )) || 'Agent 本轮已结束，可在 Athena 中查看结果。';
   } catch (error) {

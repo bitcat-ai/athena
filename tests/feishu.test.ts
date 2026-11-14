@@ -16,6 +16,8 @@ const APP_ID = 'cli_0123456789abcdef';
 const SECRET = 'test-secret-not-for-renderer';
 const OWNER = 'ou_test_operator';
 const CHAT = 'oc_test_private';
+const GROUP = 'oc_test_group';
+const BOT = 'ou_test_bot';
 const TENANT = 'tenant-test';
 
 const delay = (ms = 5) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -39,6 +41,7 @@ function event(
     appId?: string;
     tenantKey?: string;
     senderTenantKey?: string;
+    mentions?: { key: string; id: { open_id: string }; name: string }[];
   } = {},
 ) {
   return {
@@ -56,8 +59,14 @@ function event(
       message_type: extra.messageType ?? 'text',
       content: JSON.stringify({ text }),
       create_time: String(Date.now()),
+      ...(extra.mentions ? { mentions: extra.mentions } : {}),
     },
   };
+}
+
+const atBot = { key: '@_user_1', id: { open_id: BOT }, name: 'Athena' };
+function groupEvent(id: string, text: string, extra: Parameters<typeof event>[2] = {}) {
+  return event(id, text, { chatId: GROUP, chatType: 'group', mentions: [atBot], ...extra });
 }
 
 function postEvent(id: string, content: unknown) {
@@ -90,6 +99,8 @@ async function harness(
   let registration!: Parameters<FeishuDependencies['registerApp']>[0];
   let finishRegistration!: (value: Awaited<ReturnType<FeishuDependencies['registerApp']>>) => void;
   let sendFailure = false;
+  let botId: string | undefined = BOT;
+  let botIdRequests = 0;
   let autoReady = true;
   let connections = 0;
   let registrations = 0;
@@ -126,6 +137,10 @@ async function harness(
           if (sendHook) await sendHook({ chatId, text, uuid });
           if (sendFailure) throw new Error('private upstream token must not escape');
           sent.push({ chatId, text, uuid });
+        },
+        botId: async () => {
+          botIdRequests++;
+          return botId;
         },
       };
     },
@@ -170,6 +185,12 @@ async function harness(
     },
     setSendFailure(value: boolean) {
       sendFailure = value;
+    },
+    setBotId(value: string | undefined) {
+      botId = value;
+    },
+    get botIdRequests() {
+      return botIdRequests;
     },
     setAutoReady(value: boolean) {
       autoReady = value;
@@ -917,6 +938,7 @@ test('QR setup binds the code holder using the bot event identity, not registrat
     assert.equal(h.registration.addons?.preset, false);
     assert.deepEqual(h.registration.addons?.scopes?.tenant, [
       'im:message.p2p_msg:readonly',
+      'im:message.group_at_msg:readonly',
       'im:message:send_as_bot',
     ]);
     assert.equal(h.registration.addons?.scopes?.user, undefined);
@@ -1311,6 +1333,125 @@ test('replies cannot target other chats and use a stable UUID for retries', asyn
     await assert.rejects(h.connector.sendReply(received[0], 'different result'));
     assert.equal(JSON.stringify(h.states).includes('private upstream token'), false);
     assert.match(h.connector.getState().error!, /发送失败/);
+  } finally {
+    await h.cleanup();
+  }
+});
+
+test('the paired operator can start a task by mentioning the bot in a group, and the reply goes to that group', async () => {
+  const received: FeishuMessage[] = [];
+  const h = await harness(async (message) => {
+    received.push(message);
+  });
+  try {
+    await h.connectAndPair();
+    const other = { key: '@_user_2', id: { open_id: 'ou_colleague' }, name: '同事' };
+    await h.callbacks.onMessage(
+      groupEvent('group-1', '@_user_1 看一下这个页面，然后告诉 @_user_2', {
+        mentions: [atBot, other],
+      }),
+    );
+    await until(() => received.length === 1);
+    assert.deepEqual(
+      { ...received[0], timestamp: 0 },
+      {
+        id: 'group-1',
+        text: '看一下这个页面，然后告诉 @同事',
+        senderId: OWNER,
+        chatId: GROUP,
+        timestamp: 0,
+        group: true,
+      },
+    );
+    await h.connector.sendReply(received[0], '页面正常');
+    assert.deepEqual(
+      h.sent.slice(1).map(({ chatId, text }) => ({ chatId, text })),
+      [{ chatId: GROUP, text: '页面正常' }],
+    );
+    // A reply never follows a chat the caller names, and attention notices stay private.
+    await assert.rejects(h.connector.sendReply({ ...received[0], chatId: 'oc_other' }, 'x'));
+    await assert.rejects(h.connector.sendReply({ ...received[0], chatId: CHAT }, 'x'));
+    assert.equal(await h.connector.sendNotification('task:request:1', '需要你审核'), true);
+    assert.equal(h.sent.at(-1)!.chatId, CHAT);
+    // The private chat keeps working next to the group.
+    await h.callbacks.onMessage(event('private-1', '再检查一次'));
+    await until(() => received.length === 2);
+    assert.equal(received[1].group, undefined);
+    assert.equal(h.botIdRequests, 1);
+  } finally {
+    await h.cleanup();
+  }
+});
+
+test('group messages from others, without the bot mentioned or with an unknown bot identity are ignored', async () => {
+  const received: FeishuMessage[] = [];
+  const h = await harness(async (message) => {
+    received.push(message);
+  });
+  try {
+    await h.connector.configure({ appId: APP_ID, appSecret: SECRET });
+    await h.connector.connect();
+    // Nobody is paired from a group, not even with the right code.
+    await h.callbacks.onMessage(
+      groupEvent('group-pair', `@_user_1 ${h.connector.getState().pairingCode!}`),
+    );
+    await delay(20);
+    assert.equal(h.connector.getState().paired, false);
+    await h.callbacks.onMessage(event('pair-1', h.connector.getState().pairingCode!));
+    await until(() => h.sent.length === 1);
+
+    // Without the bot's own identity nothing in a group counts as addressed to it.
+    h.setBotId(undefined);
+    await h.callbacks.onMessage(groupEvent('unknown-bot', '@_user_1 操作'));
+    assert.equal(h.botIdRequests, 1);
+    h.setBotId(BOT);
+
+    const colleague = { key: '@_user_1', id: { open_id: 'ou_colleague' }, name: '同事' };
+    await h.callbacks.onMessage(
+      groupEvent('stranger', '@_user_1 删除文件', { senderId: 'ou_other' }),
+    );
+    await h.callbacks.onMessage(groupEvent('no-mention', '随便聊聊', { mentions: [] }));
+    await h.callbacks.onMessage(
+      groupEvent('other-mention', '@_user_1 你来看', { mentions: [colleague] }),
+    );
+    await h.callbacks.onMessage(groupEvent('only-mention', '@_user_1'));
+    await h.callbacks.onMessage(
+      groupEvent('other-tenant', '@_user_1 操作', {
+        tenantKey: 'tenant-x',
+        senderTenantKey: 'tenant-x',
+      }),
+    );
+    await h.callbacks.onMessage(groupEvent('bot-sender', '@_user_1 操作', { senderType: 'app' }));
+    await delay(30);
+    assert.equal(received.length, 0);
+    assert.equal(h.sent.length, 1);
+    const files = (await readdir(path.join(h.storageDir, 'inbox'))).filter((name) =>
+      name.endsWith('.enc'),
+    );
+    assert.equal(files.length, 1);
+
+    // The identity was asked again once it could be answered, and is then kept.
+    await h.callbacks.onMessage(groupEvent('known-bot', '@_user_1 操作'));
+    await until(() => received.length === 1);
+    assert.equal(received[0].text, '操作');
+    assert.equal(h.botIdRequests, 2);
+  } finally {
+    await h.cleanup();
+  }
+});
+
+test('a group task that was received is not answered after the pairing is removed', async () => {
+  const received: FeishuMessage[] = [];
+  const h = await harness(async (message) => {
+    received.push(message);
+  });
+  try {
+    await h.connectAndPair();
+    await h.callbacks.onMessage(groupEvent('group-1', '@_user_1 读一下页面'));
+    await until(() => received.length === 1);
+    await h.connector.disconnectUser();
+    await assert.rejects(h.connector.sendReply(received[0], '结果'));
+    assert.equal(h.sent.filter((message) => message.chatId === GROUP).length, 0);
   } finally {
     await h.cleanup();
   }
