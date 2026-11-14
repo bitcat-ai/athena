@@ -1900,6 +1900,25 @@ export class BrowserRuntime {
     // A renderer blocked by a dialog never answers.
     return Promise.race([check, wait(timeout + 300).then(() => 'retry' as const)]);
   }
+  /**
+   * Shows what a page script of the agent changes in view as cursor choreography: 'watch' keeps
+   * the view as it looks before the script runs, 'replay' uncovers what changed once it has
+   * returned and resolves when that show is over, so the next capture does not cut it short.
+   * A replay without a show only uncovers the page. Page scripts run in the main frame.
+   */
+  async nativeScriptEdits(targetId: string, phase: 'watch' | 'replay', show = true): Promise<void> {
+    const tab = this.tabs.get(targetId);
+    // A page that was covered is uncovered whoever has it by now.
+    if (!tab || this.pendingDialogs.has(targetId)) return;
+    if (phase === 'watch' && tab.source !== 'agent') return;
+    const call = (async () => {
+      const frame = (await this.collectFrames(tab)).find((item) => item.id === tab.mainFrameId);
+      if (frame)
+        await this.bridge(tab, frame, `globalThis.__workbenchPage.${phase}Script(${show})`);
+    })().catch(() => undefined);
+    // A renderer blocked by a dialog never answers.
+    await Promise.race([call, wait(phase === 'replay' && show ? 4800 : 500)]);
+  }
   /** Waits until loading, fresh requests and DOM changes stop. Resolves false when the page stays busy. */
   async nativeSettle(targetId: string, timeout = 3000): Promise<boolean> {
     const deadline = Date.now() + timeout;

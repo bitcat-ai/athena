@@ -120,6 +120,8 @@ export class AgentBrowserSession {
   private halt!: (error: Error) => void;
   private halted = new Promise<never>((_, reject) => (this.halt = reject));
   private script?: AbortController;
+  /** Time a running script may still spend waiting for the shows of its own page edits. */
+  private showTime = 0;
   // Element references are scoped to this task and die with the daemon that issued them.
   private token = randomUUID().slice(0, 8);
   private refs = new Map<string, { raw: string; target: string; role?: string; name?: string }>();
@@ -1169,6 +1171,9 @@ export class AgentBrowserSession {
     const timeout = within(args.timeout, 30_000, 1, 30_000, 'timeout');
     const limit = within(args.maxChars, 5000, 1, 200_000, 'maxChars');
     this.assertNoDialog(target);
+    // A script is shown its first page edits only; it has its own time limit.
+    const shown = !scripted || this.showTime > 0;
+    if (shown) await this.browser.nativeScriptEdits(target, 'watch');
     const result = await this.guard(
       this.browser.nativeEvaluate(
         target,
@@ -1177,6 +1182,12 @@ export class AgentBrowserSession {
       ),
     );
     this.check();
+    if (shown && !result.dialog) {
+      // Code that failed is not shown; the page is only uncovered.
+      const started = Date.now();
+      await this.guard(this.browser.nativeScriptEdits(target, 'replay', !result.error));
+      if (scripted) this.showTime -= Date.now() - started;
+    }
     const settle = () => this.guard(this.browser.nativeSettle(target, 3000));
     if (result.dialog) {
       const dialog = this.dialog(target);
@@ -1227,6 +1238,7 @@ export class AgentBrowserSession {
     const files: WebFile[] = [];
     const abort = new AbortController();
     this.script = abort;
+    this.showTime = 6000;
     try {
       const result = await runWebScript(code, {
         timeout,

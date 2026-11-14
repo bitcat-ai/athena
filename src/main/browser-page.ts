@@ -328,7 +328,7 @@ export const browserPageSource = String.raw`(() => {
     overlayMute=document.createElement('style');overlayMute.textContent='.selected,.feedback,.agent-cursor{visibility:hidden}';
     overlayRoot.appendChild(overlayMute);
   }
-  const swarm=createSwarm({root:overlaySurface,parent,reduced:reducedMotion,mute:muteOverlays,origin() {
+  const swarm=createSwarm({root:overlaySurface,parent,reduced:reducedMotion,mute:muteOverlays,ours:node=>overlays.has(node),origin() {
     if(!agentCursor?.isConnected || agentCursor.style.display!=='block') return null;
     const rect=agentCursor.getBoundingClientRect();
     return [rect.x,rect.y];
@@ -566,6 +566,14 @@ export const browserPageSource = String.raw`(() => {
     setInspect(value) { inspecting=!!value;hoverPoint=null;hoverElement=null;refreshOverlays(); },
     leave() { hoverPoint=null;hoverElement=null;refreshOverlays(); },
     feedback,
+    // A page script of the agent edits outside this bridge: the view is kept as it looks before
+    // the script runs, and what changed is uncovered by cursors once it has returned. The answer
+    // waits for the show to end; without a show the page is only uncovered.
+    watchScript() { return source==='agent' && swarm.watch(); },
+    replayScript(show=true) {
+      const played=swarm.replay(source==='agent' && show)>0;
+      return played ? swarm.rest(4200).then(()=>true) : false;
+    },
     clearOverlays() {
       swarm.settle();
       inspecting=false;hoverPoint=null;hoverElement=null;selectedElement=null;feedbackElement=null;feedbackPhase=null;clearTimeout(feedbackTimer);

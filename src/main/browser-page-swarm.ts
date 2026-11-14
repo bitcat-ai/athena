@@ -6,8 +6,9 @@
  * an independent implementation; none of its code or artwork is used.
  *
  * The page is always edited first. What plays afterwards only withholds pixels: opacity and
- * interpolated styles through script animations, pending text through a custom highlight. The
- * DOM, inline styles and the accessibility tree already hold the result.
+ * interpolated styles through script animations, pending text through a custom highlight, and for
+ * page scripts the snapshot a view transition keeps of the page as it was. The DOM, styles and
+ * the accessibility tree already hold the result.
  */
 export const browserSwarmCss = [
   '.swarm{position:absolute;inset:0;overflow:hidden;pointer-events:none}',
@@ -38,7 +39,14 @@ export const browserSwarmSource = String.raw`
     const veilName='athena-swarm-pending';
     const shows=new Set();
     const canVeil=typeof Highlight==='function' && !!globalThis.CSS?.highlights && typeof CSSStyleSheet==='function';
-    let stage, sheet, tints=0, suspended=false, mutedUntil=0, unmuteTimer;
+    const coverName='athena-swarm-page';
+    const canCover=typeof document.startViewTransition==='function' && typeof CSSStyleSheet==='function' && 'adoptedStyleSheets' in document;
+    let stage, sheet, tints=0, suspended=false, mutedUntil=0, unmuteTimer, armed=null, stalledUntil=0;
+    // Looks a page script may change, read as longhands so they can be compared.
+    const looks=['color','background-color','background-image','font-family','font-size','font-weight','font-style','letter-spacing','line-height','text-transform','text-align','text-decoration-line','opacity','box-shadow','backdrop-filter',
+      'border-top-left-radius','border-top-right-radius','border-bottom-right-radius','border-bottom-left-radius','border-top-width','border-right-width','border-bottom-width','border-left-width',
+      'border-top-color','border-right-color','border-bottom-color','border-left-color','padding-top','padding-right','padding-bottom','padding-left'];
+    const inherited=new Set(['color','font-family','font-size','font-weight','font-style','letter-spacing','line-height','text-transform','text-align']);
     const ease=p=>p<0.5 ? 4*p*p*p : 1-Math.pow(-2*p+2,3)/2;
     const linear=p=>p;
     const camel=name=>name.replace(/-([a-z])/g,(_,letter)=>letter.toUpperCase());
@@ -404,6 +412,223 @@ export const browserSwarmSource = String.raw`
       await tween(show,240,p=> { frame.grow=1-p; frame.place(); frame.node.style.opacity=String(1-p); });
       await pause(show,200);
     }
+    const ownText=el=> { let text=''; for (const node of el.childNodes) if (node.nodeType===3) text+=node.nodeValue; return text; };
+    // An element the page animates itself changes without anyone editing it.
+    const moving=el=>el.getAnimations().some(item=>item.playState==='running' && !(typeof CSSTransition==='function' && item instanceof CSSTransition));
+    // Where running CSS transitions will land; until then computed styles read as their start.
+    function landings() {
+      const ends=new Map();
+      if (typeof CSSTransition!=='function' || !document.getAnimations) return ends;
+      for (const item of document.getAnimations()) {
+        if (!(item instanceof CSSTransition) || !item.effect?.target || item.effect.pseudoElement) continue;
+        try {
+          const frames=item.effect.getKeyframes(), value=frames[frames.length-1]?.[camel(item.transitionProperty)];
+          if (typeof value!=='string') continue;
+          if (!ends.has(item.effect.target)) ends.set(item.effect.target,{});
+          ends.get(item.effect.target)[item.transitionProperty]=value;
+        } catch {}
+      }
+      return ends;
+    }
+    // What is in view, as it looks before a script runs.
+    function census() {
+      const seen=new Map(), every=document.body.getElementsByTagName('*');
+      let pool;
+      if (every.length<=4000) pool=[document.documentElement,document.body,...every];
+      else {
+        // Too much to walk: what lies under a grid of points stands for the view.
+        pool=new Set();
+        for (let row=0; row<14; row++) for (let column=0; column<10; column++) for (const el of document.elementsFromPoint((column+0.5)*innerWidth/10,(row+0.5)*innerHeight/14)) pool.add(el);
+      }
+      for (const el of pool) {
+        if (seen.size>=500) break;
+        if (env.ours(el)) continue;
+        const rect=el.getBoundingClientRect();
+        if (!onscreen(rect)) continue;
+        const computed=getComputedStyle(el), styles={};
+        for (const name of looks) styles[name]=computed.getPropertyValue(name);
+        seen.set(el,{rect:box(rect),styles,text:ownText(el)});
+      }
+      return seen;
+    }
+    // What a script changed in view since the census: the parts cursors will uncover, each with
+    // the changes around it that follow along.
+    function changes(watch) {
+      const ends=landings(), found=new Map(), view=innerWidth*innerHeight;
+      // The region in view, widened where a shadow reaches past its box.
+      const region=(rect,cast)=> {
+        const pad=cast ? 8 : 0, x=Math.max(0,Math.floor(rect.x-pad)), y=Math.max(0,Math.floor(rect.y-pad));
+        const width=Math.min(innerWidth,Math.ceil(rect.x+rect.width+pad))-x, height=Math.min(innerHeight,Math.ceil(rect.y+rect.height+pad))-y;
+        return width>0 && height>0 ? {x,y,width,height} : null;
+      };
+      const join=(a,b)=> {
+        if (!a || !b) return a || b;
+        const x=Math.min(a.x,b.x), y=Math.min(a.y,b.y);
+        return {x,y,width:Math.max(a.x+a.width,b.x+b.width)-x,height:Math.max(a.y+a.height,b.y+b.height)-y};
+      };
+      // The page background paints the whole view, whatever box its element has.
+      const canvas=el=>el===document.body || el===document.documentElement;
+      const note=(el,rect,own)=> {
+        if (canvas(el)) rect={x:0,y:0,width:innerWidth,height:innerHeight};
+        if (rect) found.set(el,{el,rect,own,members:[],open:0});
+      };
+      let lost=0;
+      for (const [el,was] of watch.seen) {
+        const cast=was.styles['box-shadow']!=='none';
+        if (!el.isConnected) { lost++; note(el,region(was.rect,cast),true); continue; }
+        const computed=getComputedStyle(el), land=ends.get(el), now=el.getBoundingClientRect();
+        let styled=false, boxy=false;
+        for (const name of looks) {
+          const last=was.styles[name], next=land?.[name] ?? computed.getPropertyValue(name);
+          if (!last || !next || last===next) continue;
+          // The colour of a border that is not drawn only follows the text colour.
+          if (name.startsWith('border-') && name.endsWith('-color')) { const width=name.replace('color','width'); if (was.styles[width]==='0px' && computed.getPropertyValue(width)==='0px') continue; }
+          styled=true;
+          if (!inherited.has(name)) boxy=true;
+        }
+        const wrote=ownText(el)!==was.text;
+        const shifted=[was.rect.x-now.x,was.rect.y-now.y,was.rect.width-now.width,was.rect.height-now.height].some(delta=>Math.abs(delta)>0.5);
+        if ((!styled && !wrote && !shifted) || moving(el)) continue;
+        const shade=cast || computed.getPropertyValue('box-shadow')!=='none';
+        // A wrapper that only passes a look on, or only moved, is not a part of its own.
+        note(el,join(region(was.rect,shade),region(now,shade)),boxy || wrote || (styled && !!ownText(el).trim()));
+      }
+      // A page that was mostly replaced has moved on rather than been edited.
+      if (lost>watch.seen.size/2) return [];
+      for (const el of watch.fresh) {
+        if (el.isConnected && !found.has(el) && !watch.seen.has(el) && !env.ours(el)) note(el,region(el.getBoundingClientRect(),false),true);
+      }
+      const size=item=>item.rect.width*item.rect.height;
+      const under=(el,among)=> { for (let node=env.parent(el); node; node=env.parent(node)) if (among.has(node)) return true; return false; };
+      const outer=list=> { const among=new Set(list.map(item=>item.el)); return list.filter(item=>!under(item.el,among)); };
+      const all=[...found.values()], fit=all.filter(item=>size(item)<=view*0.6);
+      // A large part that holds several changes is uncovered change by change.
+      const spread=item=> {
+        if (size(item)<=view*0.2) return [item];
+        const inner=outer(fit.filter(other=>other.own && under(other.el,new Set([item.el]))));
+        return inner.length>1 ? inner.flatMap(spread) : [item];
+      };
+      let parts=outer(fit.filter(item=>item.own)).flatMap(spread);
+      if (!parts.length) parts=outer(fit);
+      // Only something that fills most of the view changed: it is uncovered as one.
+      if (!parts.length) parts=all.sort((a,b)=>size(a)-size(b)).slice(0,1);
+      parts=parts.sort((a,b)=>size(b)-size(a)).slice(0,12).sort((a,b)=>a.rect.y-b.rect.y || a.rect.x-b.rect.x);
+      // Everything else comes into view with the part closest to it.
+      const chosen=new Set(parts.map(item=>item.el)), above=new Set();
+      for (const part of parts) for (let node=env.parent(part.el); node; node=env.parent(node)) above.add(node);
+      const rest=outer(fit.filter(item=>!chosen.has(item.el) && !above.has(item.el) && !under(item.el,chosen))).sort((a,b)=>size(b)-size(a)).slice(0,24);
+      for (const item of rest) {
+        let near=null, best=Infinity;
+        for (const part of parts) {
+          const distance=Math.hypot(item.rect.x+item.rect.width/2-part.rect.x-part.rect.width/2,item.rect.y+item.rect.height/2-part.rect.y-part.rect.height/2);
+          if (distance<best) { best=distance; near=part; }
+        }
+        near.members.push(item.rect);
+      }
+      return parts;
+    }
+    // Rectangles as rows that do not overlap, so each is cut out of the snapshot exactly once.
+    function rows(rects) {
+      const edges=[...new Set(rects.flatMap(rect=>[rect.y,rect.y+rect.height]))].sort((a,b)=>a-b), cut=[];
+      for (let row=0; row+1<edges.length; row++) {
+        const top=edges[row], bottom=edges[row+1], runs=[];
+        for (const rect of rects.filter(rect=>rect.y<bottom && rect.y+rect.height>top).sort((a,b)=>a.x-b.x)) {
+          const run=runs[runs.length-1];
+          if (run && rect.x<=run[1]) run[1]=Math.max(run[1],rect.x+rect.width);
+          else runs.push([rect.x,rect.x+rect.width]);
+        }
+        for (const run of runs) cut.push('M'+run[0]+' '+top+'H'+run[1]+'V'+bottom+'H'+run[0]+'Z');
+      }
+      return cut.join('');
+    }
+    // Keeps the page as it looks on top of itself: a view transition that captures the document
+    // for its old state only. Underneath, the document is painted, hit tested and scripted as usual.
+    function cover(watch) {
+      const host=env.root().host, page=new CSSStyleSheet();
+      page.replaceSync(':root{view-transition-name:'+coverName+'!important}:not(:root){view-transition-name:none!important}'
+        +'::view-transition{pointer-events:none!important}'
+        +'::view-transition-group(*),::view-transition-image-pair(*),::view-transition-new(*){animation:none!important;mix-blend-mode:normal!important}'
+        +'::view-transition-old(*){display:none!important}'
+        +'::view-transition-old('+coverName+'){display:block!important;mix-blend-mode:normal!important;animation:'+coverName+' 1000000s linear both!important}'
+        +'@keyframes '+coverName+'{from{opacity:1}to{opacity:1}}'
+        +'::view-transition-old('+coverName+'){}');
+      watch.rule=page.cssRules[page.cssRules.length-1];
+      document.adoptedStyleSheets=[...document.adoptedStyleSheets,page];
+      // The cursors are captured apart from the page, so they stay live above its snapshot.
+      host.style.setProperty('view-transition-name',coverName+'-cursors','important');
+      watch.undo.push(()=> {
+        document.adoptedStyleSheets=document.adoptedStyleSheets.filter(item=>item!==page);
+        host.style.setProperty('view-transition-name','initial','important');
+      });
+      // Someone using the page sees it as it is.
+      const types=['pointerdown','keydown','wheel','scroll'];
+      const used=event=> { if (event.isTrusted && (event.type!=='scroll' || event.target===document)) drop(watch); };
+      for (const type of types) addEventListener(type,used,{capture:true,passive:true});
+      watch.undo.push(()=> { for (const type of types) removeEventListener(type,used,{capture:true}); });
+      const transition=document.startViewTransition(()=> { page.cssRules[0].style.setProperty('view-transition-name','none','important'); });
+      watch.undo.push(()=>transition.skipTransition());
+      // The page may end the transition itself, for instance with one of its own.
+      transition.finished.then(()=>drop(watch),()=>drop(watch));
+      transition.updateCallbackDone.catch(()=>{});
+      return transition.ready;
+    }
+    // Takes the snapshot away, so the page shows as it is.
+    function release(watch) {
+      if (watch.done) return;
+      watch.done=true; watch.observer.disconnect(); clearTimeout(watch.timer);
+      for (const undo of watch.undo.splice(0).reverse()) { try { undo(); } catch {} }
+    }
+    function drop(watch) {
+      if (watch.done) return;
+      if (watch.show) settle(watch.show); else { if (armed===watch) armed=null; release(watch); }
+    }
+    // Ends what a script is shown with: the watch on one that runs and the show of one that returned.
+    function quit() {
+      if (armed) drop(armed);
+      for (const show of [...shows]) if (show.script) settle(show);
+    }
+    // A change by script: cursors drag the new look open part by part, then the rest follows.
+    async function uncover(show,watch,parts) {
+      let path='';
+      show.live.add(()=> {
+        const open=[];
+        for (const part of parts) {
+          if (!part.open) continue;
+          for (const rect of [part.rect,...part.members]) {
+            const width=Math.round(rect.width*part.open), height=Math.round(rect.height*part.open);
+            if (width>0 && height>0) open.push({x:rect.x,y:rect.y,width,height});
+          }
+        }
+        const next='path(evenodd,"M-9 -9H'+(innerWidth+9)+'V'+(innerHeight+9)+'H-9Z'+rows(open)+'")';
+        if (next!==path) watch.rule.style.setProperty('clip-path',path=next,'important');
+      });
+      const queue=[...parts], crew=Math.min(4,queue.length), first=queue[0].rect;
+      const home={left:first.x,top:first.y,right:first.x+first.width,bottom:first.y+first.height,width:first.width,height:first.height};
+      show.speed=clamp(2400/(Math.ceil(queue.length/crew)*700),0.5,1);
+      const worker=async(pointer,color)=> { while (queue.length) await drag(show,pointer,color,queue.shift()); };
+      await Promise.all(Array.from({length:crew},(_,index)=> {
+        const color=tint();
+        return worker(cursor(show,color,(!index && watch.origin) || entry(home,index),!index,!!index || !watch.origin),color);
+      }));
+      await pause(show,160);
+      await tween(show,300,p=>watch.rule.style.setProperty('opacity',String(1-p),'important'));
+      release(watch);
+    }
+    async function drag(show,pointer,color,part) {
+      const frame=select(show,color,()=>part.rect);
+      frame.grow=0; frame.place();
+      frame.node.style.visibility='hidden';
+      await fly(show,pointer,frame.corner(0,0),260);
+      pointer.mode('cross'); frame.node.style.visibility='';
+      await tween(show,clamp(160+Math.hypot(part.rect.width,part.rect.height)*0.4,260,460),p=> {
+        frame.grow=part.open=p; frame.place();
+        const at=frame.corner(1,1)();
+        if (at) pointer.to(at[0],at[1]);
+      });
+      pointer.mode('arrow');
+      dismiss(frame,140);
+      await pause(show,90);
+    }
     function finish(show) {
       if (show.over) return;
       for (const node of show.nodes) node.animate([{opacity:getComputedStyle(node).opacity},{opacity:0}],{duration:200,fill:'forwards'});
@@ -439,6 +664,7 @@ export const browserSwarmSource = String.raw`
       /** Plays a change that has already been applied. Returns false when nothing is shown. */
       play(spec) {
         try {
+          quit();
           if (spec.el) this.settle(spec.el);
           if (env.reduced.matches || document.visibilityState!=='visible') return false;
           if (!onscreen(spec.gone ? vacated(spec) : spec.el.getBoundingClientRect())) {
@@ -465,6 +691,7 @@ export const browserSwarmSource = String.raw`
       },
       /** Ends the shows touching an element, or all of them, leaving the page as edited. */
       settle(el) {
+        quit();
         for (const show of [...shows]) if (!el || (show.el && (show.el.contains(el) || el.contains(show.el)))) settle(show);
       },
       /** Runs an observation against the page as edited, not a frame of a running show. */
@@ -481,6 +708,61 @@ export const browserSwarmSource = String.raw`
           for (const [show,player,time] of saved) if (!show.over) { player.play(); player.currentTime=time; }
           suspended=false;
         }
+      },
+      /**
+       * Notes what is in view before a page script of the agent runs and keeps it on screen.
+       * Resolves true once the page is covered by its own snapshot.
+       */
+      watch() {
+        quit();
+        if (!canCover || shows.size || env.reduced.matches || document.visibilityState!=='visible' || !document.body || document.activeViewTransition || performance.now()<stalledUntil) return false;
+        const watch={seen:census(),scroll:[scrollX,scrollY],origin:env.origin(),fresh:new Set(),undo:[],held:false,done:false,show:null};
+        if (!watch.seen.size) return false;
+        watch.observer=new MutationObserver(records=> { for (const record of records) for (const node of record.addedNodes) if (node.nodeType===1) watch.fresh.add(node); });
+        watch.observer.observe(document,{subtree:true,childList:true});
+        armed=watch;
+        return new Promise(resolve=> {
+          // A document that renders no frames takes no snapshot; it is not asked again for a while.
+          watch.timer=setTimeout(()=> { stalledUntil=performance.now()+30000; drop(watch); resolve(false); },250);
+          const held=()=> {
+            if (watch.done) return resolve(false);
+            watch.held=true; clearTimeout(watch.timer);
+            // A script that never reports back must not leave the page covered.
+            watch.timer=setTimeout(()=>drop(watch),3000);
+            resolve(true);
+          };
+          try { cover(watch).then(held,()=> { drop(watch); resolve(false); }); } catch { drop(watch); resolve(false); }
+        });
+      },
+      /** Plays what changed in view since watch(), or only uncovers the page. Returns the number of shows it started. */
+      replay(play=true) {
+        const watch=armed;
+        if (!watch) return 0;
+        armed=null; clearTimeout(watch.timer);
+        for (const record of watch.observer.takeRecords()) for (const node of record.addedNodes) if (node.nodeType===1) watch.fresh.add(node);
+        watch.observer.disconnect();
+        let parts=[];
+        try {
+          if (play && watch.held && !env.reduced.matches && document.visibilityState==='visible' && scrollX===watch.scroll[0] && scrollY===watch.scroll[1]) parts=changes(watch);
+        } catch {}
+        if (!parts.length) { release(watch); return 0; }
+        tints=0;
+        mount();
+        const show=watch.show={el:null,script:true,speed:1,over:false,live:new Set(),players:new Set(),roots:new Set(),nodes:[],cursors:[],undo:[()=>release(watch)]};
+        shows.add(show);
+        mutedUntil=performance.now()+950; clearTimeout(unmuteTimer); env.mute(true);
+        show.guard=setTimeout(()=>settle(show),8000);
+        uncover(show,watch,parts).then(()=>finish(show),()=>settle(show));
+        loop(show);
+        return 1;
+      },
+      /** Resolves once every show is over, or after the limit. */
+      rest(limit) {
+        return new Promise(resolve=> {
+          const until=performance.now()+limit;
+          const check=()=>!shows.size || performance.now()>=until ? resolve() : setTimeout(check,50);
+          check();
+        });
       },
       get active() { return shows.size; },
     };

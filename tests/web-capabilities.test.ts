@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, realpath, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { liveWeb, refOf, webFixture, type WebFixture } from './web-fixture';
+import { liveWeb, refOf, until, webFixture, type WebFixture } from './web-fixture';
 
 const options = { skip: !liveWeb, timeout: 120000 };
 const log = (f: WebFixture) => f.state(`document.querySelector('#log').textContent`);
@@ -497,6 +497,56 @@ test('tabs, groups, popups and history stay in Athena’s own browser', options,
     await f.cleanup();
   }
 });
+
+test(
+  'page code that restyles the view is uncovered by cursors before it reports',
+  options,
+  async () => {
+    const f = await webFixture();
+    try {
+      const { page } = await f.begin('restyle');
+      const pad = () =>
+        f.state(
+          `(() => { const el = document.querySelector('#pad'); return { color: getComputedStyle(el).backgroundColor, kept: document.getAnimations().filter((item) => item.effect?.pseudoElement === '::view-transition-old(athena-swarm-page)').length }; })()`,
+        );
+      const started = performance.now();
+      const call = f.call('web_evaluate_in_page', {
+        page,
+        code: `const style = document.createElement('style'); style.textContent = '#pad { background: rgb(0, 113, 227) !important; border-radius: 18px !important; padding: 28px !important } h1 { color: rgb(0, 113, 227) !important }'; document.head.append(style); return 'restyled'`,
+      });
+      await until(async () => {
+        const seen = await pad();
+        return seen.kept === 1 && seen.color === 'rgb(0, 113, 227)';
+      }, 'the view is kept as it looked while the page already holds the result');
+      const out = await call;
+      assert.match(out.text, /"restyled"/);
+      assert.match(out.text, /脚本改动了页面/);
+      assert(performance.now() - started > 600, 'the result waits for the show');
+      assert.deepEqual(await pad(), { color: 'rgb(0, 113, 227)', kept: 0 });
+
+      // A script that only reads is neither held nor delayed by a show.
+      const quick = performance.now();
+      await f.call('web_evaluate_in_page', { page, code: 'return document.title' });
+      assert(performance.now() - quick < 600);
+
+      // A script is shown its first edits only, so a loop of edits stays quick.
+      const loop = performance.now();
+      const run = await f.call('web_run', {
+        code: `
+        const page = browser.page(${page});
+        for (let i = 0; i < 14; i++)
+          await page.evaluateInPage((i) => { document.querySelector('#pad').style.setProperty('background', 'rgb(' + i * 10 + ', 80, 120)', 'important'); }, i);
+        return 'looped';
+      `,
+      });
+      assert.match(run.text, /looped/);
+      assert(performance.now() - loop < 11_000, 'later edits of a script are not shown');
+      assert.deepEqual(await pad(), { color: 'rgb(130, 80, 120)', kept: 0 });
+    } finally {
+      await f.cleanup();
+    }
+  },
+);
 
 test(
   'page code and scripts run only after approval and report what they changed',

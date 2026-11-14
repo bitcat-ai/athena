@@ -1453,6 +1453,278 @@ test('agent edits out of view are scrolled to and played, and changes without a 
   await swarmDone(page);
 });
 
+// The snapshot that keeps the view as it looked while a page script of the agent has run.
+async function readCover(page: Page) {
+  return page.evaluate(() => ({
+    kept: document
+      .getAnimations()
+      .filter(
+        (item) =>
+          (item.effect as KeyframeEffect | null)?.pseudoElement ===
+          '::view-transition-old(athena-swarm-page)',
+      ).length,
+    sheets: document.adoptedStyleSheets.length,
+    named: getComputedStyle(
+      document.querySelector('[data-workbench-overlay]') ?? document.body,
+    ).getPropertyValue('view-transition-name'),
+  }));
+}
+
+test('agent page scripts are uncovered part by part: the view keeps its look while the page already holds the result', async (t) => {
+  if (!browser) return t.skip('Browser binary unavailable');
+  const { page, find } = await fixture(t);
+  await captureOverlayRoot(page);
+  const box = await find('#box');
+  const area = (await page.locator('#box').boundingBox())!;
+  const cdp = await page.context().newCDPSession(page);
+  // A patch of the box away from its text and corners.
+  const shot = async () =>
+    (
+      await cdp.send('Page.captureScreenshot', {
+        format: 'png',
+        clip: { x: area.x + 200, y: area.y + 30, width: 40, height: 20, scale: 1 },
+      })
+    ).data;
+  const before = await shot();
+  assert.equal(await bridge(page, 'watchScript'), false, 'only scripts of the agent are watched');
+  await bridge(page, 'setSource', 'agent');
+  assert.equal(await bridge(page, 'watchScript'), true);
+  // The script runs as its own task, the way an evaluation of the agent arrives. Its rules win
+  // over anything an animation could hold back, and it changes the layout.
+  const held = await page.evaluate(
+    async ([ref, x, y]) => {
+      const style = document.createElement('style');
+      style.textContent =
+        '* { transition: background-color .25s ease, color .25s ease; }' +
+        'body { background: rgb(0, 0, 0) !important; color: rgb(245, 245, 247) !important; }' +
+        '#heading { letter-spacing: -1px !important; color: rgb(41, 151, 255) !important; }' +
+        '#box { background: rgb(29, 29, 31) !important; border-radius: 18px !important; width: 420px !important; }' +
+        '#complex { background: rgb(0, 113, 227) !important; border-radius: 980px !important; color: rgb(255, 255, 255) !important; }';
+      document.head.appendChild(style);
+      // Longer than the page's own transitions, which run underneath.
+      await new Promise((resolve) => setTimeout(resolve, 350));
+      const el = document.querySelector('#box')!;
+      return {
+        box: getComputedStyle(el).backgroundColor,
+        width: el.getBoundingClientRect().width,
+        label: getComputedStyle(document.querySelector('#button-label')!).color,
+        hit: document.elementFromPoint(x as number, y as number)?.id,
+        inspected: (globalThis as any).__workbenchPage.inspect(ref).computed['background-color'],
+        cursors: (globalThis as any).__overlayRoot.querySelectorAll('.swarm .sw-cur').length,
+      };
+    },
+    [box.ref, area.x + 220, area.y + 40],
+  );
+  assert.deepEqual(
+    held,
+    {
+      box: 'rgb(29, 29, 31)',
+      width: 460,
+      label: 'rgb(255, 255, 255)',
+      hit: 'box',
+      inspected: 'rgb(29, 29, 31)',
+      cursors: 0,
+    },
+    'the page is as the script left it for anything that reads it or points at it',
+  );
+  assert.deepEqual(await readCover(page), {
+    kept: 1,
+    sheets: 1,
+    named: 'athena-swarm-page-cursors',
+  });
+  assert.equal(await shot(), before, 'the view keeps its look until the script has returned');
+
+  const started = await page.evaluate(() => {
+    (globalThis as any).__replayed = (globalThis as any).__workbenchPage.replayScript();
+    const stage = (globalThis as any).__overlayRoot;
+    return {
+      cursors: stage.querySelectorAll('.swarm .sw-cur').length,
+      tags: stage.querySelectorAll('.swarm .tag').length,
+    };
+  });
+  assert.deepEqual(started, { cursors: 4, tags: 1 });
+  assert.equal((await readSwarm(page)).muted, true);
+  await page.waitForFunction(
+    () =>
+      (globalThis as any).__overlayRoot.querySelectorAll('.swarm .sw-sel').length > 2 &&
+      getComputedStyle(
+        document.documentElement,
+        '::view-transition-old(athena-swarm-page)',
+      ).clipPath.split('M').length > 3,
+    undefined,
+    { timeout: 3000 },
+  );
+  assert.equal(
+    await page.evaluate(() => (globalThis as any).__replayed),
+    true,
+    'the replay answers once the show is over',
+  );
+  assert.equal((await readSwarm(page)).nodes, 0);
+  assert.deepEqual(await readCover(page), { kept: 0, sheets: 0, named: 'none' });
+  assert.notEqual(await shot(), before, 'the view ends on what the script made');
+  assert.deepEqual(
+    await page.evaluate(() => {
+      const el = document.querySelector('#box')!;
+      return {
+        box: getComputedStyle(el).backgroundColor,
+        radius: getComputedStyle(el).borderTopLeftRadius,
+        body: getComputedStyle(document.body).backgroundColor,
+        heading: getComputedStyle(document.querySelector('#heading')!).color,
+        inline: el.getAttribute('style'),
+        players: document.getAnimations().length,
+      };
+    }),
+    {
+      box: 'rgb(29, 29, 31)',
+      radius: '18px',
+      body: 'rgb(0, 0, 0)',
+      heading: 'rgb(41, 151, 255)',
+      inline: null,
+      players: 0,
+    },
+  );
+  await swarmDone(page);
+});
+
+test('text, new content and removals made by an agent script are uncovered where they are; a script that scrolls is not played', async (t) => {
+  if (!browser) return t.skip('Browser binary unavailable');
+  const { page } = await fixture(t);
+  await captureOverlayRoot(page);
+  await bridge(page, 'setSource', 'agent');
+  assert.equal(await bridge(page, 'watchScript'), true);
+  await page.evaluate(() => {
+    document.querySelector('#heading')!.textContent = '普通标题，改好了';
+    document
+      .querySelector('#box')!
+      .insertAdjacentHTML(
+        'afterend',
+        '<section id="added" style="padding:12px"><h2>新增区块</h2><p>新增内容</p></section>',
+      );
+    document.querySelector('#duplicate')!.remove();
+  });
+  const started = await page.evaluate(() => {
+    (globalThis as any).__replayed = (globalThis as any).__workbenchPage.replayScript();
+    const stage = (globalThis as any).__overlayRoot;
+    return {
+      cursors: stage.querySelectorAll('.swarm .sw-cur').length,
+      tags: stage.querySelectorAll('.swarm .tag').length,
+      text: document.querySelector('#heading')!.textContent,
+    };
+  });
+  assert.deepEqual(
+    started,
+    { cursors: 3, tags: 1, text: '普通标题，改好了' },
+    'one cursor each for the rewritten heading, the new section and the place of the removed line',
+  );
+  assert.equal(await page.evaluate(() => (globalThis as any).__replayed), true);
+  await swarmDone(page);
+  assert.deepEqual(await readCover(page), { kept: 0, sheets: 0, named: 'none' });
+  assert.equal(
+    await page.locator('#added').evaluate((el) => el.getAttribute('style')),
+    'padding:12px',
+  );
+
+  // What was in view when the script started is not what it changed after scrolling.
+  assert.equal(await bridge(page, 'watchScript'), true);
+  await page.evaluate(() => {
+    document.body.insertAdjacentHTML('beforeend', '<div id="tall" style="height:3000px"></div>');
+    scrollTo(0, 400);
+  });
+  assert.equal(await bridge(page, 'replayScript'), false);
+  assert.equal((await readSwarm(page)).nodes, 0);
+  assert.equal((await readCover(page)).kept, 0);
+});
+
+test('scripts that change nothing in view, reduced motion, captures and someone using the page leave it as the script made it', async (t) => {
+  if (!browser) return t.skip('Browser binary unavailable');
+  const { page } = await fixture(t);
+  await captureOverlayRoot(page);
+  await bridge(page, 'setSource', 'agent');
+  const paint = (color: string) =>
+    page.locator('#box').evaluate((el, color) => {
+      (el as HTMLElement).style.background = color;
+    }, color);
+  const kept = async () => (await readCover(page)).kept;
+
+  assert.equal(await bridge(page, 'watchScript'), true);
+  await page.evaluate(() => {
+    document.body.dataset.touched = '1';
+    return document.title;
+  });
+  assert.equal(await bridge(page, 'replayScript'), false, 'nothing to see, nothing to wait for');
+  assert.equal((await readSwarm(page)).nodes, 0);
+  assert.deepEqual(await readCover(page), { kept: 0, sheets: 0, named: 'none' });
+
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  assert.equal(await bridge(page, 'watchScript'), false);
+  await paint('#123');
+  assert.equal(await bridge(page, 'replayScript'), false);
+  assert.equal(await kept(), 0);
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+
+  // A capture between the script and its replay shows the page as edited and ends the show.
+  assert.equal(await bridge(page, 'watchScript'), true);
+  await paint('#456');
+  assert.equal(await kept(), 1);
+  await bridge(page, 'mask', true);
+  assert.equal(await kept(), 0);
+  await bridge(page, 'mask', false);
+  assert.equal(await bridge(page, 'replayScript'), false);
+
+  // A replay that is not to be shown only uncovers the page.
+  assert.equal(await bridge(page, 'watchScript'), true);
+  await paint('#234');
+  assert.equal(await bridge(page, 'replayScript', false), false);
+  assert.equal((await readSwarm(page)).nodes, 0);
+  assert.equal(await kept(), 0);
+
+  // A script that never reports back is not waited for by the next one, and what it leaves
+  // behind is not played for someone who has taken over.
+  assert.equal(await bridge(page, 'watchScript'), true);
+  await paint('#789');
+  assert.equal(await bridge(page, 'watchScript'), true);
+  assert.deepEqual(await readCover(page), {
+    kept: 1,
+    sheets: 1,
+    named: 'athena-swarm-page-cursors',
+  });
+  await bridge(page, 'setSource', 'human');
+  assert.equal(await bridge(page, 'replayScript'), false);
+  assert.equal((await readSwarm(page)).nodes, 0);
+  assert.equal(await kept(), 0);
+  await bridge(page, 'setSource', 'agent');
+
+  // Someone using the page sees and reaches it as it is, before the show and during it.
+  assert.equal(await bridge(page, 'watchScript'), true);
+  await paint('#345');
+  await page.locator('#complex').click();
+  assert.equal(await page.evaluate(() => (globalThis as any).clicked), 1);
+  assert.equal(await kept(), 0);
+  assert.equal(await bridge(page, 'replayScript'), false);
+
+  assert.equal(await bridge(page, 'watchScript'), true);
+  await paint('#567');
+  const cursors = await page.evaluate(() => {
+    (globalThis as any).__replayed = (globalThis as any).__workbenchPage.replayScript();
+    return (globalThis as any).__overlayRoot.querySelectorAll('.swarm .sw-cur').length;
+  });
+  assert.equal(cursors, 1);
+  await page.keyboard.press('Shift');
+  assert.equal((await readSwarm(page)).nodes, 0);
+  assert.equal(await kept(), 0);
+  assert.equal(await page.evaluate(() => (globalThis as any).__replayed), true);
+  await swarmDone(page);
+
+  // A script that does not return must not leave the view covered.
+  assert.equal(await bridge(page, 'watchScript'), true);
+  assert.equal(await kept(), 1);
+  await page.waitForFunction(() => !document.adoptedStyleSheets.length, undefined, {
+    timeout: 5000,
+  });
+  assert.equal(await kept(), 0);
+  assert.equal(await bridge(page, 'replayScript'), false);
+});
+
 test(
   'scroll debounce flushes the old participant at a control handoff',
   { skip: !executable },
