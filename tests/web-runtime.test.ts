@@ -117,6 +117,30 @@ test(
       const task = await native.beginTask('form');
       const context = JSON.parse(task.context.match(/<web_browser_context>\n([^\n]+)/)![1]);
       assert.equal(context.currentPage.targetId, second);
+      // The task starts with an outline of the page, so a preview needs no page read first.
+      assert(tools.some((tool) => tool.name === 'workbench_browser_restyle'));
+      const outline = task.context.match(/<web_page_outline>\n([\s\S]+)\n<\/web_page_outline>/)![1];
+      assert.match(outline, /\nviewport \d+x\d+, document height \d+, scrolled to \d+\nhtml \{/);
+      assert.match(outline, /\nbody[ \[]/);
+      // Agents tend to pass the page ID of the web_* tools as tabId; it names the same page.
+      const preview = async (name: string, args: Record<string, unknown>) => {
+        const result = await native.callTool(name, args);
+        assert(!result.isError, result.text);
+        return JSON.parse(result.text);
+      };
+      const restyled = await preview('workbench_browser_restyle', {
+        tabId: String(context.currentPage.pageId),
+        css: 'body{letter-spacing:1px}',
+      });
+      assert.equal(restyled.applied, true);
+      const refused = await preview('workbench_browser_restyle', {
+        css: '.not-on-this-page{color:red}',
+      });
+      assert.equal(refused.applied, false, 'a miss is reported without blocking the task');
+      assert.equal(
+        (await preview('workbench_browser_undo', { editId: restyled.editId })).page,
+        true,
+      );
       const page = context.currentPage.pageId;
       const snapshot = await call('web_snapshot', { page, mode: 'interactive' });
       await call('web_act', {

@@ -2040,3 +2040,318 @@ test(
     assert.equal(await page.locator('#preview-shadow').count(), 0);
   },
 );
+
+interface RestyleResult {
+  applied: boolean;
+  reason?: string;
+  editId?: string;
+  element?: ElementInfo;
+  rules?: number;
+  matched?: number;
+  unmatched?: string[];
+  unchanged?: string[];
+  dropped?: string[];
+  texts?: Array<{
+    selector: string;
+    matched: number;
+    changed: number;
+    skipped?: number;
+    hint?: string;
+  }>;
+}
+const readLook = (page: Page) =>
+  page.evaluate(() => {
+    const box = document.querySelector('#box')!;
+    return {
+      body: getComputedStyle(document.body).backgroundColor,
+      box: getComputedStyle(box).backgroundColor,
+      radius: getComputedStyle(box).borderTopLeftRadius,
+      heading: document.querySelector('#heading')!.textContent,
+      label: document.querySelector('#button-label')!.textContent,
+      inline: box.getAttribute('style'),
+      styles: document.querySelectorAll('style').length,
+      sheets: document.adoptedStyleSheets.length,
+    };
+  });
+
+test(
+  'a page restyle applies one sheet and its text replacements, reports what it reached, and one undo takes all of it back',
+  { skip: !executable },
+  async (t) => {
+    const { page, events } = await fixture(t);
+    const original = await readLook(page);
+    await page.evaluate(() => {
+      (globalThis as any).headingNode = document.querySelector('#heading')!.firstChild;
+    });
+    const result = await bridge<RestyleResult>(page, 'restyle', {
+      css:
+        'body{background:rgb(0,0,0);color:rgb(245,245,247)}' +
+        '#box{background:rgb(29,29,31);border-radius:18px}' +
+        '#heading:hover{color:rgb(41,151,255)}' +
+        '.missing{color:red}' +
+        '#box{}' +
+        '#leaf{color:rgb(10,20,30)}',
+      texts: [
+        { selector: '#heading', text: '新标题' },
+        { selector: '#button-label', text: '提交' },
+        { selector: '#complex', text: '不会写入' },
+      ],
+    });
+    assert.equal(result.applied, true);
+    assert.equal(result.rules, 6);
+    assert.equal(result.matched, 4, 'body, the box, the heading behind :hover and the leaf');
+    assert.deepEqual(result.unmatched, ['.missing']);
+    assert.deepEqual(result.dropped, ['#box']);
+    assert.deepEqual(result.unchanged, ['#leaf'], 'an inline style keeps winning over the sheet');
+    assert.deepEqual(result.texts, [
+      { selector: '#heading', matched: 1, changed: 1 },
+      { selector: '#button-label', matched: 1, changed: 1 },
+      {
+        selector: '#complex',
+        matched: 1,
+        changed: 0,
+        skipped: 1,
+        hint: 'Target the element that directly holds the text',
+      },
+    ]);
+    assert.equal(result.element?.tag, 'html');
+    assert.deepEqual(await readLook(page), {
+      ...original,
+      body: 'rgb(0, 0, 0)',
+      box: 'rgb(29, 29, 31)',
+      radius: '18px',
+      heading: '新标题',
+      label: '提交',
+      sheets: 1,
+    });
+    assert.equal(
+      await page.evaluate(
+        () => document.querySelector('#heading')!.firstChild === (globalThis as any).headingNode,
+      ),
+      true,
+      'the text node of the page is written to, not replaced',
+    );
+    assert.equal((await readCover(page)).kept, 0, 'nothing is played for a manual restyle');
+    await eventually(() => events.some((event) => event.editId === result.editId));
+    const recorded = events.find((event) => event.editId === result.editId)!;
+    assert.equal(recorded.kind, 'edit');
+    assert.equal(JSON.parse(recorded.value!).texts.length, 3);
+    assert.match(JSON.parse(recorded.value!).sheet, /border-radius:18px/);
+
+    const undone = await bridge<{ editId: string; page: boolean; keptTexts?: number }>(
+      page,
+      'undo',
+      result.editId,
+    );
+    assert.equal(undone.page, true);
+    assert.equal(undone.keptTexts, undefined);
+    assert.deepEqual(await readLook(page), original);
+    await assert.rejects(bridge(page, 'undo', result.editId), /No active edit/);
+
+    // Text the page rewrote after the preview is newer than the preview and survives its undo.
+    const second = await bridge<RestyleResult>(page, 'restyle', {
+      texts: [
+        { selector: '#heading', text: '预览标题' },
+        { selector: '#button-label', text: '预览按钮' },
+      ],
+    });
+    await page.evaluate(() => {
+      document.querySelector('#heading')!.firstChild!.nodeValue = '页面自己的更新';
+    });
+    const kept = await bridge<{ keptTexts?: number }>(page, 'undo', second.editId);
+    assert.equal(kept.keptTexts, 1);
+    assert.deepEqual(await readLook(page), { ...original, heading: '页面自己的更新' });
+  },
+);
+
+test(
+  'a page restyle that could load a resource, reaches nothing or is malformed is refused whole and leaves the page alone',
+  { skip: !executable },
+  async (t) => {
+    const { page, events } = await fixture(t);
+    const original = await readLook(page);
+    const refused: Array<[Record<string, unknown>, RegExp]> = [
+      [{ css: '#box{background:url(https://example.com/a.png)}' }, /External resources/],
+      [{ css: '#box{background:u\\72l("https://example.com/a.png")}' }, /External resources/],
+      [
+        { css: '#box{background-image:image-set("https://example.com/a.png" 1x)}' },
+        /External resources/,
+      ],
+      [
+        {
+          css: '@font-face{font-family:x;src:url(https://example.com/f.woff2)}body{font-family:x}',
+        },
+        /Unsupported at-rule/,
+      ],
+      [
+        { css: ':root{--bg:u\\72l(https://example.com/a.png)}#box{background:var(--bg)}' },
+        /Custom properties/,
+      ],
+      [{ css: '.nope{color:red}' }, /Nothing on the page matches/],
+      [{ css: '@import url("https://example.com/a.css");' }, /No style rule/],
+      [{ texts: [{ selector: '#private-area', text: '公开' }] }, /Nothing on the page matches/],
+      [{ texts: [{ selector: '#heading[', text: '标题' }] }, /Invalid selector/],
+      [{ css: 'body{color:red}', script: 'alert(1)' }, /Only css and texts/],
+      [{ css: 'body{color:red}', texts: [{ selector: '#heading' }] }, /selector and a text/],
+    ];
+    for (const [request, reason] of refused) {
+      const result = await bridge<RestyleResult>(page, 'restyle', request);
+      assert.equal(result.applied, false, JSON.stringify(request));
+      assert.match(result.reason!, reason, JSON.stringify(request));
+      assert.equal(result.editId, undefined);
+    }
+    const missed = await bridge<RestyleResult>(page, 'restyle', {
+      css: '.nope{color:red}#box{}',
+      texts: [{ selector: '#password-input', text: '公开' }],
+    });
+    assert.deepEqual(missed.unmatched, ['.nope']);
+    assert.deepEqual(missed.dropped, ['#box']);
+    assert.equal(missed.texts![0].skipped, 1);
+    assert.deepEqual(await readLook(page), original);
+    assert.equal(
+      await page.locator('#private-area').inputValue(),
+      'private-textarea-content',
+      'sensitive fields are never written to',
+    );
+    assert.equal(events.filter((event) => event.kind === 'edit').length, 0);
+
+    // Inline images and the at-rules that only group style rules are fine.
+    const allowed = await bridge<RestyleResult>(page, 'restyle', {
+      css:
+        '@media (min-width:1px){#box{background-image:url("data:image/png;base64,iVBORw0KGgo=");border-radius:9px}}' +
+        '@keyframes pulse{from{opacity:.9}to{opacity:1}}',
+    });
+    assert.equal(allowed.applied, true);
+    assert.equal(allowed.matched, 1);
+    assert.equal((await readLook(page)).radius, '9px');
+    await bridge(page, 'undo', allowed.editId);
+    assert.deepEqual(await readLook(page), original);
+  },
+);
+
+test('a page restyle by the agent answers at once with the page already restyled while cursors uncover it, and so does its undo', async (t) => {
+  if (!browser) return t.skip('Browser binary unavailable');
+  const { page } = await fixture(t);
+  await captureOverlayRoot(page);
+  const original = await readLook(page);
+  await bridge(page, 'setSource', 'agent');
+  const answered = await page.evaluate(async () => {
+    const result = await (globalThis as any).__workbenchPage.restyle({
+      css:
+        'body{background:rgb(0,0,0);color:rgb(245,245,247)}' +
+        '#box{background:rgb(29,29,31);border-radius:18px;width:420px}' +
+        '#complex{background:rgb(0,113,227);border-radius:980px;color:rgb(255,255,255)}',
+      texts: [{ selector: '#heading', text: '新标题' }],
+    });
+    return {
+      applied: result.applied,
+      matched: result.matched,
+      unchanged: result.unchanged,
+      box: getComputedStyle(document.querySelector('#box')!).backgroundColor,
+      heading: document.querySelector('#heading')!.textContent,
+      cursors: (globalThis as any).__overlayRoot.querySelectorAll('.swarm .sw-cur').length,
+    };
+  });
+  assert.equal(answered.applied, true);
+  assert.equal(answered.matched, 3);
+  assert.deepEqual(answered.unchanged, []);
+  assert.equal(answered.box, 'rgb(29, 29, 31)', 'the page holds the result when the tool answers');
+  assert.equal(answered.heading, '新标题');
+  assert.ok(answered.cursors > 0, 'the cursors are still at work when the tool answers');
+  assert.equal((await readCover(page)).kept, 1, 'the old look is still held on screen');
+  await swarmDone(page);
+  await page.waitForFunction(
+    () =>
+      !document
+        .getAnimations()
+        .some(
+          (item) =>
+            (item.effect as KeyframeEffect | null)?.pseudoElement ===
+            '::view-transition-old(athena-swarm-page)',
+        ),
+  );
+  assert.deepEqual(await readCover(page), { kept: 0, sheets: 1, named: 'none' });
+
+  const undone = await page.evaluate(async () => {
+    const result = await (globalThis as any).__workbenchPage.undo();
+    return {
+      page: result.page,
+      box: getComputedStyle(document.querySelector('#box')!).backgroundColor,
+      cursors: (globalThis as any).__overlayRoot.querySelectorAll('.swarm .sw-cur').length,
+    };
+  });
+  assert.equal(undone.page, true);
+  assert.equal(undone.box, original.box);
+  assert.ok(undone.cursors > 0, 'taking the restyle back is played the same way');
+  await swarmDone(page);
+  assert.deepEqual(await readLook(page), original);
+});
+
+test(
+  'the page outline names what is on the page compactly, within its budget and without private or foreign content',
+  { skip: !executable },
+  async (t) => {
+    const { page } = await fixture(t);
+    await page.evaluate(() => {
+      const style = document.createElement('style');
+      style.textContent =
+        ':root{--brand:#123456;--gap:8px}.card{display:flex;padding:8px;border-radius:12px;background:rgb(255,255,255);box-shadow:0 1px 2px rgba(0,0,0,.2)}';
+      document.head.appendChild(style);
+      const list = document.createElement('ul');
+      list.id = 'cards';
+      for (let index = 0; index < 10; index++) {
+        const item = document.createElement('li');
+        item.className = 'card';
+        item.textContent = '卡片 ' + index;
+        list.appendChild(item);
+      }
+      document.body.appendChild(list);
+    });
+    const outline = await bridge<string>(page, 'digest');
+    const lines = outline.split('\n');
+    assert.match(lines[0], /^viewport 1200x1000, document height \d+, scrolled to 0$/);
+    assert.match(lines[1], /^html \{bg:none; color:#000000; font:16px\/400; family:/);
+    assert.equal(lines[2], ':root variables: --brand: #123456; --gap: 8px');
+    assert.match(lines[3], /^body \[\d+x\d+\] \{.*pad:20px/);
+    assert.ok(lines.includes('  h1#heading "普通标题" {font:32px/700}'), outline);
+    assert.ok(
+      lines.some((line) => /^ {2}div#box "普通容器" \{bg:#eeeeee; pad:20px\}$/.test(line)),
+      outline,
+    );
+    assert.ok(
+      lines.includes('    li.card "卡片 0" {bg:#ffffff; radius:12px; shadow; pad:8px; flex}'),
+      outline,
+    );
+    assert.ok(lines.includes('    × 9 more like li.card'), outline);
+    for (const hidden of [
+      'unusual-sensitive-value',
+      'private-textarea-content',
+      '子页面',
+      'Shadow 文本',
+      'data-workbench-overlay',
+    ])
+      assert.ok(!outline.includes(hidden), hidden);
+    assert.ok(outline.length <= 6000);
+
+    await page.evaluate(() => {
+      // Five levels of four children each, every one with its own class.
+      let level: Element[] = [document.body];
+      for (let depth = 0; depth < 5; depth++) {
+        const next: Element[] = [];
+        for (const parent of level)
+          for (let index = 0; index < 4; index++) {
+            const el = document.createElement('div');
+            el.className = 'level-' + depth + '-' + index;
+            if (depth === 4) el.textContent = '叶子 ' + index;
+            parent.appendChild(el);
+            next.push(el);
+          }
+        level = next;
+      }
+    });
+    const tight = await bridge<string>(page, 'digest', 1500);
+    assert.ok(tight.length <= 1502, String(tight.length));
+    assert.match(tight, /… \d+ children|… \+\d+ more/);
+    assert.match(tight, /^viewport 1200x1000/);
+  },
+);

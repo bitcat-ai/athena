@@ -294,6 +294,108 @@ test(
   },
 );
 test(
+  'real Chrome: a page restyle is one call, selects nothing, is recorded and comes back with one undo',
+  { skip: !binary, timeout: 40_000 },
+  async () => {
+    const storageDir = await mkdtemp(join(tmpdir(), 'workbench-restyle-test-'));
+    const server = createServer((_request, response) => {
+      response.setHeader('Content-Type', 'text/html; charset=utf-8');
+      response.end(
+        '<!doctype html><title>Restyle fixture</title><style>body{padding:60px;font:18px system-ui;background:rgb(250,250,250)}.cta{background:rgb(20,40,80);color:white;padding:14px 22px;border:0}</style><h1 id="title">Old title</h1><p class="lead">Old lead</p><button class="cta">Start</button><input type="password" value="hunter2-secret">',
+      );
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const steps: RecordedStep[] = [];
+    const selected: unknown[] = [];
+    const runtime = new BrowserRuntime({
+      storageDir,
+      binaryPath: binary,
+      onState() {},
+      onFrame() {},
+      onStep(step) {
+        steps.push(step);
+      },
+      onSelected(element) {
+        selected.push(element);
+      },
+      onHumanTakeover() {},
+    });
+    try {
+      await runtime.start(`http://127.0.0.1:${(server.address() as { port: number }).port}/`);
+      const tab = (runtime as any).tabs.get(runtime.getState().activeTabId);
+      const website = async (expression: string) =>
+        (await tab.page.call('Runtime.evaluate', { expression, returnByValue: true })).result.value;
+      const look = () =>
+        website(
+          `(()=>{const cta=document.querySelector('.cta');return {body:getComputedStyle(document.body).backgroundColor,cta:getComputedStyle(cta).backgroundColor,radius:getComputedStyle(cta).borderTopLeftRadius,title:document.querySelector('#title').textContent,inline:cta.getAttribute('style'),styles:document.querySelectorAll('style').length}})()`,
+        );
+      const original = await look();
+      let outline: string | undefined;
+      for (let i = 0; i < 100 && !outline; i++) {
+        outline = await runtime.nativeOutline(tab.info.id);
+        if (!outline) await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      assert.match(outline!, /^viewport \d+x\d+, document height \d+, scrolled to 0\n/);
+      assert.match(outline!, /h1#title "Old title"/);
+      assert.match(outline!, /button\.cta "Start" \{bg:#142850; color:#ffffff;/);
+      assert(!outline!.includes('hunter2'));
+
+      runtime.allowAgentControl();
+      const refused = await runtime.callTool('workbench_browser_restyle', {
+        css: '.cta{background:url(https://example.com/a.png)}',
+      });
+      assert(!refused.isError, 'a refusal is an answer, not a failed action');
+      assert.equal(JSON.parse(refused.text).applied, false);
+      assert.deepEqual(await look(), original);
+      assert.equal(runtime.getState().previewEdits?.length ?? 0, 0);
+
+      const applied = await runtime.callTool('workbench_browser_restyle', {
+        css: 'body{background:rgb(0,0,0)}.cta{background:rgb(0,113,227);border-radius:980px}.gone{color:red}',
+        texts: [{ selector: '#title', text: 'New title' }],
+      });
+      assert(!applied.isError, applied.text);
+      const result = JSON.parse(applied.text);
+      assert.equal(result.applied, true);
+      assert.equal(result.matched, 2);
+      assert.deepEqual(result.unmatched, ['.gone']);
+      assert.deepEqual(result.unchanged, []);
+      assert.deepEqual(result.texts, [{ selector: '#title', matched: 1, changed: 1 }]);
+      assert.equal(result.element, undefined);
+      // The sheet is adopted from the isolated world and still styles the page of the website.
+      assert.deepEqual(await look(), {
+        ...original,
+        body: 'rgb(0, 0, 0)',
+        cta: 'rgb(0, 113, 227)',
+        radius: '980px',
+        title: 'New title',
+      });
+      assert.equal(runtime.getState().selectedElement, undefined);
+      assert.deepEqual(selected, []);
+      const previews = runtime.getState().previewEdits!;
+      assert.equal(previews.length, 1);
+      assert.equal(previews[0].editId, result.editId);
+      assert.match(previews[0].changes.sheet!, /border-radius:980px/);
+      assert.deepEqual(previews[0].changes.texts, [{ selector: '#title', text: 'New title' }]);
+
+      const undone = await runtime.callTool('workbench_browser_undo', { editId: result.editId });
+      assert(!undone.isError, undone.text);
+      assert.deepEqual(JSON.parse(undone.text), {
+        editId: result.editId,
+        page: true,
+        undone: true,
+      });
+      assert.deepEqual(await look(), original);
+      assert.equal(runtime.getState().previewEdits?.length ?? 0, 0);
+      assert.deepEqual(selected, []);
+    } finally {
+      await runtime.dispose();
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      await rm(storageDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+  },
+);
+test(
   'real Chrome: gradients and owned motion are one reversible preview',
   { skip: !binary, timeout: 40_000 },
   async () => {

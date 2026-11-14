@@ -259,7 +259,8 @@ export function ElementInspector({
     if (current !== request.current) return;
     setBusy(false);
     if (result) {
-      load(result.element);
+      // A page-level preview belongs to no element; the inspector keeps what it shows.
+      if (!result.page) load(result.element);
       setStatus('已撤销页面修改');
     }
   };

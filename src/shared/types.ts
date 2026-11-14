@@ -173,6 +173,10 @@ export interface ElementEdit {
   styles?: Record<string, string>;
   animation?: ElementAnimation | null;
   insert?: ElementInsertion;
+  /** A page-level preview: a stylesheet for the whole document rather than one element. */
+  sheet?: string;
+  /** Text replacements by selector that belong to a page-level preview. */
+  texts?: Array<{ selector: string; text: string }>;
 }
 export const ELEMENT_INSERT_TAGS = [
   'div',
@@ -255,6 +259,8 @@ export interface ElementInsertion {
 export interface ElementEditResult {
   editId: string;
   element: ElementDetails;
+  /** The edit belongs to the whole page; element is the document root and is not selected. */
+  page?: boolean;
 }
 export interface ElementPreview {
   actor?: BrowserActor;

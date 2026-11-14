@@ -297,6 +297,7 @@ export function redactBrowserText(value: unknown, limit = 2000): string {
     .slice(0, limit);
 }
 
+const PAGE_SHEET_LIMIT = 60_000;
 function recordedEditValue(value: string): string {
   try {
     const input = JSON.parse(value);
@@ -320,6 +321,15 @@ function recordedEditValue(value: string): string {
       truncated ||= entries.length > 30;
     }
     if (typeof input.editId === 'string') output.editId = redactBrowserText(input.editId, 1500);
+    if (typeof input.sheet === 'string') {
+      output.sheet = redactBrowserText(input.sheet, PAGE_SHEET_LIMIT);
+      truncated ||= input.sheet.length > PAGE_SHEET_LIMIT;
+    }
+    if (Array.isArray(input.texts))
+      output.texts = input.texts.slice(0, 60).map((item: any) => ({
+        selector: redactBrowserText(item?.selector, 1000),
+        text: redactBrowserText(item?.text, 20_000),
+      }));
     if (input.insert !== undefined) {
       validateInsertion(input.insert);
       output.insert = JSON.parse(
@@ -1919,6 +1929,26 @@ export class BrowserRuntime {
     // A renderer blocked by a dialog never answers.
     await Promise.race([call, wait(phase === 'replay' && show ? 16000 : 500)]);
   }
+  /**
+   * A compact outline of what the page shows, for the agent's context at the start of a turn.
+   * Undefined when the page does not answer in time; the turn then starts without it.
+   */
+  async nativeOutline(targetId: string, limit = 6000): Promise<string | undefined> {
+    const tab = this.tabs.get(targetId);
+    if (!tab || this.pendingDialogs.has(targetId)) return undefined;
+    const call = (async () => {
+      const frame = (await this.collectFrames(tab)).find((item) => item.id === tab.mainFrameId);
+      if (!frame || !/^https?:/.test(frame.url || tab.info.url)) return undefined;
+      const text = await this.bridge<string>(
+        tab,
+        frame,
+        `globalThis.__workbenchPage.digest(${limit})`,
+      );
+      return typeof text === 'string' && text ? redactBrowserText(text, limit + 200) : undefined;
+    })().catch(() => undefined);
+    // A renderer blocked by a dialog never answers.
+    return Promise.race([call, wait(800).then(() => undefined)]);
+  }
   /** Waits until loading, fresh requests and DOM changes stop. Resolves false when the page stays busy. */
   async nativeSettle(targetId: string, timeout = 3000): Promise<boolean> {
     const deadline = Date.now() + timeout;
@@ -3494,6 +3524,38 @@ export class BrowserRuntime {
     this.options.onSelected(element, 'edit');
     return { editId, element };
   }
+  /**
+   * Restyles the whole page in one step: a stylesheet and text replacements by selector, kept as
+   * one preview edit. A request the page refuses changes nothing and is answered, not thrown.
+   */
+  private async restyleInternal(
+    tab: TabSession,
+    changes: { css?: string; texts?: Array<{ selector: string; text: string }> },
+    source: 'human' | 'agent',
+    guard?: () => void,
+  ): Promise<Record<string, unknown>> {
+    const frame = (await this.collectFrames(tab)).find((item) => item.id === tab.mainFrameId);
+    if (!frame) throw new Error('页面框架尚未就绪');
+    await this.setSource(tab, source, frame);
+    const result = await this.bridge(
+      tab,
+      frame,
+      `globalThis.__workbenchPage.restyle(${JSON.stringify(changes)})`,
+      guard,
+    );
+    if (!result.applied) return result;
+    const { element, ...evidence } = result;
+    const editId = this.registerEdit(tab, frame, result.editId);
+    const metadata = tab.edits.find((edit) => edit.id === editId)!;
+    metadata.localRef = element.ref;
+    metadata.changes = {
+      sheet: changes.css ?? '',
+      ...(changes.texts?.length ? { texts: structuredClone(changes.texts) } : {}),
+    };
+    // The page as a whole changed: nothing is selected or outlined for it.
+    this.update();
+    return { ...evidence, editId };
+  }
   undoEdit(editId?: string): Promise<ElementEditResult> {
     const tab = this.activeTab();
     if (editId !== undefined && typeof editId !== 'string')
@@ -3538,6 +3600,14 @@ export class BrowserRuntime {
       guard,
     );
     tab.edits = tab.edits.filter((item) => item.id !== edit.id);
+    if (result.page) {
+      this.update();
+      return {
+        editId: edit.id,
+        element: await this.exposeDetails(tab, frame, result.element),
+        page: true,
+      };
+    }
     await this.bridge(
       tab,
       frame,
@@ -3898,6 +3968,32 @@ export class BrowserRuntime {
         },
         ['ref'],
       ),
+      tool(
+        'restyle',
+        '一次调用完成页面级外观与文案预览：css 是作用于整个页面的样式表（可写任意选择器、@media、@keyframes，覆盖站点原有样式或行内样式时加 !important），texts 按选择器替换文字。立即生效、无需用户确认，返回 editId，可用 workbench_browser_undo 撤销；多次调用会叠加。返回值就是证据：rules 规则数、matched 命中的元素数、unmatched 未命中的选择器、unchanged 命中但取样元素的计算样式没有变化的选择器（被更高优先级覆盖、媒体条件未满足或原本如此）、dropped 没有任何有效声明的规则、texts 每项的命中与实际替换数量；applied 为 false 时页面未被改动，按 reason 修正后重试即可。不能引用外部资源（url() 仅限 data:image），不能新增元素（新增用 workbench_browser_edit 的 insert），不作用于 iframe 与 shadow DOM 内部。',
+        {
+          css: {
+            type: 'string',
+            maxLength: PAGE_SHEET_LIMIT,
+            description: '完整的 CSS 样式表文本。',
+          },
+          texts: {
+            type: 'array',
+            maxItems: 60,
+            description:
+              '文字替换：selector 指向直接包含该文字的元素，命中的每个元素都会被替换；子元素（如图标）保持不变。',
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['selector', 'text'],
+              properties: {
+                selector: { type: 'string', minLength: 1, maxLength: 1000 },
+                text: { type: 'string', maxLength: 20000 },
+              },
+            },
+          },
+        },
+      ),
       tool('undo', '撤销当前标签页的预览修改。', { editId: { type: 'string' } }),
       tool('navigate', '在当前标签页打开HTTP(S)地址。', { url: { type: 'string' } }, ['url']),
       tool('click', '点击当前snapshot/query中的精确元素。', { ref }, ['ref']),
@@ -4053,12 +4149,35 @@ export class BrowserRuntime {
             ),
           );
         }
+        if (name === 'workbench_browser_restyle') {
+          if (input.css !== undefined && typeof input.css !== 'string')
+            throw new Error('css is invalid');
+          if (input.texts !== undefined && !Array.isArray(input.texts))
+            throw new Error('texts is invalid');
+          return json(
+            await this.restyleInternal(
+              tab,
+              {
+                ...(input.css !== undefined ? { css: input.css as string } : {}),
+                ...(input.texts !== undefined
+                  ? { texts: input.texts as Array<{ selector: string; text: string }> }
+                  : {}),
+              },
+              'agent',
+              assertLease,
+            ),
+          );
+        }
         if (name === 'workbench_browser_undo') {
           if (input.editId !== undefined && typeof input.editId !== 'string')
             throw new Error('editId is invalid');
-          return json(
-            await this.undoInternal(tab, input.editId as string | undefined, 'agent', assertLease),
+          const undone = await this.undoInternal(
+            tab,
+            input.editId as string | undefined,
+            'agent',
+            assertLease,
           );
+          return json(undone.page ? { editId: undone.editId, page: true, undone: true } : undone);
         }
         if (
           [

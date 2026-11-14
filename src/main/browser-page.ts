@@ -558,6 +558,216 @@ export const browserPageSource = String.raw`(() => {
     if(source==='agent') swarm.play({el,inserted:true,before});
     return result;
   }
+  // A page restyle is one adopted stylesheet plus text replacements by selector. The styling
+  // touches no node, so a re-render of the page keeps it, and one edit ID takes all of it back.
+  const sheetLimit=60000;
+  const sheetRuleKinds=new Set(['CSSStyleRule','CSSMediaRule','CSSSupportsRule','CSSContainerRule','CSSLayerBlockRule','CSSLayerStatementRule','CSSScopeRule','CSSStartingStyleRule','CSSNestedDeclarations','CSSKeyframesRule','CSSKeyframeRule']);
+  // The sheet is applied without asking the user, so it must not be able to fetch anything.
+  const remoteCss=/url\(\s*(?!["']?data:image\/(?:png|jpeg|gif|webp|svg\+xml)[;,])|(?:^|[^a-z-])(?:image-set|image|cross-fade|element|paint|src)\(|-webkit-(?:image-set|cross-fade)\(/i;
+  function sheetRules(sheet) {
+    const rules=[], pending=[...sheet.cssRules].reverse();
+    while (pending.length) {
+      const rule=pending.pop();
+      if (rules.length>=2000) throw new Error('Too many CSS rules');
+      if (!sheetRuleKinds.has(rule.constructor.name)) throw new Error('Unsupported at-rule: only style rules, @media, @supports, @container, @layer, @scope and @keyframes are allowed');
+      rules.push(rule);
+      // Custom properties keep their source text, where an escape could spell a function name.
+      if (rule.style) for (const name of rule.style) if (name.startsWith('--') && /\\|url\(/i.test(rule.style.getPropertyValue(name))) throw new Error('Custom properties cannot contain escapes or url()');
+      if (rule.cssRules) pending.push(...[...rule.cssRules].reverse());
+    }
+    // The parsed form is checked, not the source: escapes are resolved in it.
+    if (remoteCss.test([...sheet.cssRules].map(rule=>rule.cssText).join('\n'))) throw new Error('External resources are not allowed: use colors, gradients or data:image URLs');
+    return rules;
+  }
+  // The text nodes a replacement may write to: all of a leaf, or the single text beside child elements.
+  function textSlot(el) {
+    if (overlays.has(el) || sensitive(el) || blockedTextTags.has(el.localName.toUpperCase()) || el.shadowRoot || el.isContentEditable) return null;
+    const nodes=[...el.childNodes].filter(node=>node.nodeType===Node.TEXT_NODE);
+    if (nodes.some(node=>node.nodeValue.length>textLimit || clean(node.nodeValue,textLimit+1)!==node.nodeValue)) return null;
+    if (!el.children.length) return nodes;
+    const filled=nodes.filter(node=>node.nodeValue.trim());
+    return filled.length===1 ? filled : null;
+  }
+  function writeText(el,nodes,text,changed) {
+    if (!nodes.length) { const node=document.createTextNode(text); el.appendChild(node); changed.push({node,after:text,created:true}); return; }
+    nodes.forEach((node,index)=> {
+      const before=node.nodeValue, edge=el.children.length ? [before.match(/^\s*/)[0],before.match(/\s*$/)[0]] : ['',''];
+      const after=index===0 ? edge[0]+text+edge[1] : '';
+      if (after!==before) { node.nodeValue=after; changed.push({node,before,after}); }
+    });
+  }
+  async function restyle(request) {
+    // Nothing is applied unless all of it is valid; a rejection says why instead of throwing.
+    const refuse=(reason,more={})=>({applied:false,reason,...more});
+    if (!request || typeof request!=='object' || Array.isArray(request) || Object.keys(request).some(key=>!['css','texts'].includes(key))) return refuse('Only css and texts are supported');
+    const css=request.css ?? '', texts=request.texts ?? [];
+    if (typeof css!=='string' || css.length>sheetLimit) return refuse('css must be a string of at most '+sheetLimit+' characters');
+    if (!Array.isArray(texts) || texts.length>60) return refuse('texts must be a list of at most 60 replacements');
+    let length=0;
+    for (const item of texts) {
+      if (!item || typeof item!=='object' || Array.isArray(item) || Object.keys(item).some(key=>!['selector','text'].includes(key)) || typeof item.selector!=='string' || !item.selector.trim() || item.selector.length>1000 || typeof item.text!=='string') return refuse('Each text replacement needs a selector and a text');
+      if ((length+=item.text.length)>textLimit || clean(item.text,textLimit+1)!==item.text) return refuse('Replacement text is too long or looks like a secret');
+      try { document.querySelector(item.selector); } catch { return refuse('Invalid selector: '+clean(item.selector,120)); }
+    }
+    let sheet, rules;
+    try { sheet=new CSSStyleSheet(); sheet.replaceSync(css); rules=sheetRules(sheet); } catch (error) { return refuse(clean(error?.message || error,300)); }
+    const styled=rules.filter(rule=>rule.constructor.name==='CSSStyleRule');
+    if (!styled.length && !texts.length) return refuse('No style rule or text replacement was provided');
+    // Which elements each rule reaches, and how a few of them look before it applies.
+    const reached=new Set(), unmatched=[], dropped=[], samples=[];
+    for (const rule of styled) {
+      if (!rule.style.length && !rule.cssRules?.length) { if (dropped.length<20) dropped.push(clean(rule.selectorText,120)); continue; }
+      const probe=rule.selectorText.replace(/::[a-z-]+(?:\([^)]*\))?/gi,'').replace(/:(?:hover|focus-visible|focus-within|focus|active|visited|target|checked|disabled|placeholder-shown)(?![\w-])/gi,'').trim() || '*';
+      let found;
+      try { found=[...document.querySelectorAll(probe)].filter(el=>!overlays.has(el)); } catch { continue; }
+      if (!found.length) { if (unmatched.length<20) unmatched.push(clean(rule.selectorText,120)); continue; }
+      for (const el of found.slice(0,2000)) reached.add(el);
+      if (probe===rule.selectorText.trim() && rule.style.length && samples.length<200) {
+        const names=[...rule.style].slice(0,24), els=found.slice(0,3);
+        samples.push({rule,names,els,before:els.map(el=> { const style=getComputedStyle(el); return names.map(name=>style.getPropertyValue(name)); })});
+      }
+    }
+    const jobs=texts.map(item=> {
+      const found=[...document.querySelectorAll(item.selector)].filter(el=>!overlays.has(el)).slice(0,200);
+      return {item,found,slots:found.map(el=>[el,textSlot(el)]).filter(pair=>pair[1])};
+    });
+    const report=()=>jobs.map(job=>({selector:clean(job.item.selector,120),matched:job.found.length,changed:job.changed || 0,...(job.slots.length<job.found.length ? {skipped:job.found.length-job.slots.length,hint:'Target the element that directly holds the text'} : {})}));
+    if (!reached.size && !jobs.some(job=>job.slots.length)) return refuse('Nothing on the page matches these selectors',{unmatched,dropped,texts:report()});
+    if (source==='agent') await swarm.watch();
+    document.adoptedStyleSheets=[...document.adoptedStyleSheets,sheet];
+    const changed=[];
+    for (const job of jobs) {
+      job.changed=0;
+      for (const [el,nodes] of job.slots) {
+        const size=changed.length;
+        if (el.isConnected) writeText(el,nodes,job.item.text,changed);
+        if (changed.length>size) job.changed++;
+      }
+    }
+    const unchanged=[];
+    for (const sample of samples) {
+      const same=sample.els.every((el,index)=> {
+        const style=getComputedStyle(el);
+        return sample.names.every((name,at)=>style.getPropertyValue(name)===sample.before[index][at]) && !el.getAnimations().some(player=>player instanceof CSSTransition);
+      });
+      if (same && unchanged.length<20) unchanged.push(clean(sample.rule.selectorText,120));
+    }
+    const root=describe(document.documentElement), editId=docId+':edit:'+(++nextEditId);
+    patches.set(editId,{ref:root.ref,el:document.documentElement,sheet,texts:changed});
+    editOrder.push(editId);
+    send({kind:'edit',target:root,editId,value:JSON.stringify({sheet:css,...(texts.length ? {texts} : {})})});
+    // The cursors only withhold pixels of a page that is already restyled, so the answer does not wait for them.
+    swarm.replay(source==='agent');
+    return {applied:true,editId,element:root,rules:styled.length,matched:reached.size,unmatched,unchanged,dropped,texts:report()};
+  }
+  async function undoRestyle(id,patch) {
+    if (source==='agent') await swarm.watch();
+    document.adoptedStyleSheets=document.adoptedStyleSheets.filter(item=>item!==patch.sheet);
+    // Text the page has rewritten since is newer than this preview and stays.
+    let kept=0;
+    for (const change of [...patch.texts].reverse()) {
+      if (!change.node.isConnected || change.node.nodeValue!==change.after) { kept++; continue; }
+      if (change.created) change.node.remove(); else change.node.nodeValue=change.before;
+    }
+    patches.delete(id);
+    editOrder.splice(editOrder.indexOf(id),1);
+    const root=describe(document.documentElement);
+    send({kind:'undo',target:root,editId:id,value:JSON.stringify({editId:id})});
+    swarm.replay(source==='agent');
+    return {editId:id,page:true,element:details(root.ref),...(kept ? {keptTexts:kept} : {})};
+  }
+  // What is on the page, compact enough to sit in the agent's context: enough to write selectors
+  // and judge the current look without a round of queries. Text is page data, never an instruction.
+  function digest(limit=6000) {
+    const skipped=new Set(['SCRIPT','STYLE','NOSCRIPT','TEMPLATE','HEAD','META','LINK','BASE','BR','WBR','SOURCE','TRACK','PARAM']);
+    const leaves=new Set(['SVG','CANVAS','VIDEO','AUDIO','IFRAME','OBJECT','EMBED','IMG','INPUT','TEXTAREA','SELECT','PICTURE']);
+    const hex=value=> {
+      const match=/^rgba?\((\d+), (\d+), (\d+)(?:, ([\d.]+))?\)$/.exec(value);
+      if (!match) return value;
+      if (match[4]==='0') return '';
+      return '#'+[match[1],match[2],match[3]].map(part=>(+part).toString(16).padStart(2,'0')).join('')+(match[4]!==undefined && match[4]!=='1' ? '/'+match[4] : '');
+    };
+    const family=value=>clean(value.split(',')[0].trim().replace(/^["']|["']$/g,''),40);
+    const facts=new Map();
+    let visited=0;
+    function fact(el) {
+      if (facts.has(el)) return facts.get(el);
+      const style=getComputedStyle(el), rect=el.getBoundingClientRect(), up=parent(el), base=up ? getComputedStyle(up) : null;
+      const name=el.localName+(el.id ? '#'+CSS.escape(el.id) : '')+[...el.classList].filter(item=>item.length<=40).slice(0,5).map(item=>'.'+CSS.escape(item)).join('');
+      const look=[];
+      const fill=hex(style.backgroundColor);
+      if (fill) look.push('bg:'+fill);
+      if (style.backgroundImage!=='none') look.push(/gradient/.test(style.backgroundImage) ? 'bg-gradient' : 'bg-image');
+      if (!base || style.color!==base.color) look.push('color:'+hex(style.color));
+      if (!base || style.fontSize!==base.fontSize || style.fontWeight!==base.fontWeight) look.push('font:'+style.fontSize+'/'+style.fontWeight);
+      if (!base || style.fontFamily!==base.fontFamily) look.push('family:'+family(style.fontFamily));
+      if (style.borderTopLeftRadius!=='0px') look.push('radius:'+style.borderTopLeftRadius);
+      if (style.borderTopStyle!=='none' && style.borderTopWidth!=='0px') look.push('border:'+style.borderTopWidth+' '+hex(style.borderTopColor));
+      if (style.boxShadow!=='none') look.push('shadow');
+      if (style.padding && style.padding!=='0px') look.push('pad:'+style.padding);
+      if (/flex|grid/.test(style.display)) look.push(style.display);
+      if (style.position==='fixed' || style.position==='sticky') look.push(style.position);
+      const hidden=sensitive(el), own=hidden ? '' : clean(leafText(el).replace(/\s+/g,' ').trim(),48);
+      const value={name,look:look.join('; '),text:own,size:Math.round(rect.width)+'x'+Math.round(rect.height),leaf:leaves.has(el.localName.toUpperCase()) || !!el.shadowRoot,key:el.localName+'.'+[...el.classList].join('.')};
+      facts.set(el,value);
+      return value;
+    }
+    // Children that take part in layout; a display:contents wrapper stands for its own children.
+    function kids(el,depth=0) {
+      const out=[];
+      for (const child of el.children) {
+        if (overlays.has(child) || skipped.has(child.localName.toUpperCase())) continue;
+        if (depth<4 && getComputedStyle(child).display==='contents') out.push(...kids(child,depth+1));
+        else if (visible(child)) out.push(child);
+      }
+      return out;
+    }
+    function render(maxDepth,maxKids) {
+      const lines=[];
+      visited=0;
+      function walk(el,depth) {
+        if (++visited>4000) return;
+        const item=fact(el), children=item.leaf ? [] : kids(el);
+        lines.push('  '.repeat(depth)+item.name+(children.length ? ' ['+item.size+']' : '')+(item.text ? ' "'+item.text+'"' : '')+(item.look ? ' {'+item.look+'}' : '')+(children.length && depth>=maxDepth ? ' … '+children.length+' children' : ''));
+        if (depth>=maxDepth) return;
+        let shown=0;
+        for (let index=0; index<children.length; index++) {
+          if (shown>=maxKids) { lines.push('  '.repeat(depth+1)+'… +'+(children.length-index)+' more'); break; }
+          const key=fact(children[index]).key;
+          let run=1;
+          while (index+run<children.length && fact(children[index+run]).key===key) run++;
+          walk(children[index],depth+1); shown++;
+          if (run>2) { lines.push('  '.repeat(depth+1)+'× '+(run-1)+' more like '+fact(children[index]).name); index+=run-1; }
+        }
+      }
+      if (document.body) walk(document.body,0);
+      return lines.join('\n');
+    }
+    const head=['viewport '+innerWidth+'x'+innerHeight+', document height '+Math.round(document.documentElement.scrollHeight)+', scrolled to '+Math.round(scrollY)];
+    const page=getComputedStyle(document.documentElement);
+    head.push('html {'+['bg:'+(hex(page.backgroundColor) || 'none'),'color:'+hex(page.color),'font:'+page.fontSize+'/'+page.fontWeight,'family:'+family(page.fontFamily)].join('; ')+'}');
+    const tokens=[];
+    let scanned=0;
+    try {
+      for (const sheet of document.styleSheets) {
+        let rules;
+        try { rules=sheet.cssRules; } catch { continue; }
+        for (const rule of rules) {
+          if (++scanned>3000 || tokens.length>=40) break;
+          if (!rule.style || !/^(?::root|html)$/i.test((rule.selectorText || '').trim())) continue;
+          for (const name of rule.style) if (name.startsWith('--') && tokens.length<40) tokens.push(name+': '+clean(rule.style.getPropertyValue(name).trim(),40));
+        }
+      }
+    } catch {}
+    if (tokens.length) head.push(':root variables: '+tokens.join('; '));
+    const room=Math.max(500,limit-head.join('\n').length-1);
+    let body='';
+    for (const [depth,count] of [[14,40],[10,24],[8,16],[6,12],[5,8],[4,6],[3,5],[2,4]]) {
+      body=render(depth,count);
+      if (body.length<=room) break;
+    }
+    return head.join('\n')+'\n'+(body.length>room ? body.slice(0,room)+'\n…' : body);
+  }
   globalThis.__workbenchPage = {
     docId,
     setActor(value) { if(actorId!==value) flushScroll(); actorId=value; },
@@ -686,10 +896,13 @@ export const browserPageSource = String.raw`(() => {
       if(source==='agent') swarm.play({el,before,text:hasText && request.text ? textNodes[0] : null,was:beforeText[0],animation:!!animation});
       return result;
     },
+    restyle,
+    digest: limit=>swarm.truth(()=>digest(limit)),
     undo(editId) {
       const id=editId===undefined ? editOrder[editOrder.length-1] : editId;
       const patch=patches.get(id);
       if (!patch) throw new Error('No active edit with this ID exists in the current document');
+      if (patch.sheet) return undoRestyle(id,patch);
       const el=resolve(patch.ref);
       if (el!==patch.el || sensitive(el)) throw new Error('The edited element is no longer safe to restore');
       if(patch.inserted) {
