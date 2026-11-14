@@ -40,6 +40,13 @@ import {
 } from '../shared/types';
 import { CdpConnection } from './browser-cdp';
 import { browserPageSource } from './browser-page';
+import {
+  Guide,
+  parseGuide,
+  type GuideHost,
+  type GuideOptions,
+  type GuideResult,
+} from './browser-guide';
 import { BrowserFrameSession, type BrowserChannel } from './browser-frame-session';
 
 const execFileAsync = promisify(execFile);
@@ -621,6 +628,7 @@ export class BrowserRuntime {
   private refreshingFrame = false;
   private resizingViewport = false;
   private sharedTab?: string;
+  private guideRun?: Guide;
   private sharedOrigin?: string;
   private sharedFrameOrigins = new Set<string>();
   private heldKeys = new Map<string, Extract<BrowserInput, { type: 'key' }>>();
@@ -1373,6 +1381,25 @@ export class BrowserRuntime {
           }
           return;
         }
+        if (payload.kind === 'guide') {
+          // Only the document the user is looking at speaks for the guide shown on it.
+          if (
+            this.activeTabId === tab.info.id &&
+            frame.id === tab.mainFrameId &&
+            frame.documentId === payload.docId &&
+            ['advance', 'back', 'end', 'handover'].includes(payload.event)
+          )
+            this.guideRun?.push({
+              kind: 'page',
+              token: String(payload.token),
+              index: Number(payload.index),
+              event: payload.event,
+              by: typeof payload.by === 'string' ? payload.by : undefined,
+              located: typeof payload.located === 'boolean' ? payload.located : undefined,
+              filled: typeof payload.filled === 'boolean' ? payload.filled : undefined,
+            });
+          return;
+        }
         this.recordEvent(tab, frame, payload);
       } catch {}
     });
@@ -1385,8 +1412,10 @@ export class BrowserRuntime {
         tab.chooser = undefined;
         tab.edits = [];
         this.clearTabRefs(tab);
-        if (this.activeTabId === tab.info.id)
+        if (this.activeTabId === tab.info.id) {
           this.update({ selectedElement: undefined, inspecting: false });
+          this.guideRun?.push({ kind: 'navigated' });
+        }
         this.updateTab(tab, { url: frame.url });
       }
       this.appendStep({
@@ -4044,6 +4073,54 @@ export class BrowserRuntime {
           },
         },
       ),
+      tool(
+        'guide',
+        '带用户亲手完成页面上的操作：按 steps 的顺序在当前页面逐步高亮目标并在旁边显示说明，由用户自己点击或填写，你不操作页面。适合用户想学会或想自己完成的流程，以及登录、确认付款、填写个人信息这类只应由用户亲手完成的步骤。note 是给用户看的一句话；用 selector（依据 web_page_outline 或 workbench_browser_query 的结果）或 text（按钮、链接、输入框标签上的可见文字）指明位置，两者可同时给出。click 步骤在用户点击高亮处后自动进入下一步，input 步骤在用户填写后进入下一步，look 步骤只是讲解。跨页面的流程可以一次写完，说明会跟着用户进入下一个页面。调用会一直等到用户走完、结束或点“交给 Athena”才返回，返回每一步的结果和当前页面；之后先重新读取页面再继续。started 为 false 表示第一步的位置没找到、页面上没有显示任何内容，按 reason 修正后重试。不会读取或返回用户填写的内容。',
+        {
+          title: {
+            type: 'string',
+            maxLength: 80,
+            description: '这段带做的名称，如“开通企业邮箱”。',
+          },
+          steps: {
+            type: 'array',
+            minItems: 1,
+            maxItems: 12,
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['note'],
+              properties: {
+                note: {
+                  type: 'string',
+                  minLength: 1,
+                  maxLength: 280,
+                  description: '给用户看的一句话：这一步做什么、为什么。',
+                },
+                selector: { type: 'string', minLength: 1, maxLength: 1000 },
+                text: {
+                  type: 'string',
+                  minLength: 1,
+                  maxLength: 200,
+                  description: '目标上的可见文字或输入框的标签。',
+                },
+                ref: {
+                  type: 'string',
+                  maxLength: 200,
+                  description: '当前页面的元素引用，换页后失效。',
+                },
+                action: {
+                  type: 'string',
+                  enum: ['look', 'click', 'input'],
+                  description: '用户在这一步要做的事，默认 look。',
+                },
+              },
+            },
+          },
+        },
+        ['steps'],
+        false,
+      ),
       tool('undo', '撤销当前标签页的预览修改。', { editId: { type: 'string' } }),
       tool('navigate', '在当前标签页打开HTTP(S)地址。', { url: { type: 'string' } }, ['url']),
       tool('click', '点击当前snapshot/query中的精确元素。', { ref }, ['ref']),
@@ -4084,7 +4161,77 @@ export class BrowserRuntime {
       tool('diagnostics', '读取当前标签页console和网络摘要，不包含请求正文。'),
     ];
   }
+  /**
+   * Shows the user how to do something on the visible page, one step at a time, and resolves when
+   * they are through. It runs beside the action queue: the guide waits for the user's own clicks
+   * and keystrokes, which must not wait behind it.
+   */
+  async guide(args: unknown, options: GuideOptions = {}): Promise<GuideResult> {
+    const plan = parseGuide(args);
+    this.activeTab();
+    if (this.sharedTab) throw new Error('共享期间由参与者操作页面，请先停止共享再带做');
+    if (this.guideRun) throw new Error('页面上已有一段带做正在进行');
+    const run = new Guide(this.guideHost(), plan, options);
+    this.guideRun = run;
+    try {
+      return await run.run();
+    } finally {
+      if (this.guideRun === run) this.guideRun = undefined;
+    }
+  }
+  private guideHost(): GuideHost {
+    // A page that is loading or held by a dialog does not answer; the guide asks again.
+    const ask = <T>(tabId: string | undefined, expression: string): Promise<T | undefined> => {
+      const tab = this.tabs.get(tabId ?? this.activeTabId);
+      if (this.disposed || !tab || this.pendingDialogs.has(tab.info.id))
+        return Promise.resolve(undefined);
+      const call = (async () => {
+        const frame = (await this.collectFrames(tab)).find((item) => item.id === tab.mainFrameId);
+        return frame ? await this.bridge<T>(tab, frame, expression) : undefined;
+      })().catch(() => undefined);
+      return Promise.race([call, wait(3000).then(() => undefined)]);
+    };
+    return {
+      alive: () =>
+        !this.disposed && this.state.status === 'ready' && this.tabs.has(this.activeTabId),
+      where: () => this.activeTabId || undefined,
+      show: (step) =>
+        ask(undefined, `globalThis.__workbenchPage.guideShow(${JSON.stringify(step)})`),
+      shown: async () => {
+        const state = await ask<{ token: string } | null>(
+          undefined,
+          'globalThis.__workbenchPage.guideState()',
+        );
+        return state === undefined ? undefined : { token: state?.token };
+      },
+      clear: async (tabId, farewell) => {
+        await ask(
+          tabId,
+          `globalThis.__workbenchPage?.guideClear(${JSON.stringify(farewell ?? '')})`,
+        );
+      },
+      settle: async (timeout) => {
+        await this.nativeSettle(this.activeTabId, timeout);
+      },
+      page: async () => {
+        const tab = this.tabs.get(this.activeTabId);
+        return {
+          url: tab ? evidenceUrl(tab.info.url) : '',
+          title: tab ? redactBrowserText(tab.info.title, 200) : '',
+          outline: tab ? await this.nativeOutline(tab.info.id, 3000) : undefined,
+        };
+      },
+    };
+  }
   callTool(name: string, args: unknown): Promise<ToolResult> {
+    if (name === 'workbench_browser_guide')
+      return this.guide(args).then(
+        (result) => ({ text: JSON.stringify(result, null, 2), isError: !result.started }),
+        (error) => ({
+          text: redactBrowserText(error instanceof Error ? error.message : error),
+          isError: true,
+        }),
+      );
     const generation = this.leaseGeneration,
       capturedTab = this.activeTabId;
     return this.serialize(async () => {

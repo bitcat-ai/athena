@@ -1,0 +1,58 @@
+/* The steps of a guide inside a request card: what is done, where the user is, what follows. */
+.guide-steps {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.guide-steps li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+  color: var(--muted);
+}
+.guide-mark {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+  border-radius: 50%;
+  background: var(--surface-secondary);
+  color: var(--secondary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.guide-note {
+  flex: 1 1 0;
+  min-width: 0;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow-wrap: anywhere;
+}
+.guide-tag {
+  flex: none;
+  color: var(--faint);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.guide-steps li[data-status='current'] {
+  color: var(--ink);
+  font-weight: 600;
+}
+.guide-steps li[data-status='current'] .guide-mark {
+  background: var(--ink);
+  color: var(--background);
+}
+.guide-steps li[data-status='done'] .guide-mark {
+  background: none;
+}
+.guide-steps li[data-status='skipped'] .guide-note {
+  color: var(--faint);
+}

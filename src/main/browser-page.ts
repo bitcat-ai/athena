@@ -7,6 +7,7 @@ import {
   ELEMENT_INSERT_TAGS,
   ELEMENT_INSERT_ATTRIBUTES,
 } from '../shared/types';
+import { browserGuideCss, browserGuideSource } from './browser-page-guide';
 import { browserSwarmCss, browserSwarmSource } from './browser-page-swarm';
 
 // Keep this as plain JavaScript: the isolated world must not depend on bundler helpers.
@@ -227,6 +228,7 @@ export const browserPageSource = String.raw`(() => {
         '.feedback.applied,.agent-cursor.applied{animation:finish 900ms linear both}@keyframes sweep{to{transform:translateX(100%)}}@keyframes finish{0%,75%{opacity:1}100%{opacity:0}}',
         '@media(prefers-reduced-motion:reduce){.feedback,.agent-cursor,.scan::after{animation:none!important}.scan{display:none}}',
         ${JSON.stringify(browserSwarmCss)},
+        ${JSON.stringify(browserGuideCss)},
       ].join('\n');
       overlayRoot.appendChild(css); document.documentElement.appendChild(overlayHost);
       cursorMotion?.cancel();agentCursor=null;cursorTarget=null;
@@ -341,7 +343,9 @@ export const browserPageSource = String.raw`(() => {
   document.addEventListener('mouseout',event=>{
     if(!event.relatedTarget || event.relatedTarget?.localName==='iframe') {hoverPoint=null;hoverElement=null;refreshOverlays();}
   },true);
-  window.addEventListener('pagehide',()=>globalThis.__workbenchPage?.clearOverlays());
+  ${browserGuideSource}
+  const guide=createGuide({root:overlaySurface,host:()=>overlayHost,visible,sensitive,safeText,resolve,scan,describe,send,reduced:reducedMotion,ours:node=>overlays.has(node)});
+  window.addEventListener('pagehide',()=>{guide.clear();globalThis.__workbenchPage?.clearOverlays();});
   function send(payload) {
     try { globalThis.__workbenchEvent(JSON.stringify({docId,source,actorId,...payload})); } catch {}
   }
@@ -779,6 +783,10 @@ export const browserPageSource = String.raw`(() => {
     // A page script of the agent edits outside this bridge: the view is kept as it looks before
     // the script runs, and what changed is uncovered by cursors once it has returned. The answer
     // waits for the show to end; without a show the page is only uncovered.
+    // A guide outlives clearOverlays: it ends when the host says so or the document goes away.
+    guideShow(step) { return guide.show(step); },
+    guideState() { return guide.state(); },
+    guideClear(farewell) { guide.clear(farewell); return true; },
     watchScript() { return source==='agent' && swarm.watch(); },
     replayScript(show=true) {
       const played=swarm.replay(source==='agent' && show)>0;

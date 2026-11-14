@@ -813,6 +813,13 @@ export default function App() {
           setBrowserVisible(true);
           revealBrowserOnTool.current = false;
         }
+        // A guide happens on the page: it is brought into view even late in a turn.
+        if (
+          agentEvent.type === 'tool' &&
+          agentEvent.call.name === 'workbench_browser_guide' &&
+          agentEvent.call.status === 'running'
+        )
+          setBrowserVisible(true);
         if (agentEvent.type === 'approval' || agentEvent.type === 'user-input') {
           const pending: PendingAgentRequest =
             agentEvent.type === 'approval'

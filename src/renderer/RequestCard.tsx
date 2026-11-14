@@ -6,6 +6,7 @@ import { requestKey, requestKind } from '../shared/phase';
 import type { PendingAgentRequest } from '../shared/types';
 import { PhaseGlyph } from './PhaseGlyph';
 import { Icon } from './ui';
+import './guide-card.css';
 
 type Question = Extract<PendingAgentRequest, { kind: 'input' }>['request']['questions'][number];
 const marks = { approval: 'shield', input: 'bubble', handoff: 'cursor' } as const;
@@ -31,6 +32,10 @@ export function RequestCard({
   const [sending, setSending] = useState(false);
   const card = useRef<HTMLDivElement>(null);
   const type = requestKind(pending);
+  const guide =
+    pending.kind === 'approval' && pending.request.action === 'browser-guide'
+      ? pending.request
+      : undefined;
 
   useEffect(() => {
     const node = card.current;
@@ -73,6 +78,8 @@ export function RequestCard({
   const answered =
     pending.kind === 'input' && pending.request.questions.every((question) => answerFor(question));
   const primary = () => {
+    // A guide is followed on the page; nothing in the conversation completes it.
+    if (guide) return onShowBrowser();
     if (pending.kind === 'approval') return void respond('agent:approval', { approved: true });
     if (!answered) return;
     void respond('agent:user-input', {
@@ -120,7 +127,41 @@ export function RequestCard({
           <span className="req-why">{pending.request.questions[0].header}</span>
         )}
       </div>
-      {pending.kind === 'approval' ? (
+      {guide ? (
+        <>
+          <p>{guide.detail}</p>
+          <ol className="guide-steps">
+            {(guide.guide?.steps ?? []).map((step, index) => (
+              <li
+                key={index}
+                data-status={step.status}
+                aria-current={step.status === 'current' ? 'step' : undefined}
+              >
+                <span className="guide-mark">
+                  {step.status === 'done' ? <PhaseGlyph kind="checked" tone="ok" /> : index + 1}
+                </span>
+                <span className="guide-note" title={step.note}>
+                  {step.note}
+                </span>
+                {step.status === 'skipped' && <span className="guide-tag">已跳过</span>}
+              </li>
+            ))}
+          </ol>
+          <div className="req-foot">
+            <Button
+              size="sm"
+              variant="ghost"
+              isDisabled={sending}
+              onPress={() => void respond('agent:approval', { approved: false })}
+            >
+              结束带做
+            </Button>
+            <Button size="sm" variant="primary" onPress={onShowBrowser}>
+              去页面操作 ↗
+            </Button>
+          </div>
+        </>
+      ) : pending.kind === 'approval' ? (
         <>
           {type === 'handoff' ? (
             <p>{pending.request.detail}</p>

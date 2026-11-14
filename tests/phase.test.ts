@@ -12,6 +12,7 @@ import {
   phaseText,
   phaseTitle,
   replyText,
+  requestKind,
   requestSummary,
   resolvedText,
   runningPhase,
@@ -29,7 +30,7 @@ const tool = (patch: Partial<ToolCall> & Pick<ToolCall, 'name'>): ToolCall => ({
   status: 'running',
   ...patch,
 });
-const approval = (action?: 'browser-help'): PendingAgentRequest => ({
+const approval = (action?: 'browser-help' | 'browser-guide'): PendingAgentRequest => ({
   conversationId: 'c',
   messageId: 'm',
   kind: 'approval',
@@ -191,6 +192,8 @@ test('tools map to a glyph kind, a title and a recognisable target', () => {
   assert.equal(toolKind('neo_act'), 'click');
   assert.equal(isBookkeepingTool('neo_checkpoint'), true);
   assert.equal(toolTitle('mystery_tool'), 'mystery_tool');
+  assert.equal(toolTitle('workbench_browser_guide'), '带你操作页面');
+  assert.equal(toolKind('workbench_browser_guide'), 'wait');
   assert.equal(
     toolTarget({ name: 'web_navigate', input: { url: 'https://example.com/docs?q=1' } }),
     'example.com/docs',
@@ -222,6 +225,13 @@ test('handled requests keep one line of what the user decided', () => {
   assert.equal(
     resolvedText({ ...resolved, kind: 'handoff', summary: '', resolution: 'done' }),
     '你已在页面完成操作',
+  );
+  // A guide waits for the user on the page like a handoff, and keeps how far they got.
+  assert.equal(requestKind(approval('browser-guide')), 'handoff');
+  assert.equal(requestSummary(approval('browser-guide')), '允许执行此命令？');
+  assert.equal(
+    resolvedText({ ...resolved, kind: 'handoff', summary: '完成 3/3 步', resolution: 'guided' }),
+    '带你操作 · 完成 3/3 步',
   );
 });
 

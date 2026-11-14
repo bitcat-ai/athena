@@ -468,9 +468,11 @@ export interface ApprovalRequest {
   title: string;
   detail: string;
   kind: 'command' | 'file' | 'other';
-  action?: 'browser-script' | 'browser-upload' | 'browser-help';
+  action?: 'browser-script' | 'browser-upload' | 'browser-help' | 'browser-guide';
   /** The command or file the approval is about, shown once the request has been handled. */
   target?: string;
+  /** The steps of a guide the user is being walked through on the page, and how far they are. */
+  guide?: { steps: Array<{ note: string; status: 'pending' | 'current' | 'done' | 'skipped' }> };
 }
 export interface UserInputRequest {
   id: string;

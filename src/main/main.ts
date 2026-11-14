@@ -30,7 +30,7 @@ import {
   supportsImages,
 } from '../shared/agents';
 import { imageSource, parseImages, type ImageAttachment } from '../shared/images';
-import { WebRuntime } from './web-runtime';
+import { WebRuntime, type GuideCard } from './web-runtime';
 import { copyText } from './clipboard';
 import { FeishuConnector } from './feishu';
 import { FeishuKnowledge, knowledgeTools, isKnowledgeTool } from './feishu-knowledge';
@@ -1537,6 +1537,52 @@ function requestNativeApproval(request: Omit<ApprovalRequest, 'id' | 'kind'>): P
     });
   });
 }
+/** A guide's steps in the conversation: updated as the user moves on, never a question to answer. */
+function openGuideCard(request: Omit<ApprovalRequest, 'id' | 'kind'>): GuideCard | undefined {
+  const turn = active;
+  if (!turn || turn.cancelled) return undefined;
+  const id = 'web:' + randomUUID();
+  const assistant = getConversation(turn.conversationId).messages.find(
+    (message) => message.id === turn.messageId,
+  )!;
+  const show = (next: Omit<ApprovalRequest, 'id' | 'kind'>) =>
+    onAgentEvent(turn.conversationId, assistant, {
+      type: 'approval',
+      request: { ...next, id, kind: 'other' },
+    });
+  let open = true;
+  const ended = new Promise<void>((resolve) => {
+    // Ending it on the card and stopping the turn both arrive as a refusal; nothing approves it.
+    turn.nativeApprovals.set(id, (approved) => {
+      if (!approved) resolve();
+    });
+  });
+  show(request);
+  onAgentEvent(turn.conversationId, assistant, {
+    type: 'status',
+    status: 'waiting',
+    label: '等你在页面上操作',
+  });
+  return {
+    ended,
+    update: (next) => {
+      if (open) show(next);
+    },
+    close: (summary) => {
+      if (!open) return;
+      open = false;
+      turn.nativeApprovals.delete(id);
+      if (!turn.cancelled && summary) turn.resolutions.set(id, { resolution: 'guided', summary });
+      onAgentEvent(turn.conversationId, assistant, { type: 'request-resolved', id });
+      if (active === turn && !turn.cancelled)
+        onAgentEvent(turn.conversationId, assistant, {
+          type: 'status',
+          status: 'working',
+          label: '继续网页任务',
+        });
+    },
+  };
+}
 async function startTurn(
   conversation: Conversation,
   text: string,
@@ -1722,6 +1768,7 @@ async function createBrowserRuntime(binaryPath?: string) {
       }
     },
     approve: requestNativeApproval,
+    guideCard: openGuideCard,
     onExecution: (event) => {
       if (!active || active.messageId !== event.taskId) return;
       const assistant = getConversation(active.conversationId).messages.find(

@@ -71,6 +71,33 @@ test('Feishu tasks hear once that they need attention, without command details o
   assert.doesNotMatch(f.sent[0].text, /private command/);
 });
 
+test('a guide asks the user back to the page once, however often its card changes', async () => {
+  const f = fixture();
+  const guide = (current: number): AgentEvent => ({
+    type: 'approval',
+    request: {
+      id: 'g1',
+      kind: 'other',
+      action: 'browser-guide',
+      title: '带你做：开通套餐',
+      detail: '跟着页面上的提示操作，每一步都由你自己完成。',
+      guide: {
+        steps: ['点“升级”', '填写公司名称'].map((note, at) => ({
+          note,
+          status: at < current ? 'done' : at === current ? 'current' : 'pending',
+        })),
+      },
+    },
+  });
+  f.notifications.handle(guide(0));
+  f.notifications.handle(guide(1));
+  await f.notifications.settled();
+  assert.deepEqual(
+    f.sent.map((item) => item.text),
+    ['Athena · 检查网页\n带你做：开通套餐\n请回到 Mac 上的 Athena，跟着页面上的提示操作。'],
+  );
+});
+
 test('resolved and ended requests are discarded before delivery', async () => {
   const f = fixture();
   f.notifications.handle(approval);

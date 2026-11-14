@@ -24,7 +24,7 @@ export interface ResolvedRequest {
   id: string;
   kind: RequestKind;
   summary: string;
-  resolution: 'approved' | 'rejected' | 'answered' | 'done' | 'dismissed';
+  resolution: 'approved' | 'rejected' | 'answered' | 'done' | 'dismissed' | 'guided';
   at: number;
 }
 export type ToolKind = 'read' | 'edit' | 'run' | 'web' | 'click' | 'verify' | 'wait' | 'think';
@@ -59,6 +59,7 @@ const names: Record<string, string> = {
   download: '下载文件',
   pdf: '保存页面',
   request_human_help: '请求你处理网页',
+  guide: '带你操作页面',
   await_human_help: '等待你交还网页',
   plan: '更新任务计划',
   checkpoint: '核对结果',
@@ -147,6 +148,7 @@ const kinds: Record<string, ToolKind> = {
   checkpoint: 'verify',
   request_human_help: 'wait',
   await_human_help: 'wait',
+  guide: 'wait',
   commandExecution: 'run',
   fileChange: 'edit',
 };
@@ -265,14 +267,16 @@ export const requestKey = (pending: PendingAgentRequest) =>
 
 export function requestKind(pending: Pick<PendingAgentRequest, 'kind' | 'request'>): RequestKind {
   if (pending.kind === 'input') return 'input';
-  return (pending.request as ApprovalRequest).action === 'browser-help' ? 'handoff' : 'approval';
+  const { action } = pending.request as ApprovalRequest;
+  // Both leave the page to the user: once to get past something, once to be shown the way.
+  return action === 'browser-help' || action === 'browser-guide' ? 'handoff' : 'approval';
 }
 /** One line that identifies a request after it has been handled. */
 export function requestSummary(pending: Pick<PendingAgentRequest, 'kind' | 'request'>): string {
   if (pending.kind === 'input')
     return (pending.request as UserInputRequest).questions[0]?.question ?? '';
   const request = pending.request as ApprovalRequest;
-  if (request.action === 'browser-help') return request.title;
+  if (request.action === 'browser-help' || request.action === 'browser-guide') return request.title;
   return request.target || oneLine(request.detail, 80) || request.title;
 }
 const resolutions: Record<ResolvedRequest['resolution'], string> = {
@@ -281,6 +285,7 @@ const resolutions: Record<ResolvedRequest['resolution'], string> = {
   answered: '已回答',
   done: '你已在页面完成操作',
   dismissed: '已停止处理',
+  guided: '带你操作',
 };
 export function resolvedText(request: ResolvedRequest): string {
   const label = resolutions[request.resolution];

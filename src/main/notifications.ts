@@ -45,7 +45,9 @@ export class TurnNotifications {
       this.requests.add(event.request.id);
       this.enqueue(
         `request:${event.request.id}`,
-        `需要你审核\n${event.request.title}\n请回到 Mac 上的 Athena 查看操作详情并确认。`,
+        event.request.action === 'browser-guide'
+          ? `${event.request.title}\n请回到 Mac 上的 Athena，跟着页面上的提示操作。`
+          : `需要你审核\n${event.request.title}\n请回到 Mac 上的 Athena 查看操作详情并确认。`,
         event.request.id,
       );
     } else if (event.type === 'user-input') {
