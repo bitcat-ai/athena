@@ -196,7 +196,7 @@ test('a disabled item or a switched-off feature gives turns nothing', async () =
       true,
     );
     await t.learning.remove(id);
-    assert.match(t.learning.context('c1'), /目前没有沉淀的内容/);
+    assert.match(t.learning.context('c1'), /目前记忆里没有内容/);
   } finally {
     await t.close();
   }
@@ -253,7 +253,7 @@ test('the export is a document with provenance for every entry', async () => {
         },
       ],
     });
-    assert.match(text, /^# Athena 使用沉淀/);
+    assert.match(text, /^# Athena 记忆/);
     assert.match(
       text,
       /导出日期：2026-11-15。行为规范 1 条，业务知识 1 条，页面与代码仓库对应关系 1 条，需求记录 1 份。/,

@@ -867,7 +867,7 @@ function getSession(
           const turn = active;
           // Only the person at the desktop teaches Athena; a chat message from elsewhere does not.
           if (turn.source !== 'desktop')
-            return { text: JSON.stringify({ saved: false, reason: '只在桌面对话中沉淀内容' }) };
+            return { text: JSON.stringify({ saved: false, reason: '只有桌面对话能写入记忆' }) };
           return learning.call(name, record(args), {
             conversationId: turn.conversationId,
             conversationTitle: conversation.title,
@@ -2346,7 +2346,7 @@ async function invoke(action: string, payload: unknown) {
     case 'learning:export': {
       const now = Date.now();
       const selection = await dialog.showSaveDialog(window!, {
-        defaultPath: `Athena 使用沉淀 ${new Date(now).toISOString().slice(0, 10)}.md`,
+        defaultPath: `Athena 记忆 ${new Date(now).toLocaleDateString('sv-SE')}.md`,
         filters: [{ name: 'Markdown', extensions: ['md'] }],
       });
       if (selection.canceled || !selection.filePath) return false;

@@ -57,7 +57,7 @@ export const repositoryServiceTools: BrowserTool[] = [
   {
     name: 'workbench_repository_resolve',
     description:
-      '按网站和业务模块定位页面对应的真实 Git 仓库，返回基线提交和供前后端独立沙箱克隆的 Git bundle 地址。已登记的映射直接返回。未登记时先在知识库里查到这个系统的代码仓库和前后端目录（workbench_feishu_search/read，或已沉淀的知识），再带上 frontend、backend 和 source（依据的文档链接，或“用户告知”）调用；用户在卡片上确认后登记并记住。知识库里找不到时询问用户，不要猜测仓库地址。',
+      '按网站和业务模块定位页面对应的真实 Git 仓库，返回基线提交和供前后端独立沙箱克隆的 Git bundle 地址。已登记的映射直接返回。未登记时先在知识库里查到这个系统的代码仓库和前后端目录（workbench_feishu_search/read，或记忆里的知识），再带上 frontend、backend 和 source（依据的文档链接，或“用户告知”）调用；用户在卡片上确认后登记并记住。知识库里找不到时询问用户，不要猜测仓库地址。',
     inputSchema: {
       type: 'object',
       properties: {

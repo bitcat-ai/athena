@@ -138,7 +138,7 @@ export function LearningPanel({
     <>
       <div className="settings-section-heading">
         <div>
-          <h3>沉淀</h3>
+          <h3>记忆</h3>
           <p>我从你的要求和操作里记下的做法与知识。之后的对话会带上它们。</p>
         </div>
       </div>

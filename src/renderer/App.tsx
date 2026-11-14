@@ -1447,7 +1447,7 @@ export default function App() {
           </Tabs.Tab>
           <Tabs.Tab id="learning">
             <Icon icon={BookOpen01Icon} size={15} />
-            沉淀
+            记忆
           </Tabs.Tab>
         </Tabs.List>
         <div className="settings-body">
