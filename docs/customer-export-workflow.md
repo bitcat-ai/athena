@@ -33,7 +33,7 @@ PRD 由 `workbench_prd_save` 保存到当前档案的 `requirements/`，并以�
 
 ## 仓库映射 MCP
 
-当前提供的是显式配置的本机仓库服务入口，不是通用第三方 MCP 管理界面。宿主通过 `ATHENA_REPOSITORY_MCP_URL` 与 `ATHENA_REPOSITORY_MCP_TOKEN` 连接已授权服务；仅接受有凭据的回环 HTTP 地址，不跟随重定向，凭据不传入 CLI 子进程。
+未配置外部仓库服务时，Athena 使用内置的页面与仓库对应关系，由 Agent 从知识库查到仓库后经用户确认登记，见 [页面改动落到源码](page-changes-to-source.md)。本节描述的是显式配置的本机仓库服务入口，不是通用第三方 MCP 管理界面。宿主通过 `ATHENA_REPOSITORY_MCP_URL` 与 `ATHENA_REPOSITORY_MCP_TOKEN` 连接已授权服务；仅接受有凭据的回环 HTTP 地址，不跟随重定向，凭据不传入 CLI 子进程。
 
 演示服务执行真实 MCP initialize、工具发现与调用。`workbench_repository_resolve` 按网站 origin 和 `customers` 模块返回仓库、基线提交和两个代码目录；沙箱通过短期传输地址获取 Git bundle，origin 保留真实仓库 URL，GitHub 凭据留在宿主。两个沙箱分别提交并上传 bundle 后，`workbench_repository_publish` 验证基线祖先和组件目录范围，拒绝跨目录修改、符号链接或子模块，合并到新的测试分支并推送，随后读取远端 SHA 核对。不会合并 `main` 或发布生产。
 

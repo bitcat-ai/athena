@@ -271,6 +271,16 @@ export interface ElementPreview {
   nodeId: string;
   changes: ElementEdit;
 }
+/** One preview the page currently shows, as it goes into a record of the changes. */
+export interface PageChange {
+  editId: string;
+  by: 'user' | 'agent';
+  /** A page-level restyle rather than a change of one element. */
+  page?: boolean;
+  /** The element as it is now; absent when the page has since replaced it. */
+  element?: { tag: string; name: string; selector?: string; text?: string };
+  changes: ElementEdit;
+}
 export interface BrowserActor {
   id: string;
   name: string;

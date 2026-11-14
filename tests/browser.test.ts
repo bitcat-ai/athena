@@ -387,6 +387,44 @@ test(
       assert.deepEqual(await look(), original);
       assert.equal(runtime.getState().previewEdits?.length ?? 0, 0);
       assert.deepEqual(selected, []);
+
+      // The record of a page names every preview with who made it; a gesture in progress is not one yet.
+      const find = async (selector: string) =>
+        (await runtime.queryElements({ selector })).elements[0];
+      const restyled = JSON.parse(
+        (await runtime.callTool('workbench_browser_restyle', { css: '.cta{border-radius:12px}' }))
+          .text,
+      );
+      const lead = await find('.lead');
+      const reworded = JSON.parse(
+        (await runtime.callTool('workbench_browser_edit', { ref: lead.ref, text: 'New lead' }))
+          .text,
+      );
+      const cta = await find('.cta');
+      await runtime.selectElement(cta.ref);
+      const gesture = await runtime.previewStyles(cta.ref, {
+        'background-color': 'rgb(200, 30, 30)',
+      });
+      assert.deepEqual(
+        (await runtime.pageChanges()).changes.map((change) => change.editId),
+        [restyled.editId, reworded.editId],
+      );
+      await runtime.commitStyles(cta.ref, gesture.editId);
+      const page = await runtime.pageChanges();
+      assert.equal(page.url, runtime.getState().url);
+      assert.deepEqual(
+        page.changes.map((change) => [change.by, change.page ?? false, change.element?.tag]),
+        [
+          ['agent', true, undefined],
+          ['agent', false, 'p'],
+          ['user', false, 'button'],
+        ],
+      );
+      assert.equal(page.changes[0].changes.sheet, '.cta{border-radius:12px}');
+      assert.equal(page.changes[1].changes.text, 'New lead');
+      assert.equal(page.changes[1].element?.text, 'New lead');
+      assert.equal(page.changes[2].element?.name, 'Start');
+      assert.deepEqual(page.changes[2].changes.styles, { 'background-color': 'rgb(200, 30, 30)' });
     } finally {
       await runtime.dispose();
       server.closeAllConnections();

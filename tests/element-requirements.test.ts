@@ -9,9 +9,10 @@ import {
   assertRequirementRecorded,
   saveElementRequirement,
   continueElementRequirement,
+  describePageChange,
   type ElementRequirement,
 } from '../src/main/element-requirements';
-import type { ElementDetails } from '../src/shared/types';
+import type { ElementDetails, PageChange } from '../src/shared/types';
 
 test('a preview survives a later conversational confirmation without switching its target', () => {
   const element = { ref: 'picked', tag: 'button', name: '查看资料', documentId: 'd' };
@@ -141,6 +142,86 @@ test('PRD requires a real matching preview, preserves user intent and unlocks so
     );
     assert.equal(r.saved, undefined);
     assert.throws(() => assertRequirementRecorded(r), /先调用/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('a record of the page lists what the user and the agent changed, with no element selected', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'athena-prd-'));
+  const changes: PageChange[] = [
+    {
+      editId: 'e1',
+      by: 'user',
+      element: { tag: 'button', name: '查看资料', selector: '#open', text: '查看资料' },
+      changes: { styles: { 'border-radius': '12px', 'background-color': 'rgb(0, 113, 227)' } },
+    },
+    {
+      editId: 'e2',
+      by: 'agent',
+      page: true,
+      changes: {
+        sheet: 'body{background:#fff}.cta{border-radius:980px}',
+        texts: [{ selector: '#title', text: '客户中心' }],
+      },
+    },
+    { editId: 'e3', by: 'user', changes: { text: '已被替换' } },
+  ];
+  assert.equal(
+    describePageChange(changes[0]),
+    '[用户] <button> "查看资料" (#open)：样式 border-radius: 12px; background-color: rgb(0, 113, 227)',
+  );
+  assert.equal(
+    describePageChange(changes[1]),
+    '[Agent] 整个页面：整页样式表（2 条规则，46 字符）；文字替换 #title → "客户中心"',
+  );
+  assert.equal(describePageChange(changes[2]), '[用户] 已被页面替换的元素：文字改为 "已被替换"');
+  assert.equal(
+    describePageChange(
+      { ...changes[0], changes: { styles: { 'box-shadow': '0 0 1px red, '.repeat(40) } } },
+      80,
+    ).length,
+    81,
+  );
+  const args = {
+    title: '客户页改版',
+    requirements: ['按钮改为圆角蓝色'],
+    acceptance: ['构建通过'],
+  };
+  const signal = new AbortController().signal;
+  const page = {
+    conversationId: 'conversation',
+    turnId: 'turn',
+    userRequest: '把这些改动落到源码',
+    url: 'http://localhost/customers',
+    changes,
+  };
+  try {
+    await assert.rejects(
+      saveElementRequirement(dir, undefined, args, async () => assert.fail(), signal, {
+        ...page,
+        changes: [],
+      }),
+      /尚无/,
+    );
+    const artifact = await saveElementRequirement(
+      dir,
+      undefined,
+      args,
+      async () => assert.fail('Nothing is selected, so nothing is inspected'),
+      signal,
+      page,
+    );
+    const text = await readFile(artifact.path, 'utf8');
+    assert.match(text, /## 用户原始要求\n\n把这些改动落到源码/);
+    assert.match(text, /## 页面改动记录/);
+    assert.match(text, /1\. \[用户\] <button> "查看资料"/);
+    assert.match(text, /2\. \[Agent\] 整个页面/);
+    const evidence = JSON.parse(/```json\n([\s\S]+?)\n```/.exec(text)![1]);
+    assert.equal(evidence.website, 'http://localhost/customers');
+    assert.deepEqual(evidence.changes, changes);
+    assert.equal(evidence.selected, undefined);
+    assert.equal(createHash('sha256').update(text).digest('hex'), artifact.sha256);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

@@ -24,6 +24,7 @@ import type {
   BrowserState,
   BrowserTool,
   ElementRef,
+  PageChange,
   RecordedStep,
   Recording,
   ToolResult,
@@ -509,6 +510,8 @@ interface TabSession {
     localId: string;
     localRef?: string;
     changes?: ElementEdit;
+    /** Who made it: the person in the inspector, or the agent through a tool. */
+    source?: 'human' | 'agent';
   }>;
 }
 interface ScopedElement {
@@ -3425,6 +3428,7 @@ export class BrowserRuntime {
       const id = this.registerEdit(tab, frame, result.editId);
       const metadata = tab.edits.find((edit) => edit.id === id)!;
       metadata.localRef = scope.localRef;
+      metadata.source = 'human';
       metadata.transient = true;
       metadata.changes = { styles: { ...metadata.changes?.styles, ...styles } };
       if (!previous) this.update();
@@ -3513,6 +3517,7 @@ export class BrowserRuntime {
     const editId = this.registerEdit(tab, frame, result.editId);
     const metadata = tab.edits.find((edit) => edit.id === editId)!;
     metadata.localRef = changes.insert ? result.element.ref : scope.localRef;
+    metadata.source = source;
     metadata.changes = structuredClone(changes);
     await this.bridge(
       tab,
@@ -3548,6 +3553,7 @@ export class BrowserRuntime {
     const editId = this.registerEdit(tab, frame, result.editId);
     const metadata = tab.edits.find((edit) => edit.id === editId)!;
     metadata.localRef = element.ref;
+    metadata.source = source;
     metadata.changes = {
       sheet: changes.css ?? '',
       ...(changes.texts?.length ? { texts: structuredClone(changes.texts) } : {}),
@@ -3555,6 +3561,50 @@ export class BrowserRuntime {
     // The page as a whole changed: nothing is selected or outlined for it.
     this.update();
     return { ...evidence, editId };
+  }
+  /**
+   * Everything the active page currently previews, by whom and on which element, for a record
+   * of the changes. Gestures still in progress are left out.
+   */
+  pageChanges(): Promise<{ url: string; changes: PageChange[] }> {
+    return this.serialize(async () => {
+      const tab = this.tabs.get(this.activeTabId);
+      if (!tab) return { url: this.state.url, changes: [] };
+      const changes: PageChange[] = [];
+      for (const edit of tab.edits) {
+        const frame = tab.frames.get(edit.frameId);
+        if (!frame || !edit.changes || !edit.localRef || edit.transient) continue;
+        if (frame.documentId !== edit.documentId) continue;
+        const page = edit.changes.sheet !== undefined;
+        let element: PageChange['element'];
+        if (!page)
+          try {
+            const detail = await this.bridge(
+              tab,
+              frame,
+              `globalThis.__workbenchPage.inspect(${JSON.stringify(edit.localRef)})`,
+            );
+            element = {
+              tag: String(detail.tag),
+              name: String(detail.name || detail.tag).slice(0, 120),
+              ...(detail.selector ? { selector: String(detail.selector).slice(0, 400) } : {}),
+              ...(detail.textContent
+                ? { text: String(detail.textContent).replace(/\s+/g, ' ').trim().slice(0, 200) }
+                : {}),
+            };
+          } catch {
+            // The page replaced the element; the change itself is still part of the record.
+          }
+        changes.push({
+          editId: edit.id,
+          by: edit.source === 'agent' ? 'agent' : 'user',
+          ...(page ? { page: true } : {}),
+          ...(element ? { element } : {}),
+          changes: structuredClone(edit.changes),
+        });
+      }
+      return { url: tab.info.url, changes };
+    });
   }
   undoEdit(editId?: string): Promise<ElementEditResult> {
     const tab = this.activeTab();
