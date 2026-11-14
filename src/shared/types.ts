@@ -640,6 +640,7 @@ export interface AppSnapshot {
     mode?: import('./access').AccessMode;
   }>;
   share?: import('./share').ShareState;
+  learning?: import('./learning').LearningState;
 }
 export type AppEvent =
   | { type: 'sandbox:state'; state: import('./sandbox').LocalSandboxView }
@@ -652,6 +653,7 @@ export type AppEvent =
   | { type: 'codex:state'; state: CodexConnectionState }
   | { type: 'usage:updated' }
   | { type: 'share:state'; state: import('./share').ShareState }
+  | { type: 'learning:state'; state: import('./learning').LearningState }
   | { type: 'browser:state'; state: BrowserState }
   | { type: 'web:state'; state: WebExecutorState }
   | { type: 'browser:frame'; frame: BrowserFrame }

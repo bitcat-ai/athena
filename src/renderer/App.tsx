@@ -30,6 +30,7 @@ import {
   ArrowDown01Icon,
   ArrowLeft01Icon,
   ArrowUpRight01Icon,
+  BookOpen01Icon,
   ChartNoAxesCombinedIcon,
   CloudIcon,
   CommandIcon,
@@ -64,6 +65,8 @@ import { ModelPicker } from './ModelPicker';
 import { ChoiceSelect } from './ChoiceSelect';
 import { effortName } from './ReasoningSlider';
 import { SkillPicker } from './SkillPicker';
+import { LearningPanel } from './LearningPanel';
+import type { LearningState } from '../shared/learning';
 import { UsagePanel } from './UsagePanel';
 import { AgentIcon } from './AgentIcon';
 import { WorkbenchNotices, useCodexUpdate } from './WorkbenchNotices';
@@ -143,7 +146,7 @@ const emptyBrowser: BrowserState = {
   inspecting: false,
 };
 const emptyFeishu: FeishuState = { status: 'disconnected', paired: false };
-type SettingsTab = 'agent' | 'browser' | 'feishu';
+type SettingsTab = 'agent' | 'browser' | 'feishu' | 'learning';
 /** A conversation's state as the sidebar repeats it. */
 interface Echo {
   glyph: GlyphKind;
@@ -306,6 +309,11 @@ export default function App() {
   const [sandboxEnabled, setSandboxEnabled] = useState(false);
   const [nativeRecordId, setNativeRecordId] = useState<string>();
   const [feishu, setFeishu] = useState<FeishuState>(emptyFeishu);
+  const [learning, setLearning] = useState<LearningState>({
+    enabled: true,
+    items: [],
+    repositories: [],
+  });
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedId, setConversationId] = useState<string>();
   const [showArchived, setShowArchived] = useState(false);
@@ -693,6 +701,7 @@ export default function App() {
     let browserError: string | undefined;
     let webError: string | undefined;
     let feishuUpdated = false;
+    let learningUpdated = false;
     type RequestChange = (previous: PendingAgentRequest[]) => PendingAgentRequest[];
     let beforeSnapshot: RequestChange[] | undefined = [];
     const changeRequests = (change: RequestChange) => {
@@ -762,6 +771,9 @@ export default function App() {
         feishuUpdated = true;
         setFeishu(event.state);
         if (event.state.status !== 'configuring') setConnecting(false);
+      } else if (event.type === 'learning:state') {
+        learningUpdated = true;
+        setLearning(event.state);
       } else if (event.type === 'conversation:updated') upsert(event.conversation);
       else if (event.type === 'notice') showToast(event.message, event.level === 'error');
       else if (event.type === 'agent:event') {
@@ -889,6 +901,7 @@ export default function App() {
           setBrowser(snapshot.browser);
         }
         if (!feishuUpdated) setFeishu(snapshot.feishu);
+        if (!learningUpdated && snapshot.learning) setLearning(snapshot.learning);
         // Events can arrive while the initial snapshot is in flight.
         setPendingRequests(
           (beforeSnapshot ?? []).reduce(
@@ -1431,6 +1444,10 @@ export default function App() {
           <Tabs.Tab id="feishu">
             <Icon icon={Link02Icon} size={15} />
             飞书
+          </Tabs.Tab>
+          <Tabs.Tab id="learning">
+            <Icon icon={BookOpen01Icon} size={15} />
+            沉淀
           </Tabs.Tab>
         </Tabs.List>
         <div className="settings-body">
@@ -2017,6 +2034,16 @@ export default function App() {
                     </form>
                   </details>
                 )}
+            </Tabs.Panel>
+          )}
+          {settingsTab === 'learning' && (
+            <Tabs.Panel id="learning">
+              <LearningPanel
+                state={learning}
+                onChange={setLearning}
+                invoke={action}
+                onExported={() => showToast('文档已导出')}
+              />
             </Tabs.Panel>
           )}
         </div>
