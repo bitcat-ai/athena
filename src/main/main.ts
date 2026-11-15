@@ -2552,6 +2552,9 @@ async function launch() {
   app.dock?.setIcon(path.join(app.getAppPath(), 'resources/athena-icon.png'));
   const demoHtml = await readFile(path.join(app.getAppPath(), 'resources/demo.html'));
   const welcomeLogo = await readFile(path.join(app.getAppPath(), 'resources/athena-icon.png'));
+  const welcomePortrait = await readFile(
+    path.join(app.getAppPath(), 'resources/athena-portrait.webp'),
+  );
   demoServer = createServer((request, response) => {
     if (request.url === '/' && request.method === 'GET') {
       response.writeHead(200, {
@@ -2562,6 +2565,9 @@ async function launch() {
     } else if (request.url === '/athena.png' && request.method === 'GET') {
       response.writeHead(200, { 'content-type': 'image/png', 'cache-control': 'no-store' });
       response.end(welcomeLogo);
+    } else if (request.url === '/portrait.webp' && request.method === 'GET') {
+      response.writeHead(200, { 'content-type': 'image/webp', 'cache-control': 'no-store' });
+      response.end(welcomePortrait);
     } else {
       response.writeHead(404);
       response.end();
