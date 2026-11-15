@@ -1,0 +1,150 @@
+{
+  "date": "2026-11-02",
+  "status": "passed-for-surface-refinement-scope",
+  "fileKey": "vEL0JeDlefvuvLjUQQh5SB",
+  "reviewedMainBoards": [
+    "31:229",
+    "25:229",
+    "31:409",
+    "43:1326",
+    "43:1973",
+    "31:1290",
+    "26:4425",
+    "35:297",
+    "26:687",
+    "26:5233"
+  ],
+  "reviewedMainBoardCount": 10,
+  "postFixCloseups": [
+    "35:669"
+  ],
+  "recipe": "heroui-surface-recipe.json",
+  "foundation": "heroui-main-foundation.json",
+  "geometry": "heroui-main-geometry.json",
+  "nativeReference": "heroui-native-reference.json",
+  "preserved": {
+    "mainPages": 6,
+    "currentBoards": 49,
+    "prototypeTargets": 107,
+    "missingPrototypeTargets": 0,
+    "appSourceModified": false,
+    "literalSelectedDemoButton": "#176B89 and radius12 remain webpage data"
+  },
+  "newSegmentedTabTracks": 20,
+  "findingsResolved": [
+    {
+      "issue": "New bound paints retained a white fallback in the dark rendering",
+      "fix": "Resolved each bound paint for its consumer and materialized actual RGB; dark fields/composer use the secondary neutral surface"
+    },
+    {
+      "issue": "Color plane and inner fields inherited an unnecessary second shadow",
+      "fix": "The functional color plane is unraised; inner fields use secondary fill without shadow; outer popup alone uses overlay elevation"
+    },
+    {
+      "issue": "Filled default controls risked losing the previous hover distinction",
+      "fix": "Radius-hover and CSS-hover explicitly use subtle fill while default is surface + field shadow; actual default/hover/focus sheets visually checked"
+    },
+    {
+      "issue": "White color swatches became hard to distinguish on white fields",
+      "fix": "Added an inner neutral edge to white swatches without altering their sampled values"
+    }
+  ],
+  "documentationUpdated": {
+    "mainOverview": [
+      "44:5294",
+      "44:5299",
+      "44:5357",
+      "44:5729",
+      "44:5733"
+    ],
+    "mainControlNotes": [
+      "26:737",
+      "26:780",
+      "26:4162",
+      "26:4465",
+      "26:4624",
+      "26:5261",
+      "26:5676",
+      "26:5299"
+    ],
+    "agentOverview": [
+      "18:10",
+      "18:15"
+    ],
+    "revision": "04"
+  },
+  "agentPaintCrossCheck": [
+    {
+      "id": "I9:4105;9:4093",
+      "name": "Athena / Field",
+      "r": 12,
+      "effects": [],
+      "paintCheck": [
+        {
+          "actual": {
+            "r": 0.9607843160629272,
+            "g": 0.9607843160629272,
+            "b": 0.9607843160629272
+          },
+          "resolved": {
+            "r": 0.9607843160629272,
+            "g": 0.9607843160629272,
+            "b": 0.9607843160629272,
+            "a": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "I9:3885;9:3855",
+      "name": "Option / 当前项目目录",
+      "r": 12,
+      "effects": [],
+      "paintCheck": [
+        {
+          "actual": {
+            "r": 0.9411764740943909,
+            "g": 0.9411764740943909,
+            "b": 0.9411764740943909
+          },
+          "resolved": {
+            "r": 0.9411764740943909,
+            "g": 0.9411764740943909,
+            "b": 0.9411764740943909,
+            "a": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "I9:4192;9:4188",
+      "name": "Button / 提交信息",
+      "r": 24,
+      "effects": [],
+      "paintCheck": [
+        {
+          "actual": {
+            "r": 0.09019608050584793,
+            "g": 0.09019608050584793,
+            "b": 0.09019608050584793
+          },
+          "resolved": {
+            "r": 0.09019608050584793,
+            "g": 0.09019608050584793,
+            "b": 0.09019608050584793,
+            "a": 1
+          }
+        }
+      ]
+    }
+  ],
+  "previews": [
+    "../previews/heroui-surface/new-chat.png",
+    "../previews/heroui-surface/element-inspector-light.png"
+  ],
+  "limits": [
+    "Representative visual and scoped structural checks, not a repeat of the full historical 101-board review.",
+    "The 20,000-character text specimen intentionally overflows its 448×72 clipped vertical-scroll viewport.",
+    "No runtime keyboard, input, accessibility or business actions were executed."
+  ]
+}

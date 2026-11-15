@@ -1,0 +1,73 @@
+{
+  "date": "2026-11-02",
+  "status": "passed-for-homepage-logo-scope",
+  "fileKey": "vEL0JeDlefvuvLjUQQh5SB",
+  "pageId": "19:244",
+  "homeId": "31:229",
+  "scope": "Homepage sidebar and welcome logo only",
+  "sourceAsset": "src/renderer/assets/brand/athena-profile.png",
+  "sourceSha256": "9c9ace34a20976e4bf7a3658b6fc8dc3fa3cbd21329766a07b5f1f6df792c608",
+  "sourceEvidence": [
+    "src/renderer/App.tsx:4",
+    "src/renderer/App.tsx:600",
+    "src/renderer/App.tsx:765",
+    "src/renderer/styles.css:138",
+    "src/renderer/styles.css:369"
+  ],
+  "dimensionsFromCurrentApp": {
+    "sidebar": {
+      "size": 34,
+      "radius": 11
+    },
+    "welcome": {
+      "size": 56,
+      "radius": 17
+    }
+  },
+  "actualReadback": {
+    "mutatedNodeIds": [
+      "31:243",
+      "31:333"
+    ],
+    "removedNodeIds": [
+      "31:244",
+      "31:245",
+      "31:246",
+      "31:334",
+      "31:335",
+      "31:336"
+    ],
+    "homeId": "31:229",
+    "nodeTypeCounts": {
+      "FRAME": 71,
+      "ELLIPSE": 4,
+      "INSTANCE": 20,
+      "VECTOR": 40,
+      "TEXT": 31,
+      "RECTANGLE": 2
+    },
+    "images": [
+      {
+        "id": "31:243",
+        "name": "Athena / Official logo / Sidebar",
+        "width": 34,
+        "height": 34,
+        "cornerRadius": 11,
+        "imageHash": "2e4b1960c52f8d12c2ccd6355164523733239af8"
+      },
+      {
+        "id": "31:333",
+        "name": "Athena / Official logo / Welcome",
+        "width": 56,
+        "height": 56,
+        "cornerRadius": 17,
+        "imageHash": "2e4b1960c52f8d12c2ccd6355164523733239af8"
+      }
+    ],
+    "overflow": []
+  },
+  "visualReview": "Homepage native screenshot checked: correct portrait, proportions, rounded mask, label alignment and no overlap.",
+  "preview": "previews/homepage-logo.png",
+  "applicationCodeChanged": false,
+  "otherFigmaViewsChanged": false
+}

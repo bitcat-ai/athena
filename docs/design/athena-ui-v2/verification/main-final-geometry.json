@@ -1,0 +1,581 @@
+[
+  {
+    "page": "19:244",
+    "frames": [
+      {
+        "id": "31:229",
+        "name": "V2 / 01 新对话 · 1600 × 1000",
+        "w": 1600,
+        "h": 1000
+      },
+      {
+        "id": "31:409",
+        "name": "V2 / 02 对话与浏览器 · 1600 × 1000",
+        "w": 1600,
+        "h": 1000
+      },
+      {
+        "id": "25:229",
+        "name": "INSPECTOR / 01 / 调整",
+        "w": 1600,
+        "h": 1000
+      },
+      {
+        "id": "31:750",
+        "name": "V2 / 03 执行详情 · 1600 × 1000",
+        "w": 1600,
+        "h": 1000
+      },
+      {
+        "id": "31:1079",
+        "name": "V2 / 04 用量概览 · 1600 × 1000",
+        "w": 1600,
+        "h": 1000
+      },
+      {
+        "id": "31:1290",
+        "name": "V2 / 05 设置与连接 · 1600 × 1000",
+        "w": 1600,
+        "h": 1000
+      },
+      {
+        "id": "31:1494",
+        "name": "V2 / 06 共享页面 · 1600 × 1000",
+        "w": 1600,
+        "h": 1000
+      },
+      {
+        "id": "25:847",
+        "name": "INSPECTOR / 02 / 内容",
+        "w": 1600,
+        "h": 1000
+      },
+      {
+        "id": "25:1195",
+        "name": "INSPECTOR / 03 / CSS",
+        "w": 1600,
+        "h": 1000
+      },
+      {
+        "id": "25:1624",
+        "name": "INSPECTOR / 04 / 动效",
+        "w": 1600,
+        "h": 1000
+      },
+      {
+        "id": "25:1991",
+        "name": "INSPECTOR / 05 / 定位",
+        "w": 1600,
+        "h": 1000
+      },
+      {
+        "id": "43:1326",
+        "name": "V2 / 颜色浮层 · 原位预览",
+        "w": 1600,
+        "h": 1000
+      },
+      {
+        "id": "43:1973",
+        "name": "V2 / 选择菜单 · 不挤压布局",
+        "w": 1600,
+        "h": 1000
+      },
+      {
+        "id": "46:1696",
+        "name": "V2 / 10 新对话 · 浏览器展开",
+        "w": 1600,
+        "h": 1000
+      },
+      {
+        "id": "46:2082",
+        "name": "V2 / 11 选取模式 · 点击目标",
+        "w": 1600,
+        "h": 1000
+      }
+    ],
+    "issues": [],
+    "links": [
+      {
+        "source": "31:277",
+        "destination": "31:409"
+      },
+      {
+        "source": "31:281",
+        "destination": "31:750"
+      },
+      {
+        "source": "31:291",
+        "destination": "31:1079"
+      },
+      {
+        "source": "31:301",
+        "destination": "31:1290"
+      },
+      {
+        "source": "31:318",
+        "destination": "46:1696"
+      },
+      {
+        "source": "31:379",
+        "destination": "46:2082"
+      },
+      {
+        "source": "31:429",
+        "destination": "31:229"
+      },
+      {
+        "source": "31:461",
+        "destination": "31:750"
+      },
+      {
+        "source": "31:471",
+        "destination": "31:1079"
+      },
+      {
+        "source": "31:481",
+        "destination": "31:1290"
+      },
+      {
+        "source": "31:513",
+        "destination": "25:229"
+      },
+      {
+        "source": "36:1359",
+        "destination": "31:1494"
+      },
+      {
+        "source": "40:1361",
+        "destination": "31:229"
+      },
+      {
+        "source": "40:1379",
+        "destination": "31:409"
+      },
+      {
+        "source": "40:1383",
+        "destination": "31:750"
+      },
+      {
+        "source": "40:1393",
+        "destination": "31:1079"
+      },
+      {
+        "source": "40:1396",
+        "destination": "31:1290"
+      },
+      {
+        "source": "25:331",
+        "destination": "31:409"
+      },
+      {
+        "source": "25:390",
+        "destination": "25:847"
+      },
+      {
+        "source": "25:392",
+        "destination": "25:1195"
+      },
+      {
+        "source": "25:394",
+        "destination": "25:1624"
+      },
+      {
+        "source": "25:396",
+        "destination": "25:1991"
+      },
+      {
+        "source": "25:414",
+        "destination": "43:1326"
+      },
+      {
+        "source": "25:491",
+        "destination": "43:1973"
+      },
+      {
+        "source": "25:733",
+        "destination": "31:1494"
+      },
+      {
+        "source": "31:770",
+        "destination": "31:229"
+      },
+      {
+        "source": "31:798",
+        "destination": "31:409"
+      },
+      {
+        "source": "31:812",
+        "destination": "31:1079"
+      },
+      {
+        "source": "31:822",
+        "destination": "31:1290"
+      },
+      {
+        "source": "31:977",
+        "destination": "31:1494"
+      },
+      {
+        "source": "31:1099",
+        "destination": "31:229"
+      },
+      {
+        "source": "31:1127",
+        "destination": "31:409"
+      },
+      {
+        "source": "31:1131",
+        "destination": "31:750"
+      },
+      {
+        "source": "31:1151",
+        "destination": "31:1290"
+      },
+      {
+        "source": "31:1310",
+        "destination": "31:229"
+      },
+      {
+        "source": "31:1338",
+        "destination": "31:409"
+      },
+      {
+        "source": "31:1342",
+        "destination": "31:750"
+      },
+      {
+        "source": "31:1352",
+        "destination": "31:1079"
+      },
+      {
+        "source": "31:1514",
+        "destination": "31:229"
+      },
+      {
+        "source": "31:1542",
+        "destination": "31:409"
+      },
+      {
+        "source": "31:1546",
+        "destination": "31:750"
+      },
+      {
+        "source": "31:1556",
+        "destination": "31:1079"
+      },
+      {
+        "source": "31:1566",
+        "destination": "31:1290"
+      },
+      {
+        "source": "40:1448",
+        "destination": "31:229"
+      },
+      {
+        "source": "40:1466",
+        "destination": "31:409"
+      },
+      {
+        "source": "40:1470",
+        "destination": "31:750"
+      },
+      {
+        "source": "40:1480",
+        "destination": "31:1079"
+      },
+      {
+        "source": "40:1483",
+        "destination": "31:1290"
+      },
+      {
+        "source": "25:949",
+        "destination": "31:409"
+      },
+      {
+        "source": "25:1005",
+        "destination": "25:229"
+      },
+      {
+        "source": "25:1010",
+        "destination": "25:1195"
+      },
+      {
+        "source": "25:1012",
+        "destination": "25:1624"
+      },
+      {
+        "source": "25:1014",
+        "destination": "25:1991"
+      },
+      {
+        "source": "25:1084",
+        "destination": "31:1494"
+      },
+      {
+        "source": "40:1535",
+        "destination": "31:229"
+      },
+      {
+        "source": "40:1553",
+        "destination": "31:409"
+      },
+      {
+        "source": "40:1557",
+        "destination": "31:750"
+      },
+      {
+        "source": "40:1567",
+        "destination": "31:1079"
+      },
+      {
+        "source": "40:1570",
+        "destination": "31:1290"
+      },
+      {
+        "source": "25:1297",
+        "destination": "31:409"
+      },
+      {
+        "source": "25:1353",
+        "destination": "25:229"
+      },
+      {
+        "source": "25:1355",
+        "destination": "25:847"
+      },
+      {
+        "source": "25:1360",
+        "destination": "25:1624"
+      },
+      {
+        "source": "25:1362",
+        "destination": "25:1991"
+      },
+      {
+        "source": "25:1513",
+        "destination": "31:1494"
+      },
+      {
+        "source": "40:1622",
+        "destination": "31:229"
+      },
+      {
+        "source": "40:1640",
+        "destination": "31:409"
+      },
+      {
+        "source": "40:1644",
+        "destination": "31:750"
+      },
+      {
+        "source": "40:1654",
+        "destination": "31:1079"
+      },
+      {
+        "source": "40:1657",
+        "destination": "31:1290"
+      },
+      {
+        "source": "25:1726",
+        "destination": "31:409"
+      },
+      {
+        "source": "25:1782",
+        "destination": "25:229"
+      },
+      {
+        "source": "25:1784",
+        "destination": "25:847"
+      },
+      {
+        "source": "25:1786",
+        "destination": "25:1195"
+      },
+      {
+        "source": "25:1791",
+        "destination": "25:1991"
+      },
+      {
+        "source": "25:1880",
+        "destination": "31:1494"
+      },
+      {
+        "source": "40:1709",
+        "destination": "31:229"
+      },
+      {
+        "source": "40:1727",
+        "destination": "31:409"
+      },
+      {
+        "source": "40:1731",
+        "destination": "31:750"
+      },
+      {
+        "source": "40:1741",
+        "destination": "31:1079"
+      },
+      {
+        "source": "40:1744",
+        "destination": "31:1290"
+      },
+      {
+        "source": "25:2093",
+        "destination": "31:409"
+      },
+      {
+        "source": "25:2149",
+        "destination": "25:229"
+      },
+      {
+        "source": "25:2151",
+        "destination": "25:847"
+      },
+      {
+        "source": "25:2153",
+        "destination": "25:1195"
+      },
+      {
+        "source": "25:2155",
+        "destination": "25:1624"
+      },
+      {
+        "source": "25:2253",
+        "destination": "31:1494"
+      },
+      {
+        "source": "50:1838",
+        "destination": "25:229"
+      },
+      {
+        "source": "50:1841",
+        "destination": "25:229"
+      },
+      {
+        "source": "46:1712",
+        "destination": "31:229"
+      },
+      {
+        "source": "46:1730",
+        "destination": "31:409"
+      },
+      {
+        "source": "46:1734",
+        "destination": "31:750"
+      },
+      {
+        "source": "46:1744",
+        "destination": "31:1079"
+      },
+      {
+        "source": "46:1747",
+        "destination": "31:1290"
+      },
+      {
+        "source": "46:1770",
+        "destination": "46:2082"
+      },
+      {
+        "source": "46:2033",
+        "destination": "46:2082"
+      },
+      {
+        "source": "46:1850",
+        "destination": "31:1494"
+      },
+      {
+        "source": "46:1863",
+        "destination": "46:2082"
+      },
+      {
+        "source": "46:2098",
+        "destination": "31:229"
+      },
+      {
+        "source": "46:2116",
+        "destination": "31:409"
+      },
+      {
+        "source": "46:2120",
+        "destination": "31:750"
+      },
+      {
+        "source": "46:2130",
+        "destination": "31:1079"
+      },
+      {
+        "source": "46:2133",
+        "destination": "31:1290"
+      },
+      {
+        "source": "46:2153",
+        "destination": "46:1696"
+      },
+      {
+        "source": "46:2419",
+        "destination": "46:1696"
+      },
+      {
+        "source": "46:2236",
+        "destination": "31:1494"
+      },
+      {
+        "source": "46:2268",
+        "destination": "25:229"
+      }
+    ],
+    "missingTargets": []
+  },
+  {
+    "page": "19:245",
+    "frames": [
+      {
+        "id": "31:1696",
+        "name": "V2 / 07 窄窗口 · 1024 × 768",
+        "w": 1024,
+        "h": 768
+      },
+      {
+        "id": "31:1842",
+        "name": "V2 / 08 共享查看者 · 390 × 844",
+        "w": 390,
+        "h": 844
+      },
+      {
+        "id": "35:297",
+        "name": "V2 / 09 元素编辑 · 深色",
+        "w": 1600,
+        "h": 1000
+      }
+    ],
+    "issues": [],
+    "links": [],
+    "missingTargets": []
+  },
+  {
+    "page": "51:1722",
+    "frames": [
+      {
+        "id": "54:1720",
+        "name": "SETTINGS / 浏览器 · 完整界面",
+        "w": 1600,
+        "h": 1000
+      },
+      {
+        "id": "54:1914",
+        "name": "SETTINGS / 飞书 · 已连接并配对",
+        "w": 1600,
+        "h": 1000
+      },
+      {
+        "id": "54:2116",
+        "name": "模型与浏览器 / 实际状态",
+        "w": 1440,
+        "h": 2016
+      }
+    ],
+    "issues": [],
+    "links": [],
+    "missingTargets": []
+  }
+]

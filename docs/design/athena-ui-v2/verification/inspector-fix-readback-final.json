@@ -1,0 +1,291 @@
+{
+  "evidence": {
+    "VI-01": {
+      "componentId": "26:986",
+      "visibleUnits": 0
+    },
+    "VI-02": {
+      "componentId": "26:1179",
+      "draft": "240",
+      "rangeMatchesConfirmed14": true
+    },
+    "VI-03": {
+      "componentId": "26:2646",
+      "alphaVisible": false,
+      "readoutWidth": 359
+    },
+    "VI-04": {
+      "componentId": "26:2862",
+      "visibleReadoutTexts": [],
+      "caretVisible": true,
+      "sampleColor": {
+        "r": 0.0784313753247261,
+        "g": 0.41960784792900085,
+        "b": 0.5411764979362488
+      },
+      "sampleOpacity": 1
+    },
+    "VI-05": [
+      {
+        "componentId": "26:3380",
+        "hasFourSideRow": false,
+        "hasScalarRow": true,
+        "readout": [
+          "24",
+          "px"
+        ]
+      },
+      {
+        "componentId": "26:3727",
+        "hasFourSideRow": false,
+        "hasScalarRow": true,
+        "readout": [
+          "混合",
+          " "
+        ]
+      }
+    ],
+    "VI-06": {
+      "componentId": "26:3555",
+      "focusedCells": [
+        "Inset 右"
+      ]
+    },
+    "VI-07": [
+      {
+        "componentId": "26:3642",
+        "iconMain": "Athena / Icon / Unlink"
+      },
+      {
+        "componentId": "26:3982",
+        "iconMain": "Athena / Icon / Unlink"
+      }
+    ],
+    "VI-08": {
+      "componentId": "26:4784",
+      "outlinedOptions": [
+        "Option 双线"
+      ]
+    },
+    "VI-09": {
+      "componentId": "26:5511",
+      "viewportId": "61:3301",
+      "clip": true,
+      "overflow": "VERTICAL",
+      "viewportEnd": 82,
+      "counterY": 100,
+      "counterSeparate": true,
+      "bodyLength": 20000,
+      "visibleCounters": 1
+    },
+    "VI-10": {
+      "min": 110,
+      "max": 230
+    },
+    "VI-11": [
+      {
+        "componentId": "26:5971",
+        "unit": "px",
+        "unitWidth": 16
+      },
+      {
+        "componentId": "26:6022",
+        "unit": "px",
+        "unitWidth": 16
+      },
+      {
+        "componentId": "26:6042",
+        "unit": "px",
+        "unitWidth": 16
+      },
+      {
+        "componentId": "26:6065",
+        "unit": "px",
+        "unitWidth": 16
+      }
+    ],
+    "VI-12": [
+      {
+        "componentId": "26:5623",
+        "heading": "外观",
+        "fields": [
+          "背景颜色",
+          "圆角"
+        ]
+      },
+      {
+        "componentId": "26:5734",
+        "heading": "排版",
+        "fields": [
+          "文字颜色",
+          "字号",
+          "字重",
+          "文字对齐"
+        ]
+      }
+    ],
+    "VI-13": {
+      "width": 360,
+      "direction": "VERTICAL"
+    },
+    "VI-14": {
+      "panelId": "29:3067",
+      "breadcrumbLeaf": "div"
+    },
+    "VI-15": {
+      "panelId": "29:3499",
+      "width": 282,
+      "maxLines": null,
+      "truncation": "ENDING",
+      "fullText": "添加任务并通知所有已加入当前工作区、参与本周版本评审与上线验收的协作者",
+      "tooltipMatches": true
+    },
+    "VI-16": {
+      "placeholder": "查找文字、标题或按钮",
+      "visibleStandaloneHints": 0
+    }
+  },
+  "preservedInstances": [
+    {
+      "id": "26:987",
+      "type": "INSTANCE",
+      "expected": "26:986",
+      "actual": "26:986",
+      "retained": true
+    },
+    {
+      "id": "26:1180",
+      "type": "INSTANCE",
+      "expected": "26:1179",
+      "actual": "26:1179",
+      "retained": true
+    },
+    {
+      "id": "26:2647",
+      "type": "INSTANCE",
+      "expected": "26:2646",
+      "actual": "26:2646",
+      "retained": true
+    },
+    {
+      "id": "26:2863",
+      "type": "INSTANCE",
+      "expected": "26:2862",
+      "actual": "26:2862",
+      "retained": true
+    },
+    {
+      "id": "26:3381",
+      "type": "INSTANCE",
+      "expected": "26:3380",
+      "actual": "26:3380",
+      "retained": true
+    },
+    {
+      "id": "26:3728",
+      "type": "INSTANCE",
+      "expected": "26:3727",
+      "actual": "26:3727",
+      "retained": true
+    },
+    {
+      "id": "26:3556",
+      "type": "INSTANCE",
+      "expected": "26:3555",
+      "actual": "26:3555",
+      "retained": true
+    },
+    {
+      "id": "26:3643",
+      "type": "INSTANCE",
+      "expected": "26:3642",
+      "actual": "26:3642",
+      "retained": true
+    },
+    {
+      "id": "26:3983",
+      "type": "INSTANCE",
+      "expected": "26:3982",
+      "actual": "26:3982",
+      "retained": true
+    },
+    {
+      "id": "26:4785",
+      "type": "INSTANCE",
+      "expected": "26:4784",
+      "actual": "26:4784",
+      "retained": true
+    },
+    {
+      "id": "26:5512",
+      "type": "INSTANCE",
+      "expected": "26:5511",
+      "actual": "26:5511",
+      "retained": true
+    },
+    {
+      "id": "26:5455",
+      "type": "INSTANCE",
+      "expected": "26:5454",
+      "actual": "26:5454",
+      "retained": true
+    },
+    {
+      "id": "26:5428",
+      "type": "INSTANCE",
+      "expected": "26:5427",
+      "actual": "26:5427",
+      "retained": true
+    },
+    {
+      "id": "26:5972",
+      "type": "INSTANCE",
+      "expected": "26:5971",
+      "actual": "26:5971",
+      "retained": true
+    },
+    {
+      "id": "26:6023",
+      "type": "INSTANCE",
+      "expected": "26:6022",
+      "actual": "26:6022",
+      "retained": true
+    },
+    {
+      "id": "26:6043",
+      "type": "INSTANCE",
+      "expected": "26:6042",
+      "actual": "26:6042",
+      "retained": true
+    },
+    {
+      "id": "26:6066",
+      "type": "INSTANCE",
+      "expected": "26:6065",
+      "actual": "26:6065",
+      "retained": true
+    },
+    {
+      "id": "26:5624",
+      "type": "INSTANCE",
+      "expected": "26:5623",
+      "actual": "26:5623",
+      "retained": true
+    },
+    {
+      "id": "26:5735",
+      "type": "INSTANCE",
+      "expected": "26:5734",
+      "actual": "26:5734",
+      "retained": true
+    },
+    {
+      "id": "26:5254",
+      "type": "INSTANCE",
+      "expected": "26:5253",
+      "actual": "26:5253",
+      "retained": true
+    }
+  ],
+  "allInstanceLinksPreserved": true
+}

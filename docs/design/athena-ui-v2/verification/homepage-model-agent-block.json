@@ -1,0 +1,237 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-11-02",
+  "status": "passed-homepage-scoped-build",
+  "fileKey": "vEL0JeDlefvuvLjUQQh5SB",
+  "pageId": "19:244",
+  "sectionId": "104:1874",
+  "scope": {
+    "sourceBoardId": "54:2116",
+    "newRootsOnlyInsideHomepageSection": true,
+    "originalSourceBoardChanged": false,
+    "otherExistingNodesChanged": false,
+    "applicationSourceChanged": false,
+    "localSpecChanged": false,
+    "authenticationSubscriptionUploadFeaturesAdded": false
+  },
+  "modelBoard": {
+    "id": "107:2874",
+    "name": "首页 / 模型与浏览器前置状态",
+    "bounds": {
+      "x": 1800,
+      "y": 2440,
+      "width": 1440,
+      "height": 2016
+    },
+    "modelFrameCount": 12,
+    "browserFrameCount": 4,
+    "modelFrames": {
+      "model_loading": "107:2884",
+      "model_load_error": "107:2904",
+      "model_list": "107:2926",
+      "model_effort_ready": "107:2957",
+      "model_effort_draft": "107:2995",
+      "model_saving": "107:3033",
+      "model_busy": "107:3073",
+      "model_unavailable": "107:3111",
+      "model_save_error": "107:3143",
+      "model_default": "107:3185",
+      "model_no_efforts": "107:3204",
+      "model_effort_unavailable": "107:3223"
+    },
+    "modelSpecimens": {
+      "model_loading": "107:2880",
+      "model_load_error": "107:2900",
+      "model_list": "107:2922",
+      "model_effort_ready": "107:2953",
+      "model_effort_draft": "107:2991",
+      "model_saving": "107:3029",
+      "model_busy": "107:3069",
+      "model_unavailable": "107:3107",
+      "model_save_error": "107:3139",
+      "model_default": "107:3181",
+      "model_no_efforts": "107:3200",
+      "model_effort_unavailable": "107:3219"
+    },
+    "browserFrames": {
+      "browser_missing": "107:3260",
+      "browser_starting": "107:3269",
+      "browser_error": "107:3279",
+      "browser_stopped": "107:3288"
+    },
+    "sourcePreservation": {
+      "sourceId": "54:2116",
+      "sourceParentId": "51:1722",
+      "beforeCount": 573,
+      "afterCount": 573,
+      "diffs": []
+    },
+    "textScalingApplied": false
+  },
+  "agentBoard": {
+    "id": "107:3451",
+    "bounds": {
+      "x": 3520,
+      "y": 4640,
+      "width": 1440,
+      "height": 718
+    },
+    "menus": {
+      "ready": "107:3458",
+      "not_ready": "107:3529",
+      "busy": "107:3605"
+    },
+    "cells": {
+      "ready": "107:3456",
+      "not_ready": "107:3527",
+      "busy": "107:3603"
+    },
+    "availableMenuFrameId": "107:3458",
+    "rows": {
+      "ready": {
+        "codex": {
+          "nodeId": "107:3470",
+          "enabled": true,
+          "selected": true
+        },
+        "claude": {
+          "nodeId": "107:3485",
+          "enabled": false,
+          "selected": false
+        },
+        "opencode": {
+          "nodeId": "107:3494",
+          "enabled": false,
+          "selected": false
+        },
+        "gemini": {
+          "nodeId": "107:3504",
+          "enabled": false,
+          "selected": false
+        }
+      },
+      "not_ready": {
+        "codex": {
+          "nodeId": "107:3548",
+          "enabled": false,
+          "selected": false
+        },
+        "claude": {
+          "nodeId": "107:3561",
+          "enabled": false,
+          "selected": false
+        },
+        "opencode": {
+          "nodeId": "107:3570",
+          "enabled": false,
+          "selected": false
+        },
+        "gemini": {
+          "nodeId": "107:3580",
+          "enabled": false,
+          "selected": false
+        }
+      },
+      "busy": {
+        "codex": {
+          "nodeId": "107:3623",
+          "enabled": false,
+          "selected": true
+        },
+        "claude": {
+          "nodeId": "107:3638",
+          "enabled": false,
+          "selected": false
+        },
+        "opencode": {
+          "nodeId": "107:3647",
+          "enabled": false,
+          "selected": false
+        },
+        "gemini": {
+          "nodeId": "107:3657",
+          "enabled": false,
+          "selected": false
+        }
+      }
+    },
+    "managementButtons": {
+      "ready": "107:3521",
+      "not_ready": "107:3597",
+      "busy": "107:3674"
+    },
+    "states": {
+      "ready": "Codex is the only executable selected Agent; Claude Code detected but unsupported; OpenCode and Gemini CLI not detected.",
+      "not_ready": "All selections disabled; Codex not ready; management entry explains installation/connection checks.",
+      "busy": "Current Codex retained; switching disabled until task ends; management entry remains present."
+    }
+  },
+  "designSystem": {
+    "textStyles": {
+      "Display": "S:5d95b141ef3b7ab5eced16513a9df09156b839fe,",
+      "Heading": "S:09ce12ce4a557973472cd42df2e5a032cf1c605c,",
+      "Title": "S:47a7c3eac3b201f77113ae6fd6f65d89f5302842,",
+      "Body": "S:03add826664dccaa875d48d5d28d8874b8eb2f37,",
+      "Label": "S:3ab5935054c7258602bea533697a4f271ce4a1f9,",
+      "Caption": "S:59f1e4e36723f637b3993ac144d67ccf524e0d46,",
+      "Micro": "S:27b42cc9fad7e0f22c3ebf2689c28257ad9e01de,",
+      "Panel": "S:61e894823a0921424048465f989a62000408dec3,",
+      "Reading": "S:6bfc04845c806bec7e84bbb3f2758514429e080a,",
+      "Code": "S:5fcf88b5cf0c0b1f221288228c90fdf2a8114301,",
+      "ControlLabel": "S:362a95177d71ebd0b76935f4c8db1a2bd7efb596,",
+      "ControlValue": "S:3de6a75535f460b2a6c767acb8647b600c94f2c7,",
+      "SectionLabel": "S:1dbad34f6a827edc4775db5c6f11279c8d5ffe9d,"
+    },
+    "radiusRoles": [
+      "window",
+      "overlay",
+      "control",
+      "option"
+    ],
+    "effectStyleId": "S:216ded04eeec3e43f66d6b406b0720b906d495f6,",
+    "reusedComponents": [
+      "Icon/Bot",
+      "Icon/Terminal",
+      "Icon/Code2",
+      "Icon/Brain",
+      "Icon/Check",
+      "Icon/Lock",
+      "Icon/Info",
+      "Button/Ghost"
+    ],
+    "colors": "Existing monochrome semantic variables, with blue Bot icon accents. Paint RGB fallback is resolved from the variable for each consumer before binding.",
+    "fontFamilies": [
+      "Noto Sans SC"
+    ]
+  },
+  "visualReview": {
+    "status": "passed",
+    "agentScreenshot": {
+      "nodeId": "107:3451",
+      "scale": 1,
+      "path": "homepage-review/agent-menu-states.png",
+      "width": 1440,
+      "height": 720,
+      "sha256": "28b388e023cf0730580f68bcbc6a0ae53b6c48dd6f2762c2cedb8b22f53dbb98",
+      "bytes": 119773
+    },
+    "clonedBoardScreenshot": {
+      "nodeId": "107:2874",
+      "scale": 0.65
+    },
+    "observations": [
+      "All three Agent menus fit their cells; no visible text clipping or overlap.",
+      "Agent names, execution availability, current selection and busy/not-ready messages are readable.",
+      "Management entry is present in every menu.",
+      "Rounded neutral surfaces, the native overlay shadow and restrained colored icons match the current homepage design.",
+      "Cloned model and browser boards preserve the existing state layouts and original font sizes."
+    ],
+    "openIssues": []
+  },
+  "interactionScope": {
+    "menuOpenDemoTarget": "107:3458",
+    "newPrototypeLinksWritten": 0,
+    "note": "This task provides actual destination frames for the parent agent to wire into the homepage demo. It does not execute or authenticate any CLI."
+  },
+  "scopeNote": "Model/Agent state-board construction-stage evidence. Later parent homepage wiring and final target readback are recorded in homepage-final-structure.json; this report does not execute a CLI or application behavior."
+}

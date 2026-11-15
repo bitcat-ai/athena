@@ -1,0 +1,211 @@
+{
+  "date": "2026-11-02",
+  "fileKey": "vEL0JeDlefvuvLjUQQh5SB",
+  "status": "complete",
+  "removedPages": [
+    {
+      "id": "0:1",
+      "name": "R1 · 设计研究",
+      "topLevelNodes": [
+        {
+          "id": "11:2",
+          "name": "Athena / 冷光 · 设计总览",
+          "type": "FRAME"
+        },
+        {
+          "id": "11:684",
+          "name": "Research / 参考产品与设计取舍",
+          "type": "FRAME"
+        },
+        {
+          "id": "11:764",
+          "name": "Handoff / 设计决策与实现约束",
+          "type": "FRAME"
+        }
+      ]
+    },
+    {
+      "id": "2:256",
+      "name": "R1 · 首轮界面",
+      "topLevelNodes": [
+        {
+          "id": "4:2",
+          "name": "01 / 新对话 · 1440",
+          "type": "FRAME"
+        },
+        {
+          "id": "4:170",
+          "name": "02 / 对话与浏览器 · 执行中",
+          "type": "FRAME"
+        },
+        {
+          "id": "4:479",
+          "name": "03 / 元素编辑 · 即时预览",
+          "type": "FRAME"
+        },
+        {
+          "id": "5:287",
+          "name": "04 / 执行记录 · 等待人工处理",
+          "type": "FRAME"
+        },
+        {
+          "id": "5:600",
+          "name": "05 / 用量概览 · 部分数据",
+          "type": "FRAME"
+        },
+        {
+          "id": "5:819",
+          "name": "06 / 设置与连接 · 本机 Agent",
+          "type": "FRAME"
+        },
+        {
+          "id": "5:1006",
+          "name": "07 / 共享页面 · 权限与控制权",
+          "type": "FRAME"
+        },
+        {
+          "id": "10:902",
+          "name": "11 / 元素编辑 · 深色主题",
+          "type": "FRAME"
+        }
+      ]
+    },
+    {
+      "id": "2:258",
+      "name": "R1 · 状态参考",
+      "topLevelNodes": [
+        {
+          "id": "7:2",
+          "name": "08 / 窄窗口 · 1024 × 768",
+          "type": "FRAME"
+        },
+        {
+          "id": "7:142",
+          "name": "09 / 共享页面 · 移动端查看者",
+          "type": "FRAME"
+        },
+        {
+          "id": "7:186",
+          "name": "10 / 状态矩阵 · 真实任务与恢复",
+          "type": "FRAME"
+        },
+        {
+          "id": "13:392",
+          "name": "12 / 功能面板 · 录制、连接与审批",
+          "type": "FRAME"
+        }
+      ]
+    }
+  ],
+  "removedFoundationAssets": [
+    {
+      "id": "9:246",
+      "name": "Foundations / 冷光设计语言",
+      "type": "FRAME"
+    },
+    {
+      "id": "9:344",
+      "name": "Components / 核心组件与变体",
+      "type": "FRAME"
+    },
+    {
+      "id": "9:62",
+      "name": "Athena / Composer / Default",
+      "type": "COMPONENT"
+    },
+    {
+      "id": "9:141",
+      "name": "Athena / Composer / Context",
+      "type": "COMPONENT"
+    },
+    {
+      "id": "9:170",
+      "name": "Athena / Execution / Plan",
+      "type": "COMPONENT"
+    },
+    {
+      "id": "9:226",
+      "name": "Athena / Inspector / Target",
+      "type": "COMPONENT"
+    },
+    {
+      "id": "9:243",
+      "name": "Athena / Inspector / Property",
+      "type": "COMPONENT"
+    }
+  ],
+  "counts": {
+    "removedPages": 3,
+    "removedOldBoards": 17,
+    "removedUnusedCompositeComponents": 5,
+    "remainingPages": 6,
+    "preservedCurrentBoards": 49
+  },
+  "verification": {
+    "pages": [
+      {
+        "pageId": "19:246",
+        "currentFrames": 4,
+        "instancesChecked": 47,
+        "linksChecked": 46,
+        "broken": [],
+        "missingFrames": []
+      },
+      {
+        "pageId": "19:244",
+        "currentFrames": 15,
+        "instancesChecked": 534,
+        "linksChecked": 107,
+        "broken": [],
+        "missingFrames": []
+      },
+      {
+        "pageId": "19:243",
+        "currentFrames": 23,
+        "instancesChecked": 409,
+        "linksChecked": 0,
+        "broken": [],
+        "missingFrames": []
+      },
+      {
+        "pageId": "19:245",
+        "currentFrames": 3,
+        "instancesChecked": 69,
+        "linksChecked": 0,
+        "broken": [],
+        "missingFrames": []
+      },
+      {
+        "pageId": "51:1722",
+        "currentFrames": 4,
+        "instancesChecked": 123,
+        "linksChecked": 0,
+        "broken": [],
+        "missingFrames": []
+      },
+      {
+        "pageId": "2:257",
+        "currentFrames": 0,
+        "instancesChecked": 13,
+        "linksChecked": 0,
+        "broken": [],
+        "missingFrames": []
+      }
+    ],
+    "brokenReferences": 0,
+    "missingCurrentFrames": 0,
+    "instancesChecked": 1195,
+    "linksChecked": 153,
+    "overviewScreenshot": "Live 0.8x screenshot reviewed after the overview note update"
+  },
+  "componentRemovalDetail": "The five removed composite components are no longer attached to any page. Figma retains their node records with parent=null; no current instance depends on them.",
+  "agentAtlas": {
+    "fileKey": "jIaBK8NMvfZsjuMktNwpfO",
+    "readOnlyReview": true,
+    "pages": 8,
+    "currentBoards": 52,
+    "stateVariants": 175,
+    "obsoleteBoardsFound": 0,
+    "changed": false
+  }
+}

@@ -1,0 +1,954 @@
+{
+  "section": {
+    "id": "104:1874",
+    "name": "01 · 首页 / 页面与交互",
+    "x": 3660,
+    "y": 100,
+    "width": 5200,
+    "height": 8120
+  },
+  "frames": [
+    {
+      "id": "31:229",
+      "name": "首页 / 默认",
+      "x": 80,
+      "y": 80,
+      "width": 1600,
+      "height": 1000
+    },
+    {
+      "id": "46:1696",
+      "name": "首页 / 浏览器展开",
+      "x": 1800,
+      "y": 80,
+      "width": 1600,
+      "height": 1000
+    },
+    {
+      "id": "46:2082",
+      "name": "首页 / 选取页面元素",
+      "x": 3520,
+      "y": 80,
+      "width": 1600,
+      "height": 1000
+    },
+    {
+      "id": "107:2874",
+      "name": "首页 / 模型与浏览器前置状态",
+      "x": 1800,
+      "y": 2440,
+      "width": 1440,
+      "height": 2016
+    },
+    {
+      "id": "107:3451",
+      "name": "首页 / Agent 选择",
+      "x": 3520,
+      "y": 4640,
+      "width": 1440,
+      "height": 718
+    },
+    {
+      "id": "108:2172",
+      "name": "01 用户入口与上下文菜单",
+      "x": 3520,
+      "y": 2440,
+      "width": 1600,
+      "height": 640
+    },
+    {
+      "id": "108:2359",
+      "name": "02 对话搜索",
+      "x": 3520,
+      "y": 3200,
+      "width": 1600,
+      "height": 1072
+    },
+    {
+      "id": "109:2320",
+      "name": "03 输入与任务状态",
+      "x": 80,
+      "y": 2440,
+      "width": 1600,
+      "height": 1554
+    },
+    {
+      "id": "109:2640",
+      "name": "04 工作目录、侧栏与快捷入口",
+      "x": 80,
+      "y": 5800,
+      "width": 1600,
+      "height": 1124
+    },
+    {
+      "id": "113:2468",
+      "name": "首页 / 用户菜单展开",
+      "x": 80,
+      "y": 1240,
+      "width": 1600,
+      "height": 1000
+    },
+    {
+      "id": "113:2690",
+      "name": "首页 / 模型选择展开",
+      "x": 1800,
+      "y": 1240,
+      "width": 1600,
+      "height": 1000
+    },
+    {
+      "id": "113:2891",
+      "name": "首页 / 网页上下文菜单",
+      "x": 3520,
+      "y": 1240,
+      "width": 1600,
+      "height": 1000
+    },
+    {
+      "id": "113:3090",
+      "name": "首页 / Agent 选择展开",
+      "x": 1800,
+      "y": 4640,
+      "width": 1600,
+      "height": 1000
+    },
+    {
+      "id": "113:3334",
+      "name": "首页 / 对话搜索展开",
+      "x": 3520,
+      "y": 5800,
+      "width": 1600,
+      "height": 1000
+    },
+    {
+      "id": "113:3556",
+      "name": "首页 / 对话搜索结果",
+      "x": 3520,
+      "y": 7040,
+      "width": 1600,
+      "height": 1000
+    },
+    {
+      "id": "113:3771",
+      "name": "首页 / 工作目录入口",
+      "x": 1800,
+      "y": 7040,
+      "width": 1600,
+      "height": 1000
+    },
+    {
+      "id": "113:3964",
+      "name": "首页 / 侧栏收起",
+      "x": 80,
+      "y": 4640,
+      "width": 1600,
+      "height": 1000
+    },
+    {
+      "id": "113:4147",
+      "name": "首页 / 查看页面 · 草稿就绪",
+      "x": 80,
+      "y": 7040,
+      "width": 1600,
+      "height": 1000
+    },
+    {
+      "id": "113:4432",
+      "name": "首页 / 录制网页操作",
+      "x": 1800,
+      "y": 5800,
+      "width": 1600,
+      "height": 1000
+    },
+    {
+      "id": "116:3403",
+      "name": "首页 / 板块索引",
+      "x": 80,
+      "y": 20,
+      "width": 5040,
+      "height": 40
+    },
+    {
+      "id": "116:3429",
+      "name": "首页 / 行为与能力边界",
+      "x": 80,
+      "y": 4060,
+      "width": 1600,
+      "height": 350
+    }
+  ],
+  "issues": [
+    {
+      "root": "109:2320",
+      "id": "109:2615",
+      "name": "Long draft viewport",
+      "childId": "109:2616",
+      "clipsContent": true,
+      "overflowDirection": "VERTICAL"
+    }
+  ],
+  "links": [
+    {
+      "source": "31:236",
+      "target": "113:3964",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "31:257",
+      "target": "113:3334",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "31:266",
+      "target": "113:3771",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "31:277",
+      "target": "31:409",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "31:281",
+      "target": "31:750",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "31:291",
+      "target": "31:1079",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "31:301",
+      "target": "31:1290",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "104:1875",
+      "target": "113:2468",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "31:318",
+      "target": "46:1696",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "31:344",
+      "target": "113:2891",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "116:3345",
+      "target": "113:3090",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "116:3347",
+      "target": "113:2690",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "31:366",
+      "target": "113:4147",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "31:379",
+      "target": "46:2082",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "31:390",
+      "target": "113:4432",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "31:403",
+      "target": "113:3771",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "46:1712",
+      "target": "31:229",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "46:1730",
+      "target": "31:409",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "46:1734",
+      "target": "31:750",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "46:1744",
+      "target": "31:1079",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "46:1747",
+      "target": "31:1290",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "46:1770",
+      "target": "46:2082",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "46:2033",
+      "target": "46:2082",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "46:1850",
+      "target": "31:1494",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "46:1863",
+      "target": "46:2082",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "46:2098",
+      "target": "31:229",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "46:2116",
+      "target": "31:409",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "46:2120",
+      "target": "31:750",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "46:2130",
+      "target": "31:1079",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "46:2133",
+      "target": "31:1290",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "46:2153",
+      "target": "46:1696",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "46:2419",
+      "target": "46:1696",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "46:2236",
+      "target": "31:1494",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "46:2268",
+      "target": "25:229",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "108:2281",
+      "target": "31:1290",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "108:2289",
+      "target": "31:1079",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "108:2299",
+      "target": "113:3771",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "108:2313",
+      "target": "113:4147",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "108:2320",
+      "target": "46:2082",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "108:2325",
+      "target": "113:4432",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "108:2375",
+      "target": "31:229",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "108:2387",
+      "target": "31:409",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "108:2401",
+      "target": "31:750",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "108:2425",
+      "target": "31:229",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "108:2458",
+      "target": "31:229",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "108:2470",
+      "target": "31:409",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "108:2501",
+      "target": "31:229",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "108:2515",
+      "target": "31:229",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "109:2399",
+      "target": "117:3356",
+      "navigation": "SCROLL_TO"
+    },
+    {
+      "source": "109:2497",
+      "target": "31:1290",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "109:2566",
+      "target": "118:3366",
+      "navigation": "SCROLL_TO"
+    },
+    {
+      "source": "109:2381",
+      "target": "31:409",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "109:2525",
+      "target": "31:409",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "109:2538",
+      "target": "31:409",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "109:2685",
+      "target": "31:409",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "109:2698",
+      "target": "31:229",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "109:2729",
+      "target": "46:1696",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "109:2751",
+      "target": "46:1696",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:2499",
+      "target": "31:409",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:2503",
+      "target": "31:750",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:2513",
+      "target": "31:1079",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:2516",
+      "target": "31:1290",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:2526",
+      "target": "46:1696",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:2556",
+      "target": "46:2082",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:2645",
+      "target": "31:229",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:2648",
+      "target": "31:1290",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:2651",
+      "target": "31:1079",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:2654",
+      "target": "113:3771",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:2721",
+      "target": "31:409",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:2725",
+      "target": "31:750",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:2735",
+      "target": "31:1079",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:2738",
+      "target": "31:1290",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:2748",
+      "target": "46:1696",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:2778",
+      "target": "46:2082",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:2867",
+      "target": "31:229",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:2874",
+      "target": "31:229",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:2922",
+      "target": "31:409",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:2926",
+      "target": "31:750",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:2936",
+      "target": "31:1079",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:2939",
+      "target": "31:1290",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:2949",
+      "target": "46:1696",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:2979",
+      "target": "46:2082",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:3068",
+      "target": "31:229",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:3072",
+      "target": "113:4147",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:3075",
+      "target": "46:2082",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:3078",
+      "target": "113:4432",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:3121",
+      "target": "31:409",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:3125",
+      "target": "31:750",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:3135",
+      "target": "31:1079",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:3138",
+      "target": "31:1290",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:3148",
+      "target": "46:1696",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:3178",
+      "target": "46:2082",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:3267",
+      "target": "31:229",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:3365",
+      "target": "31:409",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:3369",
+      "target": "31:750",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:3379",
+      "target": "31:1079",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:3382",
+      "target": "31:1290",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:3392",
+      "target": "46:1696",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:3422",
+      "target": "46:2082",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:3511",
+      "target": "31:229",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:3516",
+      "target": "31:229",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:3518",
+      "target": "113:3556",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:3522",
+      "target": "31:409",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:3532",
+      "target": "31:750",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:3587",
+      "target": "31:409",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:3591",
+      "target": "31:750",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:3601",
+      "target": "31:1079",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:3604",
+      "target": "31:1290",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:3614",
+      "target": "46:1696",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:3644",
+      "target": "46:2082",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:3733",
+      "target": "31:229",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:3738",
+      "target": "31:229",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:3744",
+      "target": "31:409",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:3802",
+      "target": "31:409",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:3806",
+      "target": "31:750",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:3816",
+      "target": "31:1079",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:3819",
+      "target": "31:1290",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:3829",
+      "target": "46:1696",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:3859",
+      "target": "46:2082",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:3948",
+      "target": "31:229",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:3995",
+      "target": "31:409",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:3999",
+      "target": "31:750",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:4009",
+      "target": "31:1079",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:4012",
+      "target": "31:1290",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:4141",
+      "target": "31:229",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:4022",
+      "target": "46:1696",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:4052",
+      "target": "46:2082",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:4160",
+      "target": "31:229",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:4178",
+      "target": "31:409",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:4182",
+      "target": "31:750",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:4192",
+      "target": "31:1079",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:4195",
+      "target": "31:1290",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:4217",
+      "target": "46:2082",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:4228",
+      "target": "46:2082",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:4256",
+      "target": "31:1494",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:4269",
+      "target": "46:2082",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:4445",
+      "target": "31:229",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:4463",
+      "target": "31:409",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:4467",
+      "target": "31:750",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:4477",
+      "target": "31:1079",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:4480",
+      "target": "31:1290",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:4502",
+      "target": "46:2082",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:4513",
+      "target": "46:2082",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:4541",
+      "target": "31:1494",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:4554",
+      "target": "46:2082",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "113:4556",
+      "target": "46:1696",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "116:3405",
+      "target": "31:229",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "116:3409",
+      "target": "113:2468",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "116:3413",
+      "target": "109:2320",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "116:3417",
+      "target": "107:2874",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "116:3421",
+      "target": "108:2359",
+      "navigation": "NAVIGATE"
+    },
+    {
+      "source": "116:3425",
+      "target": "109:2640",
+      "navigation": "NAVIGATE"
+    }
+  ],
+  "broken": [],
+  "overlaps": []
+}

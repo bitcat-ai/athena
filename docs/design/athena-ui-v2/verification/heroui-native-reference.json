@@ -1,0 +1,295 @@
+{
+  "schema_version": 1,
+  "verified_at": "2026-11-02",
+  "scope": "Current HeroUI MCP native CSS/default theme; no Figma or application source changed; no claim about a locally installed package version.",
+  "evidence": [
+    "list_components",
+    "get_component_docs",
+    "get_css",
+    "get_theme_variables(default)",
+    "get_docs(theming)",
+    "official GitHub default variables and theme bridge"
+  ],
+  "px_assumption": "1rem = 16px; radii change when --radius changes.",
+  "sources": {
+    "default_tokens": "https://github.com/heroui-inc/heroui/blob/v3/packages/styles/themes/default/variables.css",
+    "token_bridge": "https://github.com/heroui-inc/heroui/blob/v3/packages/styles/themes/shared/theme.css",
+    "theming": "https://heroui.com/en/docs/react/getting-started/theming"
+  },
+  "native_tokens": {
+    "radius": "0.5rem",
+    "radius_px": {
+      "field": 12,
+      "xl": 12,
+      "2xl": 16,
+      "3xl": 24,
+      "4xl": 32
+    },
+    "radius_formulas": {
+      "field": "var(--radius) * 1.5",
+      "xl": "var(--radius) * 1.5",
+      "2xl": "var(--radius) * 2",
+      "3xl": "var(--radius) * 3",
+      "4xl": "var(--radius) * 4"
+    },
+    "border_width": "1px",
+    "field_border_width": "0px",
+    "field_border": "transparent",
+    "field_bridge": "--border-width-field: var(--field-border-width, var(--border-width))",
+    "light": {
+      "background": "oklch(0.9702 0 0)",
+      "surface": "var(--white)",
+      "surface_secondary": "oklch(0.9524 0.0013 286.37)",
+      "surface_tertiary": "oklch(0.9373 0.0013 286.37)",
+      "overlay": "var(--white)",
+      "field": "var(--white)",
+      "default": "oklch(94% 0.001 286.375)",
+      "border": "oklch(90% 0.004 286.32)",
+      "surface_shadow": "0 2px 4px 0 rgba(0,0,0,0.04), 0 1px 2px 0 rgba(0,0,0,0.06), 0 0 1px 0 rgba(0,0,0,0.06)",
+      "field_shadow": "0 2px 4px 0 rgba(0,0,0,0.04), 0 1px 2px 0 rgba(0,0,0,0.06), 0 0 1px 0 rgba(0,0,0,0.06)",
+      "overlay_shadow": "0 2px 8px 0 rgba(0,0,0,0.06), 0 -6px 12px 0 rgba(0,0,0,0.03), 0 14px 28px 0 rgba(0,0,0,0.08)"
+    },
+    "dark": {
+      "background": "oklch(12% 0.005 285.823)",
+      "surface": "oklch(0.2103 0.0059 285.89)",
+      "surface_secondary": "oklch(0.257 0.0037 286.14)",
+      "surface_tertiary": "oklch(0.2721 0.0024 247.91)",
+      "overlay": "oklch(0.2103 0.0059 285.89)",
+      "field": "oklch(0.2103 0.0059 285.89)",
+      "default": "oklch(27.4% 0.006 286.033)",
+      "surface_shadow": "0 0 0 0 transparent inset",
+      "field_shadow": "0 0 0 0 transparent inset",
+      "overlay_shadow": "0 0 1px 0 rgba(255,255,255,0.3) inset"
+    }
+  },
+  "components": [
+    {
+      "name": "Button",
+      "package": "@heroui/react",
+      "docs_url": "https://heroui.com/en/docs/react/components/button",
+      "css_url": "https://github.com/heroui-inc/heroui/blob/v3/packages/styles/components/button.css",
+      "native": {
+        "radius": "rounded-3xl",
+        "radius_px": 24,
+        "border": "No border in base/primary/secondary/tertiary/ghost. Outline adds border border-border.",
+        "shadow": "No base elevation shadow declared; focus styling separate.",
+        "fill": {
+          "primary": "var(--accent)",
+          "secondary": "var(--default)",
+          "tertiary": "var(--default)",
+          "ghost": "transparent",
+          "outline": "transparent"
+        },
+        "height": "h-10 md:h-9"
+      },
+      "customizable": [
+        "--radius",
+        "variant",
+        "className: radius, fill, border, shadow"
+      ]
+    },
+    {
+      "name": "Card",
+      "package": "@heroui/react",
+      "docs_url": "https://heroui.com/en/docs/react/components/card",
+      "css_url": "https://github.com/heroui-inc/heroui/blob/v3/packages/styles/components/card.css",
+      "native": {
+        "radius": "min(32px, var(--radius-3xl))",
+        "radius_px": 24,
+        "border": "No default border declaration.",
+        "shadow": "shadow-surface",
+        "fill": {
+          "default": "bg-surface",
+          "secondary": "bg-surface-secondary",
+          "tertiary": "bg-surface-tertiary",
+          "transparent": "bg-transparent; border-none; shadow-none"
+        }
+      },
+      "customizable": [
+        "--radius (32px cap remains)",
+        "variant",
+        "--surface-shadow",
+        "className"
+      ]
+    },
+    {
+      "name": "Input",
+      "package": "@heroui/react",
+      "docs_url": "https://heroui.com/en/docs/react/components/input",
+      "css_url": "https://github.com/heroui-inc/heroui/blob/v3/packages/styles/components/input.css",
+      "native": {
+        "radius": "rounded-field",
+        "radius_px": 12,
+        "border": "border-width: var(--border-width-field); default 0px; field-border transparent.",
+        "shadow": "primary: shadow-field; secondary: shadow-none",
+        "fill": {
+          "primary": "bg-field => var(--field-background)",
+          "secondary": "var(--default)"
+        },
+        "states": "Hover/focus use field-hover/field-focus and corresponding field-border tokens; retain focus treatment."
+      },
+      "customizable": [
+        "--field-radius",
+        "--field-border-width",
+        "--field-border",
+        "--field-shadow",
+        "--field-background",
+        "variant",
+        "className"
+      ]
+    },
+    {
+      "name": "Select",
+      "package": "@heroui/react",
+      "docs_url": "https://heroui.com/en/docs/react/components/select",
+      "css_url": "https://github.com/heroui-inc/heroui/blob/v3/packages/styles/components/select.css",
+      "native": {
+        "trigger": {
+          "radius": "rounded-field",
+          "radius_px": 12,
+          "border": "var(--border-width-field), default 0px",
+          "shadow": "primary: shadow-field; secondary: shadow-none",
+          "fill": {
+            "primary": "bg-field",
+            "secondary": "var(--default)"
+          },
+          "min_height_px": 36
+        },
+        "popover": {
+          "radius": "min(32px, calc(var(--radius-2xl) + var(--spacing) * 1.5))",
+          "radius_px": 22,
+          "border": "No default border declaration.",
+          "shadow": "var(--overlay-shadow)",
+          "fill": "bg-overlay"
+        }
+      },
+      "customizable": [
+        "field tokens",
+        "--overlay-shadow",
+        "--overlay",
+        "variant",
+        "trigger/popover className"
+      ]
+    },
+    {
+      "name": "PromptInput",
+      "package": "@heroui-pro/react",
+      "docs_url": "https://heroui.pro/docs/react/components/prompt-input",
+      "css_source": "HeroUI Pro MCP get_css(prompt-input)",
+      "native": {
+        "shell": {
+          "radius": "rounded-2xl",
+          "radius_px": 16,
+          "border": "solid var(--field-border, var(--border)); var(--border-width-field, var(--field-border-width, 1px)); default 0px.",
+          "shadow": "No default shell elevation shadow declared in current get_css; secondary explicitly shadow-none.",
+          "fill": {
+            "primary": "var(--field-background, var(--default))",
+            "secondary": "var(--default)"
+          }
+        },
+        "compact_inline": {
+          "collapsed_radius": "rounded-3xl",
+          "collapsed_radius_px": 24,
+          "expanded_radius": "var(--radius-2xl, 1rem)",
+          "expanded_radius_px": 16
+        },
+        "textarea": "Chrome stripped: transparent fill/border, box-shadow none; shell owns surface."
+      },
+      "customizable": [
+        "PromptInput.Shell className",
+        "--field-radius does not control shell radius; use --radius or shell className",
+        "Adding shadow-field/shadow-surface is customization, not native default.",
+        "Changing stacked composer radius to 24px is customization."
+      ]
+    },
+    {
+      "name": "Sidebar",
+      "package": "@heroui-pro/react",
+      "docs_url": "https://heroui.pro/docs/react/components/sidebar",
+      "css_source": "HeroUI Pro MCP get_css(sidebar)",
+      "native": {
+        "default": {
+          "radius": "No outer radius declared.",
+          "border": "No border width declared; separator is an inset shadow.",
+          "shadow": "inset -1px 0 0 var(--sidebar-edge-outline); right side uses +1px.",
+          "edge_outline": {
+            "light": "rgb(0 0 0 / 0.08)",
+            "dark": "rgb(255 255 255 / 0.1)"
+          },
+          "fill": "bg-background"
+        },
+        "floating": {
+          "radius": "rounded-2xl",
+          "radius_px": 16,
+          "border": "border border-border",
+          "shadow": "shadow-lg",
+          "fill": "bg-surface",
+          "margin": "m-2"
+        },
+        "inset": {
+          "border": "border-none",
+          "shadow": "shadow-none",
+          "fill": "bg-transparent",
+          "paired_main": "bg-surface shadow-surface m-2 ms-0 rounded-2xl border"
+        },
+        "menu_item": {
+          "radius": "rounded-2xl",
+          "radius_px": 16,
+          "hover_current_fill": "bg-default"
+        }
+      },
+      "customizable": [
+        "variant",
+        "--sidebar-edge-outline",
+        "--sidebar-width",
+        "className; removing default edge line or inset main border is customization."
+      ]
+    },
+    {
+      "name": "Popover",
+      "package": "@heroui/react",
+      "docs_url": "https://heroui.com/en/docs/react/components/popover",
+      "css_url": "https://github.com/heroui-inc/heroui/blob/v3/packages/styles/components/popover.css",
+      "native": {
+        "radius": "min(32px, var(--radius-3xl))",
+        "radius_px": 24,
+        "border": "No default border declaration.",
+        "shadow": "var(--overlay-shadow)",
+        "fill": "bg-overlay"
+      },
+      "customizable": [
+        "--radius (32px cap remains)",
+        "--overlay",
+        "--overlay-shadow",
+        "className"
+      ]
+    },
+    {
+      "name": "ChatTool",
+      "package": "@heroui-pro/react/chat-tool",
+      "docs_url": "https://heroui.pro/docs/react/components/chat-tool",
+      "css_source": "HeroUI Pro MCP get_css(chat-tool)",
+      "native": {
+        "radius": "rounded-xl",
+        "radius_px": 12,
+        "border": "border border-default (1px); error uses border-danger/30; requires-action uses border-warning/40.",
+        "shadow": "No default elevation shadow declared.",
+        "fill": "No base fill declared; transparent. Trigger hover/pressed uses bg-default.",
+        "trigger_radius": "rounded-none; outer wrapper owns clipping.",
+        "group": "Same rounded-xl + border-default border."
+      },
+      "customizable": [
+        "className on outer card/group",
+        "Increasing to 16px/24px is customization.",
+        "Replacing border with surface fill/shadow is customization; preserve semantic action/error states."
+      ]
+    }
+  ],
+  "interpretation": [
+    "Native surface depth is subtle fill contrast plus light surface/field shadows, with stronger overlay shadows.",
+    "Do not state that every native HeroUI component is borderless, rounded-3xl, or elevated.",
+    "Card min(32px, radius-3xl) resolves to 24px in the default theme; 32px is a cap, not the default.",
+    "Default theme --radius is 0.5rem. The theming guide's custom-theme example uses 0.75rem and must not be mistaken for native default.",
+    "Dark default surface/field shadows are transparent; do not copy light-mode elevation values into dark mode and label them native."
+  ]
+}

@@ -1,0 +1,52 @@
+{
+  "date": "2026-11-01",
+  "status": "passed-for-design-scope",
+  "majorBoards": {
+    "main": {
+      "reviewed": 49,
+      "expected": 49,
+      "evidence": "main-visual-coverage.json"
+    },
+    "agent": {
+      "reviewed": 52,
+      "expected": 52,
+      "evidence": "agent-visual-coverage.json"
+    }
+  },
+  "agentSemantics": {
+    "casesProven": 175,
+    "casesExpected": 175,
+    "checksProven": 1188,
+    "notApplicable": 1,
+    "missing": 0,
+    "richPanelsProven": 8,
+    "evidence": "actual-semantic-audit.json"
+  },
+  "inspector": {
+    "cases": 85,
+    "boards": 25,
+    "findingsClosed": 16,
+    "remaining": 0,
+    "instanceLinksPreserved": 20,
+    "evidence": "inspector-final-visual-audit.json"
+  },
+  "contrast": {
+    "passed": 48,
+    "total": 48,
+    "evidence": "final-contrast-audit.json"
+  },
+  "prototype": {
+    "mainNavigationLinks": 107,
+    "agentClickLinks": 6,
+    "agentTimedDemonstrations": 1,
+    "documentedInspectorBehaviorEntries": 120,
+    "behaviorEntriesCountedAsLinks": false,
+    "runtimeClickTested": false
+  },
+  "scopeLimits": [
+    "本轮交付与验收针对可编辑Figma设计和明确的状态样例，不代表应用已实现或部署。",
+    "没有运行真实键盘、读屏、IME、授权、取消、媒体播放或网络业务动作。",
+    "原型导航记录与条件说明分开；未把所有状态图声称为可执行动态原型。",
+    "对比度覆盖48组指定语义组合，不等于完整运行时WCAG审计。"
+  ]
+}

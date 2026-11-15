@@ -1,0 +1,34 @@
+{
+  "scope": "schema/design checks with synthetic temporary data; no application integration or user-data migration",
+  "engine": {
+    "electron": "45.1.0",
+    "node": "24.22.1",
+    "sqlite": "3.53.4"
+  },
+  "schema": "docs/database/schema.sql",
+  "schemaSha256": "20eb4de359a05ecdd7705660fa120121add92bea98d050efaa650ce0523049b6",
+  "checksPassed": 21,
+  "checks": [
+    "connection pragmas, version and transactional schema migration",
+    "foreign keys, ordering, required keys and JSON root types",
+    "legacy unscoped history and missing agent are preserved",
+    "archive restoration preserves records and deterministic remote-chat routing order",
+    "message plus usage acceptance is all-or-nothing",
+    "unknown usage remains NULL; explicit zero and cumulative snapshots survive",
+    "stored integers remain readable under the JavaScript Number contract",
+    "call IDs are unique within a message, not across independent messages",
+    "image count, per-image bytes and aggregate bytes are enforced",
+    "memory provenance and global business keys reject NULL loopholes",
+    "recording selection and rule injection preserve array order independently of clocks",
+    "repository component ownership and mapping uniqueness",
+    "knowledge snapshots require both authority and root; separate identities do not merge",
+    "artifact readiness and inbox deduplication have explicit integrity checks",
+    "late updates cannot overwrite a newer or terminal message",
+    "recovery records interruption without replaying work",
+    "deleting a conversation removes owned content and preserves independent records",
+    "import manifests prevent a changed source from silently being reimported",
+    "WAL supports a reader while another connection holds a bounded write lock",
+    "backup is a complete snapshot; external-file manifest detects missing or changed files",
+    "future database versions are refused and integrity checks cover both storage and relations"
+  ]
+}

@@ -1,0 +1,764 @@
+{
+  "meta": {
+    "date": "2026-11-01",
+    "fileKey": "jIaBK8NMvfZsjuMktNwpfO",
+    "reviewer": "interaction_design_research",
+    "status": "passed-for-explicitly-reviewed-scope",
+    "primaryMethod": "Read actual PNGs and actual Figma node screenshots; fixes verified with readback and post-fix scale1 screenshots."
+  },
+  "coverage": {
+    "cachedPNGBoardsActuallyViewed": 45,
+    "additionalLiveBoardsActuallyViewed": 6,
+    "distinctMajorBoardsReviewedByThisAgent": 51,
+    "postFixCloseupReviews": 8,
+    "totalMajorBoardsExpectedByParent": 52,
+    "remainingMajorBoard": {
+      "nodeId": "18:82",
+      "owner": "root",
+      "status": "parent-owned review in progress; not claimed reviewed by this agent"
+    },
+    "parentSecondPass": [
+      "9:3819",
+      "9:10819",
+      "14:1092"
+    ]
+  },
+  "reviewedCachedBoards": [
+    {
+      "nodeId": "7:128",
+      "nativeSize": [
+        1440,
+        1228
+      ],
+      "reviewed": true,
+      "status": "reviewed-with-targeted-fixes",
+      "findings": [
+        "msg_final follow-up action"
+      ],
+      "snapshotNote": "Cached export predates the final targeted fixes and minor parent-managed palette darkening; geometry is otherwise unchanged. Fixed areas have newer actual Figma close-up evidence.",
+      "sourceSnapshotName": "agent-7_128.png",
+      "sourceSnapshotBundled": false
+    },
+    {
+      "nodeId": "7:433",
+      "nativeSize": [
+        1440,
+        1439
+      ],
+      "reviewed": true,
+      "status": "reviewed-no-additional-blocking-defect",
+      "findings": [],
+      "snapshotNote": "Board-level review from the available export; parent later darkened muted/control primitives without changing layout.",
+      "sourceSnapshotName": "agent-7_433.png",
+      "sourceSnapshotBundled": false
+    },
+    {
+      "nodeId": "7:778",
+      "nativeSize": [
+        1440,
+        678
+      ],
+      "reviewed": true,
+      "status": "reviewed-with-targeted-fixes",
+      "findings": [
+        "duplicate return-to-latest action"
+      ],
+      "snapshotNote": "Cached export predates the final targeted fixes and minor parent-managed palette darkening; geometry is otherwise unchanged. Fixed areas have newer actual Figma close-up evidence.",
+      "sourceSnapshotName": "agent-7_778.png",
+      "sourceSnapshotBundled": false
+    },
+    {
+      "nodeId": "7:2347",
+      "nativeSize": [
+        1440,
+        1448
+      ],
+      "reviewed": true,
+      "status": "reviewed-no-additional-blocking-defect",
+      "findings": [],
+      "snapshotNote": "Board-level review from the available export; parent later darkened muted/control primitives without changing layout.",
+      "sourceSnapshotName": "agent-7_2347.png",
+      "sourceSnapshotBundled": false
+    },
+    {
+      "nodeId": "9:1010",
+      "nativeSize": [
+        1440,
+        1674
+      ],
+      "reviewed": true,
+      "status": "reviewed-no-additional-blocking-defect",
+      "findings": [],
+      "snapshotNote": "Board-level review from the available export; parent later darkened muted/control primitives without changing layout.",
+      "sourceSnapshotName": "agent-9_1010.png",
+      "sourceSnapshotBundled": false
+    },
+    {
+      "nodeId": "9:1533",
+      "nativeSize": [
+        1440,
+        1614
+      ],
+      "reviewed": true,
+      "status": "reviewed-no-additional-blocking-defect",
+      "findings": [],
+      "snapshotNote": "Board-level review from the available export; parent later darkened muted/control primitives without changing layout.",
+      "sourceSnapshotName": "agent-9_1533.png",
+      "sourceSnapshotBundled": false
+    },
+    {
+      "nodeId": "9:3819",
+      "nativeSize": [
+        1440,
+        1850
+      ],
+      "reviewed": true,
+      "status": "reviewed-no-additional-blocking-defect",
+      "findings": [],
+      "snapshotNote": "Board-level review from the available export; parent later darkened muted/control primitives without changing layout.",
+      "sourceSnapshotName": "agent-9_3819.png",
+      "sourceSnapshotBundled": false
+    },
+    {
+      "nodeId": "9:4428",
+      "nativeSize": [
+        1440,
+        1256
+      ],
+      "reviewed": true,
+      "status": "reviewed-with-targeted-fixes",
+      "findings": [
+        "empty nested textarea label gap"
+      ],
+      "snapshotNote": "Cached export predates the final targeted fixes and minor parent-managed palette darkening; geometry is otherwise unchanged. Fixed areas have newer actual Figma close-up evidence.",
+      "sourceSnapshotName": "agent-9_4428.png",
+      "sourceSnapshotBundled": false
+    },
+    {
+      "nodeId": "9:4807",
+      "nativeSize": [
+        1440,
+        1743
+      ],
+      "reviewed": true,
+      "status": "reviewed-no-additional-blocking-defect",
+      "findings": [],
+      "snapshotNote": "Board-level review from the available export; parent later darkened muted/control primitives without changing layout.",
+      "sourceSnapshotName": "agent-9_4807.png",
+      "sourceSnapshotBundled": false
+    },
+    {
+      "nodeId": "9:5464",
+      "nativeSize": [
+        1440,
+        1566
+      ],
+      "reviewed": true,
+      "status": "reviewed-no-additional-blocking-defect",
+      "findings": [],
+      "snapshotNote": "Board-level review from the available export; parent later darkened muted/control primitives without changing layout.",
+      "sourceSnapshotName": "agent-9_5464.png",
+      "sourceSnapshotBundled": false
+    },
+    {
+      "nodeId": "9:5973",
+      "nativeSize": [
+        1440,
+        627
+      ],
+      "reviewed": true,
+      "status": "reviewed-no-additional-blocking-defect",
+      "findings": [],
+      "snapshotNote": "Board-level review from the available export; parent later darkened muted/control primitives without changing layout.",
+      "sourceSnapshotName": "agent-9_5973.png",
+      "sourceSnapshotBundled": false
+    },
+    {
+      "nodeId": "9:7014",
+      "nativeSize": [
+        1440,
+        877
+      ],
+      "reviewed": true,
+      "status": "reviewed-no-additional-blocking-defect",
+      "findings": [],
+      "snapshotNote": "Board-level review from the available export; parent later darkened muted/control primitives without changing layout.",
+      "sourceSnapshotName": "agent-9_7014.png",
+      "sourceSnapshotBundled": false
+    },
+    {
+      "nodeId": "9:7752",
+      "nativeSize": [
+        1440,
+        1744
+      ],
+      "reviewed": true,
+      "status": "reviewed-no-additional-blocking-defect",
+      "findings": [],
+      "snapshotNote": "Board-level review from the available export; parent later darkened muted/control primitives without changing layout.",
+      "sourceSnapshotName": "agent-9_7752.png",
+      "sourceSnapshotBundled": false
+    },
+    {
+      "nodeId": "9:8329",
+      "nativeSize": [
+        1440,
+        1443
+      ],
+      "reviewed": true,
+      "status": "reviewed-no-additional-blocking-defect",
+      "findings": [],
+      "snapshotNote": "Board-level review from the available export; parent later darkened muted/control primitives without changing layout.",
+      "sourceSnapshotName": "agent-9_8329.png",
+      "sourceSnapshotBundled": false
+    },
+    {
+      "nodeId": "9:9018",
+      "nativeSize": [
+        1440,
+        1620
+      ],
+      "reviewed": true,
+      "status": "reviewed-no-additional-blocking-defect",
+      "findings": [],
+      "snapshotNote": "Board-level review from the available export; parent later darkened muted/control primitives without changing layout.",
+      "sourceSnapshotName": "agent-9_9018.png",
+      "sourceSnapshotBundled": false
+    },
+    {
+      "nodeId": "9:9591",
+      "nativeSize": [
+        1440,
+        1677
+      ],
+      "reviewed": true,
+      "status": "reviewed-no-additional-blocking-defect",
+      "findings": [],
+      "snapshotNote": "Board-level review from the available export; parent later darkened muted/control primitives without changing layout.",
+      "sourceSnapshotName": "agent-9_9591.png",
+      "sourceSnapshotBundled": false
+    },
+    {
+      "nodeId": "9:10729",
+      "nativeSize": [
+        1440,
+        707
+      ],
+      "reviewed": true,
+      "status": "reviewed-no-additional-blocking-defect",
+      "findings": [],
+      "snapshotNote": "Board-level review from the available export; parent later darkened muted/control primitives without changing layout.",
+      "sourceSnapshotName": "agent-9_10729.png",
+      "sourceSnapshotBundled": false
+    },
+    {
+      "nodeId": "9:10819",
+      "nativeSize": [
+        1440,
+        1818
+      ],
+      "reviewed": true,
+      "status": "reviewed-no-additional-blocking-defect",
+      "findings": [],
+      "snapshotNote": "Board-level review from the available export; parent later darkened muted/control primitives without changing layout.",
+      "sourceSnapshotName": "agent-9_10819.png",
+      "sourceSnapshotBundled": false
+    },
+    {
+      "nodeId": "9:11453",
+      "nativeSize": [
+        1440,
+        1756
+      ],
+      "reviewed": true,
+      "status": "reviewed-no-additional-blocking-defect",
+      "findings": [],
+      "snapshotNote": "Board-level review from the available export; parent later darkened muted/control primitives without changing layout.",
+      "sourceSnapshotName": "agent-9_11453.png",
+      "sourceSnapshotBundled": false
+    },
+    {
+      "nodeId": "9:12258",
+      "nativeSize": [
+        1440,
+        760
+      ],
+      "reviewed": true,
+      "status": "reviewed-no-additional-blocking-defect",
+      "findings": [],
+      "snapshotNote": "Board-level review from the available export; parent later darkened muted/control primitives without changing layout.",
+      "sourceSnapshotName": "agent-9_12258.png",
+      "sourceSnapshotBundled": false
+    },
+    {
+      "nodeId": "9:12442",
+      "nativeSize": [
+        1440,
+        1457
+      ],
+      "reviewed": true,
+      "status": "reviewed-no-additional-blocking-defect",
+      "findings": [],
+      "snapshotNote": "Board-level review from the available export; parent later darkened muted/control primitives without changing layout.",
+      "sourceSnapshotName": "agent-9_12442.png",
+      "sourceSnapshotBundled": false
+    },
+    {
+      "nodeId": "9:12947",
+      "nativeSize": [
+        1440,
+        1503
+      ],
+      "reviewed": true,
+      "status": "reviewed-no-additional-blocking-defect",
+      "findings": [],
+      "snapshotNote": "Board-level review from the available export; parent later darkened muted/control primitives without changing layout.",
+      "sourceSnapshotName": "agent-9_12947.png",
+      "sourceSnapshotBundled": false
+    },
+    {
+      "nodeId": "9:13393",
+      "nativeSize": [
+        1440,
+        1634
+      ],
+      "reviewed": true,
+      "status": "reviewed-no-additional-blocking-defect",
+      "findings": [],
+      "snapshotNote": "Board-level review from the available export; parent later darkened muted/control primitives without changing layout.",
+      "sourceSnapshotName": "agent-9_13393.png",
+      "sourceSnapshotBundled": false
+    },
+    {
+      "nodeId": "9:13940",
+      "nativeSize": [
+        1440,
+        688
+      ],
+      "reviewed": true,
+      "status": "reviewed-no-additional-blocking-defect",
+      "findings": [],
+      "snapshotNote": "Board-level review from the available export; parent later darkened muted/control primitives without changing layout.",
+      "sourceSnapshotName": "agent-9_13940.png",
+      "sourceSnapshotBundled": false
+    },
+    {
+      "nodeId": "9:14115",
+      "nativeSize": [
+        1440,
+        1723
+      ],
+      "reviewed": true,
+      "status": "reviewed-with-targeted-fixes",
+      "findings": [
+        "media size",
+        "generating filename",
+        "duplicated sources summary"
+      ],
+      "snapshotNote": "Cached export predates the final targeted fixes and minor parent-managed palette darkening; geometry is otherwise unchanged. Fixed areas have newer actual Figma close-up evidence.",
+      "sourceSnapshotName": "agent-9_14115.png",
+      "sourceSnapshotBundled": false
+    },
+    {
+      "nodeId": "9:14714",
+      "nativeSize": [
+        1440,
+        1622
+      ],
+      "reviewed": true,
+      "status": "reviewed-with-targeted-fixes",
+      "findings": [
+        "preview-loading filename"
+      ],
+      "snapshotNote": "Cached export predates the final targeted fixes and minor parent-managed palette darkening; geometry is otherwise unchanged. Fixed areas have newer actual Figma close-up evidence.",
+      "sourceSnapshotName": "agent-9_14714.png",
+      "sourceSnapshotBundled": false
+    },
+    {
+      "nodeId": "9:15281",
+      "nativeSize": [
+        1440,
+        1827
+      ],
+      "reviewed": true,
+      "status": "reviewed-no-additional-blocking-defect",
+      "findings": [],
+      "snapshotNote": "Board-level review from the available export; parent later darkened muted/control primitives without changing layout.",
+      "sourceSnapshotName": "agent-9_15281.png",
+      "sourceSnapshotBundled": false
+    },
+    {
+      "nodeId": "9:16016",
+      "nativeSize": [
+        1440,
+        1182
+      ],
+      "reviewed": true,
+      "status": "reviewed-no-additional-blocking-defect",
+      "findings": [],
+      "snapshotNote": "Board-level review from the available export; parent later darkened muted/control primitives without changing layout.",
+      "sourceSnapshotName": "agent-9_16016.png",
+      "sourceSnapshotBundled": false
+    },
+    {
+      "nodeId": "9:16393",
+      "nativeSize": [
+        1440,
+        1398
+      ],
+      "reviewed": true,
+      "status": "reviewed-no-additional-blocking-defect",
+      "findings": [],
+      "snapshotNote": "Board-level review from the available export; parent later darkened muted/control primitives without changing layout.",
+      "sourceSnapshotName": "agent-9_16393.png",
+      "sourceSnapshotBundled": false
+    },
+    {
+      "nodeId": "9:17323",
+      "nativeSize": [
+        1440,
+        1478
+      ],
+      "reviewed": true,
+      "status": "reviewed-no-additional-blocking-defect",
+      "findings": [],
+      "snapshotNote": "Board-level review from the available export; parent later darkened muted/control primitives without changing layout.",
+      "sourceSnapshotName": "agent-9_17323.png",
+      "sourceSnapshotBundled": false
+    },
+    {
+      "nodeId": "9:17826",
+      "nativeSize": [
+        1440,
+        678
+      ],
+      "reviewed": true,
+      "status": "reviewed-no-additional-blocking-defect",
+      "findings": [],
+      "snapshotNote": "Board-level review from the available export; parent later darkened muted/control primitives without changing layout.",
+      "sourceSnapshotName": "agent-9_17826.png",
+      "sourceSnapshotBundled": false
+    },
+    {
+      "nodeId": "9:17991",
+      "nativeSize": [
+        1440,
+        1130
+      ],
+      "reviewed": true,
+      "status": "reviewed-no-additional-blocking-defect",
+      "findings": [],
+      "snapshotNote": "Board-level review from the available export; parent later darkened muted/control primitives without changing layout.",
+      "sourceSnapshotName": "agent-9_17991.png",
+      "sourceSnapshotBundled": false
+    },
+    {
+      "nodeId": "13:477",
+      "nativeSize": [
+        1600,
+        1000
+      ],
+      "reviewed": true,
+      "status": "reviewed-no-additional-blocking-defect",
+      "findings": [],
+      "snapshotNote": "Board-level review from the available export; parent later darkened muted/control primitives without changing layout.",
+      "sourceSnapshotName": "agent-13_477.png",
+      "sourceSnapshotBundled": false
+    },
+    {
+      "nodeId": "13:778",
+      "nativeSize": [
+        1600,
+        1000
+      ],
+      "reviewed": true,
+      "status": "reviewed-no-additional-blocking-defect",
+      "findings": [],
+      "snapshotNote": "Board-level review from the available export; parent later darkened muted/control primitives without changing layout.",
+      "sourceSnapshotName": "agent-13_778.png",
+      "sourceSnapshotBundled": false
+    },
+    {
+      "nodeId": "14:1092",
+      "nativeSize": [
+        1600,
+        1000
+      ],
+      "reviewed": true,
+      "status": "reviewed-no-additional-blocking-defect",
+      "findings": [],
+      "snapshotNote": "Board-level review from the available export; parent later darkened muted/control primitives without changing layout.",
+      "sourceSnapshotName": "agent-14_1092.png",
+      "sourceSnapshotBundled": false
+    },
+    {
+      "nodeId": "14:1423",
+      "nativeSize": [
+        1600,
+        1000
+      ],
+      "reviewed": true,
+      "status": "reviewed-no-additional-blocking-defect",
+      "findings": [],
+      "snapshotNote": "Board-level review from the available export; parent later darkened muted/control primitives without changing layout.",
+      "sourceSnapshotName": "agent-14_1423.png",
+      "sourceSnapshotBundled": false
+    },
+    {
+      "nodeId": "14:1767",
+      "nativeSize": [
+        1600,
+        1000
+      ],
+      "reviewed": true,
+      "status": "reviewed-no-additional-blocking-defect",
+      "findings": [],
+      "snapshotNote": "Board-level review from the available export; parent later darkened muted/control primitives without changing layout.",
+      "sourceSnapshotName": "agent-14_1767.png",
+      "sourceSnapshotBundled": false
+    },
+    {
+      "nodeId": "14:2359",
+      "nativeSize": [
+        1440,
+        900
+      ],
+      "reviewed": true,
+      "status": "reviewed-no-additional-blocking-defect",
+      "findings": [],
+      "snapshotNote": "Board-level review from the available export; parent later darkened muted/control primitives without changing layout.",
+      "sourceSnapshotName": "agent-14_2359.png",
+      "sourceSnapshotBundled": false
+    },
+    {
+      "nodeId": "14:2476",
+      "nativeSize": [
+        1440,
+        900
+      ],
+      "reviewed": true,
+      "status": "reviewed-no-additional-blocking-defect",
+      "findings": [],
+      "snapshotNote": "Board-level review from the available export; parent later darkened muted/control primitives without changing layout.",
+      "sourceSnapshotName": "agent-14_2476.png",
+      "sourceSnapshotBundled": false
+    },
+    {
+      "nodeId": "14:2557",
+      "nativeSize": [
+        1440,
+        900
+      ],
+      "reviewed": true,
+      "status": "reviewed-no-additional-blocking-defect",
+      "findings": [],
+      "snapshotNote": "Board-level review from the available export; parent later darkened muted/control primitives without changing layout.",
+      "sourceSnapshotName": "agent-14_2557.png",
+      "sourceSnapshotBundled": false
+    },
+    {
+      "nodeId": "17:10970",
+      "nativeSize": [
+        1440,
+        1560
+      ],
+      "reviewed": true,
+      "status": "reviewed-no-additional-blocking-defect",
+      "findings": [],
+      "snapshotNote": "Board-level review from the available export; parent later darkened muted/control primitives without changing layout.",
+      "sourceSnapshotName": "agent-17_10970.png",
+      "sourceSnapshotBundled": false
+    },
+    {
+      "nodeId": "17:11390",
+      "nativeSize": [
+        1440,
+        1560
+      ],
+      "reviewed": true,
+      "status": "reviewed-no-additional-blocking-defect",
+      "findings": [],
+      "snapshotNote": "Board-level review from the available export; parent later darkened muted/control primitives without changing layout.",
+      "sourceSnapshotName": "agent-17_11390.png",
+      "sourceSnapshotBundled": false
+    },
+    {
+      "nodeId": "18:2",
+      "nativeSize": [
+        1440,
+        1080
+      ],
+      "reviewed": true,
+      "status": "reviewed-no-additional-blocking-defect",
+      "findings": [],
+      "snapshotNote": "Board-level review from the available export; parent later darkened muted/control primitives without changing layout.",
+      "sourceSnapshotName": "agent-18_2.png",
+      "sourceSnapshotBundled": false
+    },
+    {
+      "nodeId": "18:521",
+      "nativeSize": [
+        1440,
+        1201
+      ],
+      "reviewed": true,
+      "status": "reviewed-no-additional-blocking-defect",
+      "findings": [],
+      "snapshotNote": "Board-level review from the available export; parent later darkened muted/control primitives without changing layout.",
+      "sourceSnapshotName": "agent-18_521.png",
+      "sourceSnapshotBundled": false
+    },
+    {
+      "nodeId": "18:590",
+      "nativeSize": [
+        1440,
+        1086
+      ],
+      "reviewed": true,
+      "status": "reviewed-no-additional-blocking-defect",
+      "findings": [],
+      "snapshotNote": "Board-level review from the available export; parent later darkened muted/control primitives without changing layout.",
+      "sourceSnapshotName": "agent-18_590.png",
+      "sourceSnapshotBundled": false
+    }
+  ],
+  "additionalLiveBoards": [
+    {
+      "nodeId": "9:6310",
+      "name": "目标与计划 / 01",
+      "nativeSize": [
+        1440,
+        1785
+      ],
+      "reviewed": true,
+      "method": "actual node.screenshot(scale=1)",
+      "result": "Plan proposal is pending; active/revised/verification/partial steps match their count and state. No clipping observed."
+    },
+    {
+      "nodeId": "9:7293",
+      "name": "工具调用与结果 / 01",
+      "nativeSize": [
+        1440,
+        1581
+      ],
+      "reviewed": true,
+      "method": "actual node.screenshot(scale=1)",
+      "result": "Parameter preparation is distinct; measured progress consistently12/20; waiting progress remains indeterminate; command output and exit-code pending fit."
+    },
+    {
+      "nodeId": "9:10130",
+      "name": "MCP 服务、资源与授权 / 02",
+      "nativeSize": [
+        1440,
+        1975
+      ],
+      "reviewed": true,
+      "method": "actual node.screenshot(scale=1)",
+      "result": "Existing/new scopes are separate; selected resources and count align; current/new versions clear; workflow fields and external URL purpose fit."
+    },
+    {
+      "nodeId": "9:16848",
+      "name": "运行异常与恢复 / 02",
+      "nativeSize": [
+        1440,
+        1398
+      ],
+      "reviewed": true,
+      "method": "actual node.screenshot(scale=1)",
+      "result": "Stopping/stopped and unknown/not-applied stay separate; no blind retry in unknown-result state; recovery controls are visible."
+    },
+    {
+      "nodeId": "14:813",
+      "name": "Flow / 03 确认文件修改",
+      "nativeSize": [
+        1600,
+        1000
+      ],
+      "reviewed": true,
+      "method": "actual node.screenshot(scale=1)",
+      "result": "Requested files match context, code remains unmodified before approval, actions visible and composer unobscured."
+    },
+    {
+      "nodeId": "14:2045",
+      "name": "Flow / 07 交付报告",
+      "nativeSize": [
+        1600,
+        1000
+      ],
+      "reviewed": true,
+      "method": "actual node.screenshot(scale=1) plus corrected artifact close-up",
+      "result": "Found report summary/name mismatch and corrected only this instance; final identity now consistently 按钮调整报告.pdf."
+    }
+  ],
+  "postFixCloseups": [
+    {
+      "componentId": "7:355",
+      "instanceId": "7:356",
+      "result": "Follow-up Ghost button uses 32px row and is visible beside copy; no overflow."
+    },
+    {
+      "componentId": "9:14444",
+      "instanceId": "9:14445",
+      "result": "840 KB metadata fits on one line with PNG identity and description."
+    },
+    {
+      "componentId": "9:14677",
+      "instanceId": "9:14678",
+      "result": "Generating state retains 调研报告.pdf/PDF and running status, no false open-file action."
+    },
+    {
+      "componentId": "9:14863",
+      "instanceId": "9:14864",
+      "result": "Preview loading retains filename, type and2.4MB while original file action remains available."
+    },
+    {
+      "componentId": "7:815",
+      "instanceId": "7:816",
+      "result": "Single inline return-to-latest affordance remains; redundant footer removed; actual bounds clear."
+    },
+    {
+      "componentId": "9:4477",
+      "instanceId": "9:4478",
+      "result": "Removed empty inner label; textarea starts directly after its single label with intended8px group gap."
+    },
+    {
+      "componentId": "9:14563",
+      "instanceId": "9:14564",
+      "result": "Exactly one source-summary sentence above three distinct source cards; all actions retained."
+    },
+    {
+      "componentId": null,
+      "instanceId": "14:2151",
+      "result": "Final delivery artifact summary and file card agree on 按钮调整报告.pdf ·2.4MB."
+    }
+  ],
+  "observations": [
+    "Cold graphite/ice-blue appearance is consistent across the reviewed Agent atlas; warm brand gradients were not introduced.",
+    "Body, metadata, actions and status cues remain legible in the reviewed exports; no additional crop or overlapping-control defect was found.",
+    "Questions, approvals, tool activity, artifacts and output review are represented by different structures, not only badge substitutions.",
+    "Confirmed local defects were limited to the four semantic-detail gaps, duplicate unread action, duplicate citation summary, empty textarea-label spacing, and final-scene artifact identity. All were corrected and rechecked.",
+    "Live geometry readbacks proved earlier Composer controls/Board title/Preview title overflow findings were already repaired; no redundant edits were applied.",
+    "File-generated state remains distinct from audio ready/playing and video ready/buffering in the rich-output examples.",
+    "Design rationales, implementation boundaries and source references remain outside the product panels in the atlas/hand-off surfaces."
+  ],
+  "fixedFindingsReport": "agent-final-fixes.json",
+  "actualSemanticAudit": "actual-semantic-audit.json",
+  "finalPreview": {
+    "path": "../previews/agent-interaction.png",
+    "nodeId": "14:1092",
+    "nativeSize": [
+      1600,
+      1000
+    ],
+    "method": "Fresh get_screenshot export after final parent palette adjustment, downloaded then visually opened."
+  },
+  "unresolvedDefectsInReviewedScope": [],
+  "limits": [
+    "A board-level PNG review is not a runtime keyboard, screen-reader, media, network or permissions test.",
+    "Long boards were viewed from native exports; the host may fit very tall images to its display. Specific modified controls were checked separately at scale1.",
+    "Not every one of175 cases was separately re-exported as a close-up here; all175 did receive the independent actual-node semantic audit.",
+    "Node18:82 remains explicitly assigned to the parent review, so this report does not independently claim52/52.",
+    "Main-app and element-inspector file review remains owned by the parent and the inspector reviewer."
+  ],
+  "evidencePackagingNote": "历史画板导出未作为最终截图打包；针对已修区域的实时Figma截图复查和节点读回见报告。最终预览为previews/agent-interaction.png。"
+}

@@ -1,0 +1,130 @@
+[
+  {
+    "mode": "light",
+    "foreground": "ink",
+    "background": "surface",
+    "ratio": 15.34,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "mode": "light",
+    "foreground": "secondary",
+    "background": "canvas",
+    "ratio": 6.19,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "mode": "light",
+    "foreground": "muted",
+    "background": "canvas",
+    "ratio": 4.59,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "mode": "light",
+    "foreground": "onAccent",
+    "background": "accent",
+    "ratio": 5.53,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "mode": "light",
+    "foreground": "accentInk",
+    "background": "accentSoft",
+    "ratio": 6.03,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "mode": "light",
+    "foreground": "success",
+    "background": "successSoft",
+    "ratio": 4.79,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "mode": "light",
+    "foreground": "danger",
+    "background": "dangerSoft",
+    "ratio": 5.27,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "mode": "light",
+    "foreground": "control",
+    "background": "surface",
+    "ratio": 3.77,
+    "minimum": 3,
+    "pass": true
+  },
+  {
+    "mode": "dark",
+    "foreground": "ink",
+    "background": "surface",
+    "ratio": 15.07,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "mode": "dark",
+    "foreground": "secondary",
+    "background": "canvas",
+    "ratio": 9.83,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "mode": "dark",
+    "foreground": "muted",
+    "background": "canvas",
+    "ratio": 7.38,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "mode": "dark",
+    "foreground": "onAccent",
+    "background": "accent",
+    "ratio": 8.13,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "mode": "dark",
+    "foreground": "accentInk",
+    "background": "accentSoft",
+    "ratio": 8.42,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "mode": "dark",
+    "foreground": "success",
+    "background": "successSoft",
+    "ratio": 6.75,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "mode": "dark",
+    "foreground": "danger",
+    "background": "dangerSoft",
+    "ratio": 7.22,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "mode": "dark",
+    "foreground": "control",
+    "background": "surface",
+    "ratio": 4.82,
+    "minimum": 3,
+    "pass": true
+  }
+]

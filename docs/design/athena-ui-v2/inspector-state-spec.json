@@ -1,0 +1,2639 @@
+{
+  "schemaVersion": "2.0",
+  "documentType": "inspector-state-spec",
+  "date": "2026-11-01",
+  "product": "Athena",
+  "audience": "design-and-engineering",
+  "status": "design-reviewed-proposal",
+  "verification": {
+    "status": "passed-for-surface-refinement-scope",
+    "revision": "heroui-surface-2026-11-02",
+    "scope": [
+      "HeroUI-inspired radius and surface recipe",
+      "15 representative visual boards",
+      "Scoped structure and prototype-target readback"
+    ],
+    "note": "Revision04表面精修已按实际recipe和回读合并；本轮15张代表画板，前轮黑白配色与历史全量审阅仅作基线。",
+    "evidence": "verification/heroui-surface-refinement.json",
+    "completedScopedChecks": [
+      {
+        "area": "representative-surface-visual-review",
+        "status": "passed",
+        "mainBoards": 10,
+        "agentBoards": 5,
+        "totalBoards": 15,
+        "evidence": "verification/heroui-surface-refinement.json"
+      },
+      {
+        "area": "main-structure-and-prototype-targets",
+        "status": "passed-structural",
+        "boards": 49,
+        "targets": 107,
+        "missingTargets": 0,
+        "unexpectedOverflow": 0,
+        "evidence": "verification/heroui-main-geometry.json"
+      },
+      {
+        "area": "agent-surface-and-preservation",
+        "status": "passed-for-stated-scope",
+        "majorFramesPreserved": 52,
+        "canonicalStatesPreserved": 175,
+        "fullSemanticReaudit": false,
+        "evidence": "verification/heroui-agent-surface-refinement.json"
+      }
+    ],
+    "priorRefinementBaseline": {
+      "revision": "monochrome-2026-11-02",
+      "applicability": "Previous monochrome refinement; not new surface-refinement evidence",
+      "verification": {
+        "status": "passed-for-retheme-scope",
+        "revision": "monochrome-2026-11-02",
+        "scope": [
+          "Current monochrome foundation variables",
+          "Representative retheme screenshots",
+          "Color logo and icon readback"
+        ],
+        "note": "2026-11-02黑白主题独立验收：84个实际颜色值匹配目标，96组指定配色达阈值，13张代表画板完成视觉复查；14页101张主要画板结构存在。旧配色验收保留为历史基线。",
+        "evidence": "verification/monochrome-retheme.json",
+        "priorThemeBaseline": {
+          "theme": "冰蓝 / 石墨灰",
+          "applicability": "Historical baseline before the monochrome retheme; not current-theme visual evidence",
+          "verification": {
+            "status": "passed-for-design-scope",
+            "scope": [
+              "Figma final visual review",
+              "Cross-screen and state consistency review",
+              "Prototype interaction review"
+            ],
+            "note": "最终设计审阅证据已合并；适用范围与未测运行边界见scopeLimits。",
+            "scopeLimits": [
+              "本轮交付与验收针对可编辑Figma设计和明确的状态样例，不代表应用已实现或部署。",
+              "没有运行真实键盘、读屏、IME、授权、取消、媒体播放或网络业务动作。",
+              "原型导航记录与条件说明分开；未把所有状态图声称为可执行动态原型。",
+              "对比度覆盖48组指定语义组合，不等于完整运行时WCAG审计。"
+            ],
+            "inspectorAudit": {
+              "status": "passed-for-design-scope",
+              "controlCases": 85,
+              "boardsActuallyViewed": 25,
+              "findingsClosed": 16,
+              "remainingFindings": 0,
+              "instanceLinksPreserved": 20,
+              "evidence": "verification/inspector-final-visual-audit.json"
+            }
+          }
+        },
+        "scopeLimits": [
+          "本轮视觉复查覆盖13张代表画板：主稿8张、Agent稿5张；没有重新截图验收全部101张主要画板。",
+          "本轮结构回读确认14页和101张主要画板存在，不等于重新执行内容、语义、原型或运行验收。",
+          "换肤前的视觉、语义、几何和原型检查保留为历史基线，不自动成为本轮新证据。",
+          "未修改应用源码或部署；没有运行真实键盘、读屏、IME、授权、取消、媒体播放或网络业务动作。",
+          "96组指定语义配色的数值对比度检查不等于完整运行时WCAG审计。"
+        ],
+        "completedScopedChecks": [
+          {
+            "area": "theme-variable-readback",
+            "status": "passed",
+            "resolvedValues": 84,
+            "evidence": "verification/monochrome-retheme.json"
+          },
+          {
+            "area": "selected-color-contrast",
+            "status": "passed",
+            "passed": 96,
+            "total": 96,
+            "evidence": "verification/monochrome-contrast-audit.json"
+          },
+          {
+            "area": "representative-theme-visual-review",
+            "status": "passed",
+            "mainBoards": 8,
+            "agentBoards": 5,
+            "totalBoards": 13,
+            "evidence": "verification/monochrome-retheme.json"
+          },
+          {
+            "area": "current-node-existence",
+            "status": "passed-structural",
+            "pages": 14,
+            "majorBoards": 101,
+            "missing": 0,
+            "fullScreenshotAudit": false,
+            "evidence": "verification/monochrome-structure-readback.json"
+          }
+        ]
+      }
+    },
+    "scopeLimits": [
+      "本轮视觉复查15张代表画板：主稿10张、Agent稿5张；未重新截图验收全部101张主要画板。",
+      "主稿49张当前画板与107个原型目标已做结构回读；Agent报告记录52画板与175状态保留，不等于重新执行全状态语义审计。",
+      "前轮黑白配色的84个颜色值和96组对比度保留为基线，不写成本轮重新测量。",
+      "主稿包含深色代表界面复查；Agent本轮没有新增深色视觉审计。",
+      "未修改应用源码或部署；未执行真实键盘、读屏、IME、授权、媒体播放或业务动作。"
+    ]
+  },
+  "scope": "专用元素调整控件；保留比例样张、精确数字、单位列、细轨、窄滑柄、颜色棋盘、边框预览与四向间距结构。",
+  "package": "packages/element-inspector",
+  "tabs": [
+    {
+      "id": "adjust",
+      "label": "调整",
+      "behavior": "即时预览；无应用预览按钮；手势合并为一次撤销；属性组由选中元素和 A2UI surface 决定。",
+      "sections": [
+        "外观",
+        "排版",
+        "布局与间距"
+      ],
+      "evidence": [
+        {
+          "file": "src/renderer/ElementInspector.tsx",
+          "lines": "442-451"
+        },
+        {
+          "file": "src/renderer/ElementControls.tsx",
+          "lines": "257-320"
+        },
+        {
+          "file": "src/renderer/LiveStyleQueue.ts",
+          "lines": "3-79"
+        }
+      ]
+    },
+    {
+      "id": "text",
+      "label": "内容",
+      "behavior": "元素文字 textarea；editableText=false 时禁用并给出原因；最大 20000 字符；显式应用预览。",
+      "evidence": [
+        {
+          "file": "src/renderer/ElementInspector.tsx",
+          "lines": "452-471"
+        }
+      ]
+    },
+    {
+      "id": "styles",
+      "label": "CSS",
+      "behavior": "15 个原始 CSS 输入；背景/渐变、阴影和变换跨双列；输入变更先成为草稿，显式应用预览。",
+      "fields": [
+        [
+          "font-size",
+          "字号"
+        ],
+        [
+          "font-weight",
+          "字重"
+        ],
+        [
+          "line-height",
+          "行高"
+        ],
+        [
+          "color",
+          "文字颜色"
+        ],
+        [
+          "background-color",
+          "背景颜色"
+        ],
+        [
+          "border-radius",
+          "圆角"
+        ],
+        [
+          "width",
+          "宽度"
+        ],
+        [
+          "height",
+          "高度"
+        ],
+        [
+          "padding",
+          "内边距"
+        ],
+        [
+          "margin",
+          "外边距"
+        ],
+        [
+          "letter-spacing",
+          "字间距"
+        ],
+        [
+          "opacity",
+          "透明度"
+        ],
+        [
+          "background-image",
+          "背景 / 渐变"
+        ],
+        [
+          "box-shadow",
+          "阴影"
+        ],
+        [
+          "transform",
+          "变换"
+        ]
+      ],
+      "evidence": [
+        {
+          "file": "src/renderer/ElementInspector.tsx",
+          "lines": "32-48"
+        },
+        {
+          "file": "src/renderer/ElementInspector.tsx",
+          "lines": "472-499"
+        }
+      ]
+    },
+    {
+      "id": "motion",
+      "label": "动效",
+      "behavior": "无/当前自定义/呼吸/弹跳/呼吸弹跳；周期 0.1–60 秒；系统减少动态效果时保存配置而不播放；选择无并应用停止动效。",
+      "evidence": [
+        {
+          "file": "src/renderer/ElementInspector.tsx",
+          "lines": "500-545"
+        }
+      ]
+    },
+    {
+      "id": "details",
+      "label": "定位",
+      "behavior": "语义类型及推断标志、识别依据、backendNodeId、selector、ref、shadowPath、frameId、最多8项属性；只读。",
+      "evidence": [
+        {
+          "file": "src/renderer/ElementInspector.tsx",
+          "lines": "546-595"
+        }
+      ]
+    }
+  ],
+  "counts": {
+    "controlCases": 85,
+    "behaviorFamilies": 9,
+    "allowedProperties": 27,
+    "maxControlsPerSurface": 24
+  },
+  "cases": [
+    {
+      "id": "N01",
+      "family": "NumberControl",
+      "variant": "radius-integer",
+      "label": "圆角",
+      "value": "14",
+      "visualState": "default",
+      "notes": [
+        "控件高34、圆角12、默认无描边并使用field轻影；标签12/16、标签间距6，总行高56；左侧比例样张32宽，轨道3高、命中32高，滑柄12×16；读数固定72宽，单位不参与数字宽度。",
+        "微缩圆角样张随14px数值变化；轨道范围0–200，数字14右对齐。",
+        "行为 rest：进入属性后显示已读取的14px，不产生写操作。",
+        "行为 hover：指针进入改用subtle浅灰填充，离开恢复surface默认表面；数值与几何不变。",
+        "行为 drag-start：按下滑柄进入抓取状态，第一次移动才更新值。",
+        "行为 integer：整数保持无尾随小数，单位固定分列。",
+        "行为 escape-reset：Esc丢弃数字草稿并恢复原14px，不新增撤销步骤。"
+      ],
+      "unit": "px",
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "N02",
+      "family": "NumberControl",
+      "variant": "radius-hover",
+      "label": "圆角",
+      "value": "14",
+      "visualState": "hover",
+      "notes": [
+        "悬停使用subtle浅灰填充，默认使用白色surface与field轻影；不扩大控件、不改变数值列或滑轨长度。",
+        "行为 hover：指针进入改用subtle浅灰填充，离开恢复surface默认表面；数值与几何不变。"
+      ],
+      "unit": "px",
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "N03",
+      "family": "NumberControl",
+      "variant": "radius-keyboard",
+      "label": "圆角",
+      "value": "14",
+      "visualState": "focus-visible",
+      "notes": [
+        "滑柄外加2px黑白主题焦点环和2px间隔；保持真实值14，焦点可见与hover区分。",
+        "行为 keyboard-focus：Tab进入滑柄后显示焦点环；方向键按step改变值并保持焦点。"
+      ],
+      "unit": "px",
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "N04",
+      "family": "NumberControl",
+      "variant": "radius-drag",
+      "label": "圆角",
+      "value": "18",
+      "visualState": "dragging",
+      "notes": [
+        "滑柄显示4px低透明聚焦晕；值18与比例样张同步；手势未结束前不显示已保存。",
+        "行为 drag-start：按下滑柄进入抓取状态，第一次移动才更新值。",
+        "行为 dragging-preview：移动持续调用onChange，样张和值同步；只保留最新待写入值。",
+        "行为 gesture-commit：松开触发onCommit，等待宿主回读后显示已预览；整个手势只占一次撤销。"
+      ],
+      "unit": "px",
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "N05",
+      "family": "NumberControl",
+      "variant": "radius-minimum",
+      "label": "圆角",
+      "value": "0",
+      "visualState": "minimum",
+      "notes": [
+        "滑柄停在轨道起点，保留12×16实体宽度；圆角样张呈直角；到边界不震荡。",
+        "行为 min-boundary：向左达到0后保持0；继续输入不能越过边界。"
+      ],
+      "unit": "px",
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "N06",
+      "family": "NumberControl",
+      "variant": "radius-maximum",
+      "label": "圆角",
+      "value": "200",
+      "visualState": "maximum",
+      "notes": [
+        "滑柄停在轨道末端；200为支持上限；数字列不挤压轨道。",
+        "行为 max-boundary：达到200后滑柄停在终点。"
+      ],
+      "unit": "px",
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "N07",
+      "family": "NumberControl",
+      "variant": "weight-discrete",
+      "label": "字重",
+      "value": "600",
+      "visualState": "discrete-ticks",
+      "notes": [
+        "Aa样张使用600字重；100–900共9档，细刻度置于3px轨道下5px处；数值无单位。",
+        "行为 discrete-ticks-for-weight：100–900按100步长；Aa与实际字重同步，不能仅改变装饰线。"
+      ],
+      "implementation": "current-behavior-new-visual",
+      "unit": "",
+      "numericFormat": {
+        "discrete": true,
+        "min": 100,
+        "max": 900,
+        "step": 100,
+        "unitColumnVisible": false
+      },
+      "finalDesignEvidence": {
+        "findingId": "VI-01",
+        "componentId": "26:986",
+        "instanceId": "26:987",
+        "status": "closed-after-live-readback-and-visual-review",
+        "report": "verification/inspector-final-fixes.json"
+      }
+    },
+    {
+      "id": "N08",
+      "family": "NumberControl",
+      "variant": "precise-draft",
+      "label": "圆角",
+      "value": "20",
+      "visualState": "input-draft",
+      "notes": [
+        "数字输入框光标位于20之后；外框使用2px焦点环；尚未失焦或Enter时页面仍为上次提交的14px。",
+        "行为 precise-input-draft：编辑仅改变草稿，保存之前不覆盖宿主确认值。",
+        "行为 enter-submit：Enter且非IME确认时验证并提交；非法值停留N10或N11。",
+        "行为 blur-submit：失焦使用与Enter相同的验证和提交链路，不产生第二次重复提交。",
+        "行为 escape-reset：Esc丢弃数字草稿并恢复原14px，不新增撤销步骤。"
+      ],
+      "unit": "px",
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "N09",
+      "family": "NumberControl",
+      "variant": "precise-committed",
+      "label": "圆角",
+      "value": "20",
+      "visualState": "committed",
+      "notes": [
+        "无焦点晕；数值与样张保持20；宿主反馈与控件本体分离，不在每一行堆成功徽标。",
+        "行为 gesture-commit：松开触发onCommit，等待宿主回读后显示已预览；整个手势只占一次撤销。",
+        "行为 enter-submit：Enter且非IME确认时验证并提交；非法值停留N10或N11。",
+        "行为 blur-submit：失焦使用与Enter相同的验证和提交链路，不产生第二次重复提交。"
+      ],
+      "unit": "px",
+      "hint": "已预览，可撤销",
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "N10",
+      "family": "NumberControl",
+      "variant": "empty-or-nonnumeric",
+      "label": "圆角",
+      "value": "",
+      "visualState": "invalid",
+      "notes": [
+        "输入框为空，边框+错误图标+一行错误文字；错误行向下扩展，不覆盖下一属性。原生number字段过滤非法字母后可呈现同一空值错误。",
+        "行为 invalid-empty：提交空草稿不写入页面，展示范围说明。",
+        "行为 invalid-nonnumeric：原生number字段不保留abc；被过滤为空后提交走同一空值错误，不设计不存在的字母读数。"
+      ],
+      "unit": "px",
+      "hint": "请输入 0–200px 之间的数值",
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "N11",
+      "family": "NumberControl",
+      "variant": "outside-range",
+      "label": "圆角",
+      "value": "240",
+      "visualState": "invalid",
+      "notes": [
+        "保留错误草稿240供修正，滑轨仍反映上次合法值14；不得把240夹紧并偷偷提交。",
+        "行为 invalid-out-of-range：240保留在草稿供修正，页面合法值保持不变。"
+      ],
+      "unit": "px",
+      "hint": "请输入 0–200px 之间的数值",
+      "implementation": "current-behavior-new-visual",
+      "draftValue": 240,
+      "confirmedValue": 14,
+      "sliderValueSource": "confirmedValue",
+      "finalDesignEvidence": {
+        "findingId": "VI-02",
+        "componentId": "26:1179",
+        "instanceId": "26:1180",
+        "status": "closed-after-live-readback-and-visual-review",
+        "report": "verification/inspector-final-fixes.json"
+      }
+    },
+    {
+      "id": "N12",
+      "family": "NumberControl",
+      "variant": "CSS-mixed",
+      "label": "圆角",
+      "value": "混合",
+      "visualState": "mixed",
+      "notes": [
+        "读数列显示混合，完整CSS原值在下一行；滑块仅代表可编辑标量入口，不自动把多值覆盖成单值。",
+        "行为 mixed-CSS-value：读取复合值显示原CSS；用户明确拖动或输入单值后才转标量。"
+      ],
+      "hint": "当前值 12px 20px 12px 20px",
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "N13",
+      "family": "NumberControl",
+      "variant": "disabled",
+      "label": "圆角",
+      "value": "14",
+      "visualState": "disabled",
+      "notes": [
+        "整行降低视觉重量但标签和值可读；无hover、焦点或可拖动光标。禁用原因由宿主上下文说明。",
+        "行为 disabled：不可编辑时保留值与标签，不通过灰度暗示值已丢失。"
+      ],
+      "unit": "px",
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "N14",
+      "family": "NumberControl",
+      "variant": "commit-pending",
+      "label": "圆角",
+      "value": "20",
+      "visualState": "pending",
+      "notes": [
+        "保留乐观预览值20，显示宿主同步提示而不阻断后续最新值排队；不是新增组件内部spinner。",
+        "行为 gesture-commit：松开触发onCommit，等待宿主回读后显示已预览；整个手势只占一次撤销。",
+        "行为 enter-submit：Enter且非IME确认时验证并提交；非法值停留N10或N11。",
+        "行为 blur-submit：失焦使用与Enter相同的验证和提交链路，不产生第二次重复提交。",
+        "行为 write-pending：宿主写入进行中只提示同步状态；新的拖动仍按latest-pending队列合并。",
+        "行为 preview-readback-failed：写入或回读失败保留上下文，等待核对或重新选取，不伪装成功。"
+      ],
+      "unit": "px",
+      "hint": "正在同步页面预览…",
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "N15",
+      "family": "NumberControl",
+      "variant": "readback-failed",
+      "label": "圆角",
+      "value": "20",
+      "visualState": "error",
+      "notes": [
+        "保留最后输入值和页面上下文；错误文字与宿主重试/核对操作相邻，不能用绿色已完成。",
+        "行为 preview-readback-failed：写入或回读失败保留上下文，等待核对或重新选取，不伪装成功。"
+      ],
+      "unit": "px",
+      "hint": "预览回读失败，请检查页面后重试",
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "N16",
+      "family": "NumberControl",
+      "variant": "stale-element",
+      "label": "圆角",
+      "value": "—",
+      "visualState": "stale",
+      "notes": [
+        "旧读数不可继续写入；禁用滑轨与数值框，错误提示后提供宿主“重新选取”动作。",
+        "行为 stale-element：页面或引用失效后禁止旧控件写入，重新选中目标后恢复N01。"
+      ],
+      "unit": "px",
+      "hint": "元素已变化，请重新选取",
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "N17",
+      "family": "NumberControl",
+      "variant": "tracking-decimal",
+      "label": "字间距",
+      "value": "1.5",
+      "visualState": "decimal",
+      "notes": [
+        "Aa样张展示字间距；范围−8–24，step0.1；小数点和单位位置稳定，读数72宽。",
+        "行为 decimal：精确输入可接受合法范围的小数，不能强行四舍五入到滑轨整数步长。"
+      ],
+      "unit": "px",
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "N18",
+      "family": "NumberControl",
+      "variant": "margin-negative",
+      "label": "上外边距",
+      "value": "-12",
+      "visualState": "negative",
+      "notes": [
+        "间距样张必须保留负值方向；范围−160–160，零位于轨道中点；数值列72宽。",
+        "行为 negative-value：负号是值的一部分；零和正值共用同一固定宽读数区。"
+      ],
+      "unit": "px",
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "C01",
+      "family": "ColorControl",
+      "variant": "opaque",
+      "label": "背景颜色",
+      "value": "#146B8A",
+      "visualState": "default",
+      "notes": [
+        "高34，色板触发40宽、样本22×20、8px棋盘，CSS读数等宽12/18；alpha独立小读数。浮层264宽、内边距16、色区144高、轨道视觉12/命中28。",
+        "色板实色，CSS值完整可编辑，隐藏冗余100%alpha。",
+        "行为 opaque：已读取的实色默认态，不额外显示100%标签。",
+        "行为 valid-CSS-enter-or-blur：Enter/Blur验证CSS且未被宿主禁止后提交；回读成功形成新的默认值。",
+        "行为 empty-clear-override：提交空串清除inline覆盖，并用页面cascade读回值；不能把空值当作透明色。",
+        "行为 escape-reset：Esc清除未提交草稿及错误，恢复原CSS值。"
+      ],
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "C02",
+      "family": "ColorControl",
+      "variant": "alpha",
+      "label": "背景颜色",
+      "value": "#146B8A",
+      "visualState": "alpha",
+      "notes": [
+        "22×20色板透出棋盘；右侧独立64%读数，不把HEX误解为不含透明度的最终CSS。",
+        "行为 alpha：非焦点时显示HEX和64%分离读数；色板保留棋盘。",
+        "行为 text-focused-show-original-alpha：文本聚焦从HEX+alpha切换为原始rgba，失焦合法提交后回到紧凑显示。",
+        "行为 alpha-drag：透明度轨道与数字联动，松开提交；色相和RGB保持。"
+      ],
+      "hint": "64%",
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "C03",
+      "family": "ColorControl",
+      "variant": "transparent",
+      "label": "背景颜色",
+      "value": "transparent",
+      "visualState": "transparent",
+      "notes": [
+        "完整棋盘为0透明；原始transparent文字保持可读，不把无色画成白色。",
+        "行为 transparent：0%与白色完全不同，清楚显示transparent。"
+      ],
+      "hint": "0%",
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "C04",
+      "family": "ColorControl",
+      "variant": "wide-gamut",
+      "label": "背景颜色",
+      "value": "oklch(55% 0.1 210)",
+      "visualState": "wide-gamut",
+      "notes": [
+        "保留原始CSS Color 4字符串；读数采用长字段88+弹性区域，完整值可横向查看；未操作色盘前不改写原值。",
+        "行为 wide-gamut-original：CSS Color4原始字符串在任何色盘操作之前保持原样。",
+        "行为 picker-sRGB-projection：打开色盘可使用sRGB投影显示；只是投影不等于改写CSS，操作色盘后才提交新的rgba。"
+      ],
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "C05",
+      "family": "ColorControl",
+      "variant": "picker-open",
+      "label": "背景颜色",
+      "value": "#146B8A",
+      "visualState": "popover-open",
+      "notes": [
+        "底部起始对齐，offset6；浮层含标题、当前样本、HSB色区、色相、不透明度、HEX；alpha输出100%。",
+        "行为 picker-sRGB-projection：打开色盘可使用sRGB投影显示；只是投影不等于改写CSS，操作色盘后才提交新的rgba。",
+        "行为 popover-open：激活色板按钮打开浮层，焦点进入Dialog；关闭回到触发器。",
+        "行为 popover-edge-flip：内容不变，空间不足时整体翻转上方，不缩窄选色区到不可用。",
+        "行为 saturation-brightness-drag：拖动色区实时onChange，手势结束onCommit；圆柄始终有双色边缘。",
+        "行为 hue-drag：色相变化更新色区、样本和读数；松开形成一次提交。"
+      ],
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "C06",
+      "family": "ColorControl",
+      "variant": "color-area-drag",
+      "label": "背景颜色",
+      "value": "#1C6D94",
+      "visualState": "color-area-dragging",
+      "notes": [
+        "饱和度/亮度圆柄13×13、白描边2与暗外环；手指/鼠标移动时当前样本立即变化；松开才提交手势。",
+        "行为 saturation-brightness-drag：拖动色区实时onChange，手势结束onCommit；圆柄始终有双色边缘。"
+      ],
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "C07",
+      "family": "ColorControl",
+      "variant": "hue-drag",
+      "label": "背景颜色",
+      "value": "#146B8A",
+      "visualState": "hue-dragging",
+      "notes": [
+        "色相滑块显示当前195°附近位置，色区随色相变化；HSV颜色值与HEX输出联动。",
+        "行为 hue-drag：色相变化更新色区、样本和读数；松开形成一次提交。"
+      ],
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "C08",
+      "family": "ColorControl",
+      "variant": "gray-hue-retained",
+      "label": "背景颜色",
+      "value": "rgba(32,32,32,1)",
+      "visualState": "gray-retains-hue",
+      "notes": [
+        "色区圆柄位于低饱和灰黑区域，色相滑块仍保留之前选择的195°；不跳回0°。",
+        "行为 gray-black-hue-preserved：经过灰/黑时保留用户色相选择，再提高饱和度沿用该色相。"
+      ],
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "C09",
+      "family": "ColorControl",
+      "variant": "alpha-drag",
+      "label": "背景颜色",
+      "value": "rgba(20,107,138,0.32)",
+      "visualState": "alpha-dragging",
+      "notes": [
+        "alpha轨道由透明棋盘渐变到当前颜色；数值32%；HEX保留颜色通道，不把alpha合并丢失。",
+        "行为 alpha-drag：透明度轨道与数字联动，松开提交；色相和RGB保持。"
+      ],
+      "hint": "32%",
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "C10",
+      "family": "ColorControl",
+      "variant": "HEX-alpha-preserved",
+      "label": "背景颜色",
+      "value": "146B8A",
+      "visualState": "hex-focused",
+      "notes": [
+        "HEX输入框2px焦点环，alpha输出64%；改HEX仅替换RGB，alpha维持0.64。",
+        "行为 HEX-edit-preserves-alpha：编辑HEX时保留现有alpha；不能把64%误恢复为100%。"
+      ],
+      "hint": "64%",
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "C11",
+      "family": "ColorControl",
+      "variant": "inline-alpha-focus",
+      "label": "背景颜色",
+      "value": "rgba(20,107,138,0.64)",
+      "visualState": "inline-focused",
+      "notes": [
+        "inline输入获得焦点时显示完整rgba原值；非焦点态的独立64%读数隐藏，避免双重读数。",
+        "行为 text-focused-show-original-alpha：文本聚焦从HEX+alpha切换为原始rgba，失焦合法提交后回到紧凑显示。"
+      ],
+      "implementation": "current-behavior-new-visual",
+      "finalDesignEvidence": {
+        "findingId": "VI-03",
+        "componentId": "26:2646",
+        "instanceId": "26:2647",
+        "status": "closed-after-live-readback-and-visual-review",
+        "report": "verification/inspector-final-fixes.json"
+      }
+    },
+    {
+      "id": "C12",
+      "family": "ColorControl",
+      "variant": "CSS-text-draft",
+      "label": "背景颜色",
+      "value": "#167C9B",
+      "visualState": "text-draft",
+      "notes": [
+        "光标在CSS草稿末尾；输入时不直接改写页面；Enter/Blur验证后才提交。",
+        "行为 text-draft：输入建立草稿，色板确认值不会在每个字符时变成无效。",
+        "行为 valid-CSS-enter-or-blur：Enter/Blur验证CSS且未被宿主禁止后提交；回读成功形成新的默认值。",
+        "行为 escape-reset：Esc清除未提交草稿及错误，恢复原CSS值。"
+      ],
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "C13",
+      "family": "ColorControl",
+      "variant": "invalid-or-disallowed",
+      "label": "背景颜色",
+      "value": "#12GG9B",
+      "visualState": "invalid",
+      "notes": [
+        "保留非法草稿，边框+错误文字双重反馈，色板仍显示上次合法色；unsafe CSS同类错误但不把危险字符串写进可见样例。",
+        "行为 invalid-CSS：CSS.supports失败时保持草稿并阻止写入。",
+        "行为 unsafe-CSS-rejected：宿主isAllowed拒绝时同样阻止写入；用具体颜色格式提示恢复，不执行外链或表达式。"
+      ],
+      "hint": "请输入具体的 CSS 颜色，例如 #445566",
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "C14",
+      "family": "ColorControl",
+      "variant": "clear-inline-override",
+      "label": "背景颜色",
+      "value": "",
+      "visualState": "empty-clear",
+      "notes": [
+        "输入框为空并有焦点；色板仍是当前页面读回色，只有提交空值才清除inline覆盖。",
+        "行为 empty-clear-override：提交空串清除inline覆盖，并用页面cascade读回值；不能把空值当作透明色。"
+      ],
+      "hint": "清除后恢复页面样式",
+      "implementation": "current-behavior-new-visual",
+      "draftState": {
+        "draftValue": "",
+        "committed": false,
+        "swatchSource": "current-page-readback",
+        "sampleReadbackColor": "#146B8A",
+        "sampleReadbackAlpha": 1,
+        "emptyMeansTransparent": false,
+        "clearOverrideOnlyOnCommit": true
+      },
+      "finalDesignEvidence": {
+        "findingId": "VI-04",
+        "componentId": "26:2862",
+        "instanceId": "26:2863",
+        "status": "closed-after-live-readback-and-visual-review",
+        "report": "verification/inspector-final-fixes.json"
+      }
+    },
+    {
+      "id": "C15",
+      "family": "ColorControl",
+      "variant": "disabled",
+      "label": "背景颜色",
+      "value": "#146B8A",
+      "visualState": "disabled",
+      "notes": [
+        "色板和CSS文本一并禁用，仍展示真实颜色；不把主题灰覆盖到数据色板上。",
+        "行为 disabled：禁用编辑入口而不改变数据色样。"
+      ],
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "C16",
+      "family": "ColorControl",
+      "variant": "commit-failed",
+      "label": "背景颜色",
+      "value": "#167C9B",
+      "visualState": "error",
+      "notes": [
+        "保留用户值及宿主错误提示；可重新核对页面，避免显示未核实的成功色。",
+        "行为 commit-failure：失败保留原引用和输入，提示重新核对或选取。"
+      ],
+      "hint": "预览未应用，请重新选取元素",
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "C17",
+      "family": "ColorControl",
+      "variant": "swatch-keyboard-focus",
+      "label": "背景颜色",
+      "value": "#146B8A",
+      "visualState": "focus-visible",
+      "notes": [
+        "色板按钮外圈2px黑白主题焦点环；Enter/Space打开色盘；Esc关闭后焦点回到此按钮。",
+        "行为 keyboard-focus：键盘焦点针对色板按钮、色区圆柄、两条通道和HEX分别可见。"
+      ],
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "C18",
+      "family": "ColorControl",
+      "variant": "popover-top-edge",
+      "label": "背景颜色",
+      "value": "#146B8A",
+      "visualState": "popover-open-above",
+      "notes": [
+        "与C05内容完全一致，因底部空间不足翻转为top start；距触发器6px，距窗口边缘至少12px，不遮挡当前字段。",
+        "行为 popover-edge-flip：内容不变，空间不足时整体翻转上方，不缩窄选色区到不可用。"
+      ],
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "C19",
+      "family": "ColorControl",
+      "variant": "preview-pending",
+      "label": "背景颜色",
+      "value": "#167C9B",
+      "visualState": "pending",
+      "notes": [
+        "颜色读数和样本保持新值，宿主同步反馈置于属性区底部；可以继续拖动并合并最新值。",
+        "行为 valid-CSS-enter-or-blur：Enter/Blur验证CSS且未被宿主禁止后提交；回读成功形成新的默认值。",
+        "行为 empty-clear-override：提交空串清除inline覆盖，并用页面cascade读回值；不能把空值当作透明色。",
+        "行为 saturation-brightness-drag：拖动色区实时onChange，手势结束onCommit；圆柄始终有双色边缘。",
+        "行为 hue-drag：色相变化更新色区、样本和读数；松开形成一次提交。",
+        "行为 alpha-drag：透明度轨道与数字联动，松开提交；色相和RGB保持。",
+        "行为 preview-pending：宿主正在预览/提交时不标记完成；值仍可被最新用户操作替换。",
+        "行为 commit-failure：失败保留原引用和输入，提示重新核对或选取。"
+      ],
+      "hint": "正在同步页面预览…",
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "P01",
+      "family": "InsetsControl",
+      "variant": "uniform-linked",
+      "label": "内边距",
+      "value": "24",
+      "visualState": "linked",
+      "notes": [
+        "保留间距比例样张+细滑轨+固定72px读数；标题右侧链条按钮24×24为统一模式。",
+        "行为 linked-uniform：相等px值默认可用统一滑轨。",
+        "行为 toggle-without-write：点击链条只改变呈现模式；24px统一变成四个24px，不调用onChange。",
+        "行为 linked-edit-overwrites-all-on-commit：由不等边切换统一模式本身不写；随后改变统一值并提交才明确覆盖四边。"
+      ],
+      "unit": "px",
+      "implementation": "current-behavior-new-visual",
+      "presentationMode": "uniform-slider-single-readout",
+      "finalDesignEvidence": {
+        "findingId": "VI-05",
+        "componentId": "26:3380",
+        "instanceId": "26:3381",
+        "status": "closed-after-live-readback-and-visual-review",
+        "report": "verification/inspector-final-fixes.json"
+      }
+    },
+    {
+      "id": "P02",
+      "family": "InsetsControl",
+      "variant": "unequal-split",
+      "label": "内边距",
+      "value": "18 / 32 / 18 / 32",
+      "visualState": "unlinked",
+      "notes": [
+        "四格顺序上、右、下、左，方向图示14、格间4、格高34；数值右对齐并保留px。",
+        "行为 unlinked-four-values：不等边px值默认呈四格，保留上右下左顺序。",
+        "行为 unequal-initial-values：初次读取18/32/18/32，不把parseFloat结果18当作四边总值。",
+        "行为 CSS-shorthand-mixed：合法1至4个px值拆解为四边；无法拆解的单位串显示混合与原值。",
+        "行为 linked-edit-overwrites-all-on-commit：由不等边切换统一模式本身不写；随后改变统一值并提交才明确覆盖四边。"
+      ],
+      "unit": "px",
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "P03",
+      "family": "InsetsControl",
+      "variant": "equal-split-focus",
+      "label": "内边距",
+      "value": "24 / 24 / 24 / 24",
+      "visualState": "split-focused",
+      "notes": [
+        "等值也允许分拆；右侧值输入有2px焦点环；切换模式没有写入页面。",
+        "行为 toggle-without-write：点击链条只改变呈现模式；24px统一变成四个24px，不调用onChange。",
+        "行为 four-side-keyboard-edit：Tab逐格访问；修改单边经Enter/Blur提交，其余边保留。"
+      ],
+      "unit": "px",
+      "implementation": "current-behavior-new-visual",
+      "finalDesignEvidence": {
+        "findingId": "VI-06",
+        "componentId": "26:3555",
+        "instanceId": "26:3556",
+        "status": "closed-after-live-readback-and-visual-review",
+        "report": "verification/inspector-final-fixes.json"
+      }
+    },
+    {
+      "id": "P04",
+      "family": "InsetsControl",
+      "variant": "one-side-invalid",
+      "label": "内边距",
+      "value": "18 / 240 / 18 / 32",
+      "visualState": "side-invalid",
+      "notes": [
+        "仅右侧单元边框和错误文字突出；其他三边保留合法值；错误行自动增高且四格仍有方向图示。",
+        "行为 per-side-invalid：一边非法时只拒绝该草稿，保留其他三边的真实值。"
+      ],
+      "unit": "px",
+      "hint": "右内边距应为 0–160px",
+      "implementation": "current-behavior-new-visual",
+      "finalDesignEvidence": {
+        "findingId": "VI-07",
+        "componentId": "26:3642",
+        "instanceId": "26:3643",
+        "status": "closed-after-live-readback-and-visual-review",
+        "report": "verification/inspector-final-fixes.json"
+      }
+    },
+    {
+      "id": "P05",
+      "family": "InsetsControl",
+      "variant": "non-px-mixed",
+      "label": "内边距",
+      "value": "混合",
+      "visualState": "mixed",
+      "notes": [
+        "保留原CSS读数并显示混合；非px不显示无依据的四格数值；用户明确输入后才统一覆盖。",
+        "行为 CSS-shorthand-mixed：合法1至4个px值拆解为四边；无法拆解的单位串显示混合与原值。",
+        "行为 unsupported-non-px-preserved：1rem 2rem不强制转换成像素，也不显示臆测的四边值。"
+      ],
+      "hint": "当前值 1rem 2rem",
+      "implementation": "current-behavior-new-visual",
+      "originalCss": "1rem 2rem",
+      "perSidePixelValues": null,
+      "conversionToPixels": false,
+      "finalDesignEvidence": {
+        "findingId": "VI-05",
+        "componentId": "26:3727",
+        "instanceId": "26:3728",
+        "status": "closed-after-live-readback-and-visual-review",
+        "report": "verification/inspector-final-fixes.json"
+      }
+    },
+    {
+      "id": "P06",
+      "family": "InsetsControl",
+      "variant": "disabled-four-sides",
+      "label": "内边距",
+      "value": "18 / 32 / 18 / 32",
+      "visualState": "disabled",
+      "notes": [
+        "四格和联动按钮同时禁用，方向与数值仍可读；不把不等边重置为同值。",
+        "行为 disabled：禁用当前四边编辑，仍展示原数据。"
+      ],
+      "unit": "px",
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "P07",
+      "family": "InsetsControl",
+      "variant": "pending-four-sides",
+      "label": "内边距",
+      "value": "18 / 40 / 18 / 32",
+      "visualState": "pending",
+      "notes": [
+        "显示最新右侧40px，其他边不变化；宿主同步反馈在四格下方，布局不覆盖下一行。",
+        "行为 four-side-keyboard-edit：Tab逐格访问；修改单边经Enter/Blur提交，其余边保留。",
+        "行为 pending：一边修改已进入队列，宿主回读完成前保留pending反馈。",
+        "行为 undo：撤销最近一次手势后回到上次四边快照，不回到任意默认值。"
+      ],
+      "unit": "px",
+      "hint": "正在同步页面预览…",
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "P08",
+      "family": "InsetsControl",
+      "variant": "undo-restored",
+      "label": "内边距",
+      "value": "18 / 32 / 18 / 32",
+      "visualState": "restored",
+      "notes": [
+        "撤销后回到原四边值和分拆状态；宿主反馈可短暂出现，不把撤销变成新的编辑操作。",
+        "行为 undo：撤销最近一次手势后回到上次四边快照，不回到任意默认值。"
+      ],
+      "unit": "px",
+      "hint": "已撤销页面修改",
+      "implementation": "current-behavior-new-visual",
+      "finalDesignEvidence": {
+        "findingId": "VI-07",
+        "componentId": "26:3982",
+        "instanceId": "26:3983",
+        "status": "closed-after-live-readback-and-visual-review",
+        "report": "verification/inspector-final-fixes.json"
+      }
+    },
+    {
+      "id": "A01",
+      "family": "ChoiceControl-segments",
+      "variant": "alignment-unknown",
+      "label": "文字对齐",
+      "value": "start",
+      "visualState": "unknown-current",
+      "notes": [
+        "4段左/中/右/两端均未选中；完整原始CSS以hint保留；不把start强制标成left。",
+        "行为 unselected：不在选项中的start使各段均未选中，保留原始值提示。",
+        "行为 unknown-original-CSS-value：未知于枚举的值是页面现状，不能当成错误或直接清零。"
+      ],
+      "hint": "当前值 start",
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "A02",
+      "family": "ChoiceControl-segments",
+      "variant": "alignment-selected",
+      "label": "文字对齐",
+      "value": "center",
+      "visualState": "selected",
+      "notes": [
+        "高34，内边距3、段间3；中间按钮使用中性选中底+1px内边+对应浅深色图标；其余图标中性。",
+        "行为 selected：选择项由填充+图标色+内边界共同表达。",
+        "行为 hover：hover一个未选段不清除原选择。",
+        "行为 keyboard-radio-navigation：方向键从center移到right，触发原生radio选择并立即提交。",
+        "行为 commit：点击或键盘选择后立即preview+finish，不等待额外应用按钮。"
+      ],
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "A03",
+      "family": "ChoiceControl-segments",
+      "variant": "alignment-hover",
+      "label": "文字对齐",
+      "value": "center",
+      "visualState": "hover-unselected",
+      "notes": [
+        "center保持选中；鼠标hover的right段只用中性轻底，不能与已选状态完全相同。",
+        "行为 hover：hover一个未选段不清除原选择。"
+      ],
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "A04",
+      "family": "ChoiceControl-segments",
+      "variant": "alignment-keyboard",
+      "label": "文字对齐",
+      "value": "right",
+      "visualState": "focus-visible",
+      "notes": [
+        "right已选并有2px焦点环；方向键在radio组内切换并提交，焦点不消失。",
+        "行为 focus-visible：Tab和方向键路径显示真实焦点。",
+        "行为 keyboard-radio-navigation：方向键从center移到right，触发原生radio选择并立即提交。",
+        "行为 commit：点击或键盘选择后立即preview+finish，不等待额外应用按钮。"
+      ],
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "A05",
+      "family": "ChoiceControl-segments",
+      "variant": "alignment-disabled",
+      "label": "文字对齐",
+      "value": "center",
+      "visualState": "disabled",
+      "notes": [
+        "保留center选择但降低整体强度；键盘和指针不修改值。",
+        "行为 disabled：禁用保留选中值和可读图标。"
+      ],
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "A06",
+      "family": "ChoiceControl-segments",
+      "variant": "alignment-stale",
+      "label": "文字对齐",
+      "value": "center",
+      "visualState": "stale",
+      "notes": [
+        "保持最后已知center并禁用；紧邻宿主重新选取提示，不用空白假装当前值已知。",
+        "行为 stale-element：旧元素失效禁止重新提交旧选择，重新选取后读回。"
+      ],
+      "hint": "元素已变化，请重新选取",
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "D01",
+      "family": "InspectorSelect",
+      "variant": "border-closed",
+      "label": "边框样式",
+      "value": "dashed",
+      "visualState": "default",
+      "notes": [
+        "高34、圆角12；普通态无描边，以表面填充与轻影承载；24px独立预览列显示虚线，文字弹性列，末尾13pxchevron；三列互不重叠。",
+        "行为 closed-known-value：显示已知标签及边框预览。",
+        "行为 border-style-preview：触发器与每个选项使用一致线段预览，包括无与双线。",
+        "行为 escape-close：Esc取消临时菜单焦点并关闭，保留旧的dashed而不提交double。"
+      ],
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "D02",
+      "family": "InspectorSelect",
+      "variant": "empty-current",
+      "label": "元素动效",
+      "value": "当前值",
+      "visualState": "empty",
+      "notes": [
+        "无已知value时显示当前值占位；不预选第一个选项；chevron保持中性。",
+        "行为 closed-empty-current-value：空值显示当前值占位而非默认替用户选择。"
+      ],
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "D03",
+      "family": "InspectorSelect",
+      "variant": "unknown-actual-value",
+      "label": "布局",
+      "value": "flow-root",
+      "visualState": "unknown-current",
+      "notes": [
+        "真实CSS不在枚举中仍显示flow-root，并作为菜单首项保留；不得无意替换为block。",
+        "行为 closed-unknown-value-preserved：未知值保留为首个可选项目和当前显示值。"
+      ],
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "D04",
+      "family": "InspectorSelect",
+      "variant": "border-open",
+      "label": "边框样式",
+      "value": "dashed",
+      "visualState": "open",
+      "notes": [
+        "菜单offset4、padding4、radius22、min140w或触发宽；外层使用overlay轻影，内部不叠加第二层影；5项无/实线/虚线/点线/双线，各有24px预览，虚线带check。",
+        "行为 open：激活触发器打开浮层，chevron旋转180°并突出边框。",
+        "行为 selected-option：选中项保留check和较高字重，不只依赖背景色。",
+        "行为 border-style-preview：触发器与每个选项使用一致线段预览，包括无与双线。",
+        "行为 arrow-navigation：方向键在列表项目间移动焦点；不把hover当作选择。"
+      ],
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "D05",
+      "family": "InspectorSelect",
+      "variant": "option-hover",
+      "label": "边框样式",
+      "value": "dashed",
+      "visualState": "open-hover",
+      "notes": [
+        "当前虚线保留check；点线行hover中性浅底；只有指针高亮，不改变value。",
+        "行为 hover-option：指针移到点线只改变hover样式。"
+      ],
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "D06",
+      "family": "InspectorSelect",
+      "variant": "option-keyboard-focus",
+      "label": "边框样式",
+      "value": "dashed",
+      "visualState": "open-focus",
+      "notes": [
+        "双线行显示1px内焦点边，虚线仍为选择项；Arrow移动焦点不在Enter前写入页面。",
+        "行为 focused-option：键盘焦点移动到双线，尚未改变虚线value。",
+        "行为 escape-close：Esc取消临时菜单焦点并关闭，保留旧的dashed而不提交double。",
+        "行为 enter-commit：Enter提交聚焦的double，关闭菜单并归还焦点；仅一次preview+finish。",
+        "行为 arrow-navigation：方向键在列表项目间移动焦点；不把hover当作选择。"
+      ],
+      "implementation": "current-behavior-new-visual",
+      "finalDesignEvidence": {
+        "findingId": "VI-08",
+        "componentId": "26:4784",
+        "instanceId": "26:4785",
+        "status": "closed-after-live-readback-and-visual-review",
+        "report": "verification/inspector-final-fixes.json"
+      }
+    },
+    {
+      "id": "D07",
+      "family": "InspectorSelect",
+      "variant": "selected-option-focused",
+      "label": "边框样式",
+      "value": "dashed",
+      "visualState": "open-selected-focus",
+      "notes": [
+        "虚线行同时选中与聚焦：中性选中底、对应浅深色标签、check、1px内边；与普通hover区分。",
+        "行为 selected-focused-option：选中与聚焦重合时叠加焦点边而不是丢失check。"
+      ],
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "D08",
+      "family": "InspectorSelect",
+      "variant": "long-trigger-value",
+      "label": "CSS 当前值",
+      "value": "repeating-linear-gradient(90deg, …)",
+      "visualState": "long-truncated",
+      "notes": [
+        "只让文字列省略，预览和chevron不压缩；完整值通过可访问名称/详情保留。不是新控件类别。",
+        "行为 long-label-ellipsis：长触发标签省略，chevron固定位置。"
+      ],
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "D09",
+      "family": "InspectorSelect",
+      "variant": "long-menu-label",
+      "label": "元素动效",
+      "value": "当前自定义动效",
+      "visualState": "open-long-option",
+      "notes": [
+        "当前自定义动效带长名称的选项采用最多两行，行高20、上下8；末尾check独立16px列；该换行是V2精修建议。",
+        "行为 long-menu-label：V2建议长菜单标签两行包裹，保持预览与check列不重叠。"
+      ],
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "D10",
+      "family": "InspectorSelect",
+      "variant": "motion-menu-scroll-above",
+      "label": "元素动效",
+      "value": "breathe-bounce",
+      "visualState": "open-scroll-above",
+      "notes": [
+        "菜单因底部仅剩96px翻转top start；5个真实动效选项，列表最大可见96px、内部滚动，聚焦项滚入可见区。",
+        "行为 menu-scroll：菜单内部滚动，焦点选项自动进入视野，页面不跟随滚动。",
+        "行为 menu-near-window-edge：可用空间不足时翻转并限制高度；不是裁切选项到画板外。"
+      ],
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "D11",
+      "family": "InspectorSelect",
+      "variant": "disabled",
+      "label": "边框样式",
+      "value": "dashed",
+      "visualState": "disabled",
+      "notes": [
+        "保留虚线预览与读数，禁止展开，不显示hover背景。",
+        "行为 disabled：禁用后保留真实值但不能打开。"
+      ],
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "D12",
+      "family": "InspectorSelect",
+      "variant": "trigger-focus-return",
+      "label": "边框样式",
+      "value": "double",
+      "visualState": "closed-focus-visible",
+      "notes": [
+        "从菜单提交或Esc返回后，焦点回到34px触发器并显示2px黑白主题外环；double仅代表已提交时的值。",
+        "行为 enter-commit：Enter提交聚焦的double，关闭菜单并归还焦点；仅一次preview+finish。",
+        "行为 focus-return：关闭菜单后焦点回触发器；鼠标关闭可不显示键盘外环。"
+      ],
+      "implementation": "current-behavior-new-visual",
+      "finalDesignEvidence": {
+        "findingId": "VI-08",
+        "componentId": "26:5217",
+        "instanceId": "26:5218",
+        "status": "closed-after-live-readback-and-visual-review",
+        "report": "verification/inspector-final-fixes.json"
+      }
+    },
+    {
+      "id": "I01",
+      "family": "InspectorInput",
+      "variant": "search-empty",
+      "label": "查找页面元素",
+      "value": "",
+      "visualState": "empty",
+      "notes": [
+        "原有搜索用途；高34、圆角12、padding10，普通态无描边；占位“查找文字、标题或按钮”，查找按钮禁用。",
+        "行为 empty：空搜索字段不允许提交。"
+      ],
+      "hint": "查找文字、标题或按钮",
+      "implementation": "current-behavior-new-visual",
+      "finalDesignEvidence": {
+        "findingId": "VI-16",
+        "componentId": "26:5253",
+        "instanceId": "26:5254",
+        "status": "closed-after-live-readback-and-visual-review",
+        "report": "verification/inspector-final-fixes.json"
+      },
+      "finalInstanceGeometry": {
+        "width": 400,
+        "height": 56,
+        "mainComponentId": "26:5253"
+      }
+    },
+    {
+      "id": "I02",
+      "family": "InspectorInput",
+      "variant": "search-filled",
+      "label": "查找页面元素",
+      "value": "添加任务",
+      "visualState": "default",
+      "notes": [
+        "有真实查询值时查找可用；字体12/18，不显示实现提示。",
+        "行为 filled：合法查询显示可执行查找动作。",
+        "行为 enter-submit-when-applicable：仅搜索form等宿主定义了submit的场景使用Enter提交；普通CSS字段Enter不能偷做应用。"
+      ],
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "I03",
+      "family": "InspectorInput",
+      "variant": "CSS-hover",
+      "label": "宽度",
+      "value": "320px",
+      "visualState": "hover",
+      "notes": [
+        "原始CSS字段，鼠标进入使用subtle浅灰填充；padding10，值不因hover移动。",
+        "行为 hover：以浅灰填充变化提供可编辑提示，不依赖加深边框。"
+      ],
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "I04",
+      "family": "InspectorInput",
+      "variant": "search-focus-IME",
+      "label": "查找页面元素",
+      "value": "添加任务",
+      "visualState": "focus-visible",
+      "notes": [
+        "光标与2px焦点环；输入法候选确认不提交查询；输入完成后的Enter可由搜索form提交。",
+        "行为 focused：焦点环与文本光标显示真实编辑目标。",
+        "行为 enter-submit-when-applicable：仅搜索form等宿主定义了submit的场景使用Enter提交；普通CSS字段Enter不能偷做应用。",
+        "行为 IME-confirmation-not-submit：composing Enter用于确认候选，不触发搜索或任务发送。"
+      ],
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "I05",
+      "family": "InspectorInput",
+      "variant": "long-CSS-draft",
+      "label": "背景 / 渐变",
+      "value": "linear-gradient(120deg, #E8F3F7 0%, #146B8A 100%)",
+      "visualState": "dirty-long",
+      "notes": [
+        "跨双列原始CSS字段；编辑焦点内水平滚动查看长值；底部应用预览可用，当前值尚未写入。",
+        "行为 draft-dirty：原始CSS输入只成为草稿，须点应用预览才写入。",
+        "行为 long-value：长CSS值在跨列字段内横向查看，不让其把控件撑出面板。",
+        "行为 escape-reset-when-applicable：基础InspectorInput没有统一Esc重置。此CSS草稿按宿主保留，不能凭设计给它加入未有依据的清空行为；数字/颜色的Esc另见N08→N01、C12→C01。"
+      ],
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "I06",
+      "family": "InspectorInput",
+      "variant": "motion-duration-invalid",
+      "label": "动效周期",
+      "value": "80",
+      "visualState": "invalid",
+      "notes": [
+        "保留80草稿，范围提示置于动效组；显式应用预览禁用。原始组件为基础input，校验由宿主提供。",
+        "行为 invalid：周期超界保留草稿并阻止应用，提示具体范围。"
+      ],
+      "unit": "秒",
+      "hint": "周期应为 0.1–60 秒",
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "I07",
+      "family": "InspectorInput",
+      "variant": "write-disabled",
+      "label": "宽度",
+      "value": "320px",
+      "visualState": "disabled",
+      "notes": [
+        "宿主写入中原始CSS字段禁用；值仍可读。readonly是宿主语义，不默认给所有CSS字段增加只读按钮。",
+        "行为 readonly-or-disabled：执行期间禁用；只读内容由明确宿主状态决定。"
+      ],
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "T01",
+      "family": "InspectorTextarea",
+      "variant": "content-empty",
+      "label": "元素文字",
+      "value": "",
+      "visualState": "empty",
+      "notes": [
+        "高110起，padding9×11，正文12/20；空白是合法元素内容草稿，应用是否可用依dirty决定。",
+        "行为 empty：空字段保留可编辑区，dirty判断由原值对比决定。"
+      ],
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "T02",
+      "family": "InspectorTextarea",
+      "variant": "content-multiline",
+      "label": "元素文字",
+      "value": "整理今日会议纪要\n确认产品交互细节\n给重要的事留一点时间。",
+      "visualState": "multiline",
+      "notes": [
+        "110px最低高度的内容字段；纵向resize手柄，内部滚动；宽度始终填满属性面板。",
+        "行为 filled：正文按行展示，保持换行。",
+        "行为 multiline：多行文本不压缩成单行；内部滚动独立于工作区。",
+        "行为 resize-min-max：从110px拖到230px，其他区域保持布局，超过最大值由内部滚动承接。",
+        "行为 disabled-during-write：提交中保留文字并禁用，成功回读解除禁用并清除dirty。"
+      ],
+      "implementation": "current-behavior-new-visual",
+      "finalDesignEvidence": {
+        "findingId": "VI-10",
+        "componentId": "26:5427",
+        "instanceId": "26:5428",
+        "status": "closed-after-live-readback-and-visual-review",
+        "report": "verification/inspector-final-fixes.json"
+      },
+      "finalInstanceGeometry": {
+        "width": 468,
+        "height": 132,
+        "mainComponentId": "26:5427"
+      }
+    },
+    {
+      "id": "T03",
+      "family": "InspectorTextarea",
+      "variant": "content-focused-dirty",
+      "label": "元素文字",
+      "value": "整理今日会议纪要\n确认产品交互细节\n下午检查首页按钮。",
+      "visualState": "focused-dirty",
+      "notes": [
+        "示例拉伸到230px最大高度，末行光标和2px焦点环；修改只在点击应用预览后写入。",
+        "行为 focused：光标及焦点环明示编辑目标。",
+        "行为 dirty：内容不同于原文时应用按钮可用；未提交前页面保持原文。",
+        "行为 resize-min-max：从110px拖到230px，其他区域保持布局，超过最大值由内部滚动承接。",
+        "行为 disabled-during-write：提交中保留文字并禁用，成功回读解除禁用并清除dirty。"
+      ],
+      "implementation": "current-behavior-new-visual",
+      "sampleControlHeight": 230,
+      "resizeRange": {
+        "min": 110,
+        "max": 230,
+        "unit": "px"
+      },
+      "finalDesignEvidence": {
+        "findingId": "VI-10",
+        "componentId": "26:5454",
+        "instanceId": "26:5455",
+        "status": "closed-after-live-readback-and-visual-review",
+        "report": "verification/inspector-final-fixes.json"
+      },
+      "finalInstanceGeometry": {
+        "width": 468,
+        "height": 252,
+        "mainComponentId": "26:5454"
+      }
+    },
+    {
+      "id": "T04",
+      "family": "InspectorTextarea",
+      "variant": "complex-element-readonly",
+      "label": "元素文字",
+      "value": "开始整理",
+      "visualState": "readonly",
+      "notes": [
+        "字段保留文字但禁用；原因直接显示，不能把有复杂子节点的整体内容当纯文本覆盖。",
+        "行为 readonly-with-reason：editableText=false时禁用并显示editReason；可改选单独文字节点。"
+      ],
+      "hint": "请选取单独的文字元素进行修改",
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "T05",
+      "family": "InspectorTextarea",
+      "variant": "content-limit",
+      "label": "元素文字",
+      "value": "整理今日会议纪要\n确认产品交互细节\n给重要的事留一点时间。",
+      "visualState": "limit",
+      "notes": [
+        "绘制长文本的可见片段与滚动条；fixture逻辑长度20,000。当前已有maxLength=20000，字符计数为V2可视化精修建议。",
+        "行为 20k-limit：达到maxLength后不再接收更多字符；计数是设计增强，不声称当前已有。"
+      ],
+      "hint": "20,000 / 20,000",
+      "implementation": "current-behavior-new-visual",
+      "textAreaBehavior": {
+        "maxLength": 20000,
+        "sampleContentLength": 20000,
+        "verticalScrollViewport": true,
+        "counterOutsideViewport": true,
+        "visibleCounterCount": 1
+      },
+      "finalDesignEvidence": {
+        "findingId": "VI-09",
+        "componentId": "26:5511",
+        "instanceId": "26:5512",
+        "status": "closed-after-live-readback-and-visual-review",
+        "report": "verification/inspector-final-fixes.json"
+      },
+      "finalInstanceGeometry": {
+        "width": 468,
+        "height": 148,
+        "mainComponentId": "26:5511"
+      }
+    },
+    {
+      "id": "T06",
+      "family": "InspectorTextarea",
+      "variant": "content-write-disabled",
+      "label": "元素文字",
+      "value": "整理今日会议纪要\n确认产品交互细节",
+      "visualState": "disabled-pending",
+      "notes": [
+        "应用预览期间禁用文本框与重复应用，宿主显示进行中；不要把文字清空成loading。",
+        "行为 disabled-during-write：提交中保留文字并禁用，成功回读解除禁用并清除dirty。"
+      ],
+      "hint": "正在应用页面预览…",
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "S01",
+      "family": "PropertySection",
+      "variant": "two-column",
+      "label": "外观",
+      "value": "背景颜色 · 圆角 · 透明度 · 边框样式",
+      "visualState": "two-column",
+      "notes": [
+        "容器宽480、双列232、列距16、行距16；组标题13/20，左图标15、gap8，以标题和留白分组，不绘制装饰延伸线；每字段56基础行高。",
+        "行为 two-column：宽容器按两列排布，数值列固定而轨道弹性。",
+        "行为 group-heading-rule：标题与留白共同分组，不绘制装饰延伸线或厚边框卡片。"
+      ],
+      "implementation": "current-behavior-new-visual",
+      "finalDesignEvidence": {
+        "findingId": "VI-12",
+        "componentId": "26:5623",
+        "instanceId": "26:5624",
+        "status": "closed-after-live-readback-and-visual-review",
+        "report": "verification/inspector-final-fixes.json"
+      },
+      "finalInstanceGeometry": {
+        "width": 480,
+        "height": 92,
+        "mainComponentId": "26:5623"
+      }
+    },
+    {
+      "id": "S02",
+      "family": "PropertySection",
+      "variant": "narrow-single-column",
+      "label": "排版",
+      "value": "文字颜色 · 字号 · 字重 · 文字对齐",
+      "visualState": "one-column",
+      "notes": [
+        "在≤392px容器转为单列；示例容器360；无布局属性时省略整个“布局与间距”组，不留下空标题或分隔。",
+        "行为 one-column-at-392：≤392px容器单列；这是属性容器阈值，不是整个窗口宽度。",
+        "行为 empty-group-omitted：当所选元素没有布局控件时，不创建布局与间距section；剩余组自然上移而非显示空卡。"
+      ],
+      "implementation": "current-behavior-new-visual",
+      "finalDesignEvidence": {
+        "findingId": "VI-13",
+        "componentId": "26:5734",
+        "instanceId": "26:5735",
+        "status": "closed-after-live-readback-and-visual-review",
+        "report": "verification/inspector-final-fixes.json"
+      },
+      "finalInstanceGeometry": {
+        "width": 360,
+        "height": 308,
+        "mainComponentId": "26:5734"
+      }
+    },
+    {
+      "id": "S03",
+      "family": "PropertySection",
+      "variant": "long-section-heading",
+      "label": "布局与间距",
+      "value": "宽度 · 高度 · 内边距 · 主轴对齐",
+      "visualState": "long-heading",
+      "notes": [
+        "长标题可扩展至可用宽度，不绘制右侧装饰延伸线；不能覆盖图标或强制断成每字一行。",
+        "行为 long-section-label：标题可随可用宽度增长，所有行仍沿共同左基线。",
+        "行为 group-heading-rule：标题与留白共同分组，不绘制装饰延伸线或厚边框卡片。"
+      ],
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "S04",
+      "family": "PropertySection",
+      "variant": "adjust-controls-preparing",
+      "label": "调整",
+      "value": "外观 / 排版 / 布局与间距",
+      "visualState": "loading-skeleton",
+      "notes": [
+        "保留组标题与2列56px行骨架，样张/读数轮廓轻灰；宿主尚在准备控件时使用。当前Suspense是文字提示，骨架为V2精修建议。",
+        "行为 loading-skeleton-proposed：从准备控件过渡到S01或S02时保留版式；该骨架属于设计建议，当前fallback只有文本。"
+      ],
+      "hint": "准备调整控件…",
+      "implementation": "extension"
+    },
+    {
+      "id": "F01",
+      "family": "PropertyField",
+      "variant": "label-and-unit",
+      "label": "字号",
+      "value": "16",
+      "visualState": "default",
+      "notes": [
+        "标签12/16与输入通过htmlFor关联；间距6、控件高34、整行56；16使用等宽12/18，px在固定单位列。",
+        "行为 label-linked-to-input：点击字号标签聚焦对应精确数值框；屏幕阅读器名称不依赖图标。",
+        "行为 value-with-units：数字和px分列，单位不可误编辑进数字输入。"
+      ],
+      "unit": "px",
+      "implementation": "current-behavior-new-visual",
+      "numericReadout": {
+        "valueColumnSeparateFromUnit": true,
+        "unitColumnWidth": 16,
+        "unitEditable": false
+      },
+      "finalDesignEvidence": {
+        "findingId": "VI-11",
+        "componentId": "26:5971",
+        "instanceId": "26:5972",
+        "status": "closed-after-live-readback-and-visual-review",
+        "report": "verification/inspector-final-fixes.json"
+      }
+    },
+    {
+      "id": "F02",
+      "family": "PropertyField",
+      "variant": "heading-action-and-hint",
+      "label": "内边距",
+      "value": "混合",
+      "visualState": "hint-with-action",
+      "notes": [
+        "标题右侧24×24链条动作；值区保留混合状态，hint位于控件下6px；hint是当前CSS值而非实现文案。",
+        "行为 trailing-action：链条在标题行右侧，点击不让标签或输入跳动；动作名称说明统一/分别调整。",
+        "行为 hint：原始CSS提示位于当前字段下，保持长期可读。"
+      ],
+      "hint": "当前值 1rem 2rem",
+      "implementation": "current-behavior-new-visual"
+    },
+    {
+      "id": "F03",
+      "family": "PropertyField",
+      "variant": "validation-expands",
+      "label": "圆角",
+      "value": "240",
+      "visualState": "validation-error",
+      "notes": [
+        "错误行额外占20px，行间距16保持；错误图标、范围文字与边框共同表达，不覆盖下一字段。",
+        "行为 validation-error：错误使该字段自然增高，修正后恢复基础行高。"
+      ],
+      "unit": "px",
+      "hint": "请输入 0–200px 之间的数值",
+      "implementation": "current-behavior-new-visual",
+      "finalDesignEvidence": {
+        "findingId": "VI-11",
+        "componentId": "26:6022",
+        "instanceId": "26:6023",
+        "status": "closed-after-live-readback-and-visual-review",
+        "report": "verification/inspector-final-fixes.json"
+      },
+      "numericReadout": {
+        "valueColumnSeparateFromUnit": true,
+        "unitColumnWidth": 16,
+        "unitEditable": false
+      }
+    },
+    {
+      "id": "F04",
+      "family": "PropertyField",
+      "variant": "long-label-disabled",
+      "label": "所选元素的最大可用宽度",
+      "value": "1280",
+      "visualState": "long-label-disabled",
+      "notes": [
+        "长中文标签最多两行32px，值区仍34px；禁用后标签和值可读，动作缺失时不保留空按钮占位。",
+        "行为 disabled：禁用时保留当前值，不能同时显示像可用的hover。",
+        "行为 long-label：长标签两行而非侵入数值区；其余字段与同一列对齐。"
+      ],
+      "unit": "px",
+      "implementation": "current-behavior-new-visual",
+      "numericReadout": {
+        "valueColumnSeparateFromUnit": true,
+        "unitColumnWidth": 16,
+        "unitEditable": false
+      },
+      "finalDesignEvidence": {
+        "findingId": "VI-11",
+        "componentId": "26:6042",
+        "instanceId": "26:6043",
+        "status": "closed-after-live-readback-and-visual-review",
+        "report": "verification/inspector-final-fixes.json"
+      }
+    },
+    {
+      "id": "F05",
+      "family": "PropertyField",
+      "variant": "host-feedback",
+      "label": "圆角",
+      "value": "20",
+      "visualState": "pending-feedback",
+      "notes": [
+        "保持行本体的56px节奏，宿主同步提示作为可伸展辅助行；spinner只能在这次实际等待期间出现。",
+        "行为 pending-feedback-proposed：当前库不含独立pending props；由宿主预览队列状态提供辅助反馈，完成回读后替换为已预览或错误。"
+      ],
+      "unit": "px",
+      "hint": "正在同步页面预览…",
+      "implementation": "extension",
+      "numericReadout": {
+        "valueColumnSeparateFromUnit": true,
+        "unitColumnWidth": 16,
+        "unitEditable": false
+      },
+      "finalDesignEvidence": {
+        "findingId": "VI-11",
+        "componentId": "26:6065",
+        "instanceId": "26:6066",
+        "status": "closed-after-live-readback-and-visual-review",
+        "report": "verification/inspector-final-fixes.json"
+      }
+    }
+  ],
+  "behaviorMappings": {
+    "NumberControl": {
+      "rest": "N01",
+      "hover": [
+        "N01",
+        "N02"
+      ],
+      "keyboard-focus": "N03",
+      "drag-start": [
+        "N01",
+        "N04"
+      ],
+      "dragging-preview": "N04",
+      "gesture-commit": [
+        "N04",
+        "N14",
+        "N09"
+      ],
+      "min-boundary": "N05",
+      "max-boundary": "N06",
+      "integer": "N01",
+      "decimal": "N17",
+      "negative-value": "N18",
+      "discrete-ticks-for-weight": "N07",
+      "precise-input-draft": "N08",
+      "enter-submit": [
+        "N08",
+        "N14",
+        "N09"
+      ],
+      "blur-submit": [
+        "N08",
+        "N14",
+        "N09"
+      ],
+      "escape-reset": [
+        "N08",
+        "N01"
+      ],
+      "invalid-empty": "N10",
+      "invalid-nonnumeric": "N10",
+      "invalid-out-of-range": "N11",
+      "mixed-CSS-value": "N12",
+      "disabled": "N13",
+      "write-pending": "N14",
+      "preview-readback-failed": [
+        "N14",
+        "N15"
+      ],
+      "stale-element": "N16"
+    },
+    "ColorControl": {
+      "opaque": "C01",
+      "alpha": "C02",
+      "transparent": "C03",
+      "wide-gamut-original": "C04",
+      "picker-sRGB-projection": [
+        "C04",
+        "C05"
+      ],
+      "text-focused-show-original-alpha": [
+        "C02",
+        "C11"
+      ],
+      "text-draft": "C12",
+      "valid-CSS-enter-or-blur": [
+        "C12",
+        "C19",
+        "C01"
+      ],
+      "empty-clear-override": [
+        "C14",
+        "C19",
+        "C01"
+      ],
+      "invalid-CSS": "C13",
+      "unsafe-CSS-rejected": "C13",
+      "escape-reset": [
+        "C12",
+        "C01"
+      ],
+      "popover-open": "C05",
+      "popover-edge-flip": [
+        "C05",
+        "C18"
+      ],
+      "saturation-brightness-drag": [
+        "C05",
+        "C06",
+        "C19"
+      ],
+      "hue-drag": [
+        "C05",
+        "C07",
+        "C19"
+      ],
+      "alpha-drag": [
+        "C02",
+        "C09",
+        "C19"
+      ],
+      "HEX-edit-preserves-alpha": "C10",
+      "gray-black-hue-preserved": "C08",
+      "keyboard-focus": "C17",
+      "disabled": "C15",
+      "preview-pending": "C19",
+      "commit-failure": [
+        "C19",
+        "C16"
+      ]
+    },
+    "InsetsControl": {
+      "linked-uniform": "P01",
+      "unlinked-four-values": "P02",
+      "unequal-initial-values": "P02",
+      "toggle-without-write": [
+        "P01",
+        "P03"
+      ],
+      "four-side-keyboard-edit": [
+        "P03",
+        "P07"
+      ],
+      "per-side-invalid": "P04",
+      "CSS-shorthand-mixed": [
+        "P02",
+        "P05"
+      ],
+      "unsupported-non-px-preserved": "P05",
+      "linked-edit-overwrites-all-on-commit": [
+        "P02",
+        "P01"
+      ],
+      "disabled": "P06",
+      "pending": "P07",
+      "undo": [
+        "P07",
+        "P08"
+      ]
+    },
+    "ChoiceControl-segments": {
+      "unselected": "A01",
+      "selected": "A02",
+      "hover": [
+        "A02",
+        "A03"
+      ],
+      "focus-visible": "A04",
+      "keyboard-radio-navigation": [
+        "A02",
+        "A04"
+      ],
+      "unknown-original-CSS-value": "A01",
+      "disabled": "A05",
+      "commit": [
+        "A02",
+        "A04"
+      ],
+      "stale-element": "A06"
+    },
+    "InspectorSelect": {
+      "closed-known-value": "D01",
+      "closed-empty-current-value": "D02",
+      "closed-unknown-value-preserved": "D03",
+      "open": "D04",
+      "selected-option": "D04",
+      "hover-option": "D05",
+      "focused-option": "D06",
+      "selected-focused-option": "D07",
+      "long-label-ellipsis": "D08",
+      "long-menu-label": "D09",
+      "menu-scroll": "D10",
+      "menu-near-window-edge": "D10",
+      "border-style-preview": [
+        "D01",
+        "D04"
+      ],
+      "disabled": "D11",
+      "escape-close": [
+        "D06",
+        "D01"
+      ],
+      "enter-commit": [
+        "D06",
+        "D12"
+      ],
+      "arrow-navigation": [
+        "D04",
+        "D06"
+      ],
+      "focus-return": "D12"
+    },
+    "InspectorInput": {
+      "empty": "I01",
+      "filled": "I02",
+      "hover": "I03",
+      "focused": "I04",
+      "draft-dirty": "I05",
+      "invalid": "I06",
+      "readonly-or-disabled": "I07",
+      "long-value": "I05",
+      "enter-submit-when-applicable": [
+        "I04",
+        "I02"
+      ],
+      "IME-confirmation-not-submit": "I04",
+      "escape-reset-when-applicable": "I05"
+    },
+    "InspectorTextarea": {
+      "empty": "T01",
+      "filled": "T02",
+      "focused": "T03",
+      "readonly-with-reason": "T04",
+      "dirty": "T03",
+      "multiline": "T02",
+      "20k-limit": "T05",
+      "resize-min-max": [
+        "T02",
+        "T03"
+      ],
+      "disabled-during-write": [
+        "T03",
+        "T06",
+        "T02"
+      ]
+    },
+    "PropertySection": {
+      "two-column": "S01",
+      "one-column-at-392": "S02",
+      "empty-group-omitted": "S02",
+      "long-section-label": "S03",
+      "group-heading-rule": [
+        "S01",
+        "S03"
+      ],
+      "loading-skeleton-proposed": "S04"
+    },
+    "PropertyField": {
+      "label-linked-to-input": "F01",
+      "trailing-action": "F02",
+      "hint": "F02",
+      "validation-error": "F03",
+      "disabled": "F04",
+      "long-label": "F04",
+      "value-with-units": "F01",
+      "pending-feedback-proposed": "F05"
+    }
+  },
+  "livePropertyCatalog": {
+    "color": {
+      "label": "文字颜色",
+      "type": "ColorPicker"
+    },
+    "background-color": {
+      "label": "背景颜色",
+      "type": "ColorPicker"
+    },
+    "border-color": {
+      "label": "边框颜色",
+      "type": "ColorPicker"
+    },
+    "font-size": {
+      "label": "字号",
+      "type": "Slider",
+      "min": 1,
+      "max": 160,
+      "step": 1,
+      "unit": "px"
+    },
+    "font-weight": {
+      "label": "字重",
+      "type": "Slider",
+      "min": 100,
+      "max": 900,
+      "step": 100,
+      "unit": ""
+    },
+    "border-radius": {
+      "label": "圆角",
+      "type": "Slider",
+      "min": 0,
+      "max": 200,
+      "step": 1,
+      "unit": "px"
+    },
+    "border-width": {
+      "label": "边框宽度",
+      "type": "Slider",
+      "min": 0,
+      "max": 24,
+      "step": 1,
+      "unit": "px"
+    },
+    "padding": {
+      "label": "内边距",
+      "type": "Slider",
+      "min": 0,
+      "max": 160,
+      "step": 1,
+      "unit": "px"
+    },
+    "padding-top": {
+      "label": "上内边距",
+      "type": "Slider",
+      "min": 0,
+      "max": 160,
+      "step": 1,
+      "unit": "px"
+    },
+    "padding-right": {
+      "label": "右内边距",
+      "type": "Slider",
+      "min": 0,
+      "max": 160,
+      "step": 1,
+      "unit": "px"
+    },
+    "padding-bottom": {
+      "label": "下内边距",
+      "type": "Slider",
+      "min": 0,
+      "max": 160,
+      "step": 1,
+      "unit": "px"
+    },
+    "padding-left": {
+      "label": "左内边距",
+      "type": "Slider",
+      "min": 0,
+      "max": 160,
+      "step": 1,
+      "unit": "px"
+    },
+    "margin-top": {
+      "label": "上外边距",
+      "type": "Slider",
+      "min": -160,
+      "max": 160,
+      "step": 1,
+      "unit": "px"
+    },
+    "margin-right": {
+      "label": "右外边距",
+      "type": "Slider",
+      "min": -160,
+      "max": 160,
+      "step": 1,
+      "unit": "px"
+    },
+    "margin-bottom": {
+      "label": "下外边距",
+      "type": "Slider",
+      "min": -160,
+      "max": 160,
+      "step": 1,
+      "unit": "px"
+    },
+    "margin-left": {
+      "label": "左外边距",
+      "type": "Slider",
+      "min": -160,
+      "max": 160,
+      "step": 1,
+      "unit": "px"
+    },
+    "border-style": {
+      "label": "边框样式",
+      "type": "ChoicePicker",
+      "options": [
+        "none",
+        "solid",
+        "dashed",
+        "dotted",
+        "double"
+      ]
+    },
+    "gap": {
+      "label": "间距",
+      "type": "Slider",
+      "min": 0,
+      "max": 160,
+      "step": 1,
+      "unit": "px"
+    },
+    "width": {
+      "label": "宽度",
+      "type": "Slider",
+      "min": 1,
+      "max": 2000,
+      "step": 1,
+      "unit": "px"
+    },
+    "height": {
+      "label": "高度",
+      "type": "Slider",
+      "min": 1,
+      "max": 1600,
+      "step": 1,
+      "unit": "px"
+    },
+    "opacity": {
+      "label": "透明度",
+      "type": "Slider",
+      "min": 0,
+      "max": 1,
+      "step": 0.01,
+      "unit": ""
+    },
+    "letter-spacing": {
+      "label": "字间距",
+      "type": "Slider",
+      "min": -8,
+      "max": 24,
+      "step": 0.1,
+      "unit": "px"
+    },
+    "text-align": {
+      "label": "文字对齐",
+      "type": "ChoicePicker",
+      "options": [
+        "left",
+        "center",
+        "right",
+        "justify"
+      ]
+    },
+    "display": {
+      "label": "布局",
+      "type": "ChoicePicker",
+      "options": [
+        "block",
+        "inline-block",
+        "flex",
+        "grid",
+        "inline-flex"
+      ]
+    },
+    "flex-direction": {
+      "label": "排列方向",
+      "type": "ChoicePicker",
+      "options": [
+        "row",
+        "column",
+        "row-reverse",
+        "column-reverse"
+      ]
+    },
+    "align-items": {
+      "label": "交叉轴对齐",
+      "type": "ChoicePicker",
+      "options": [
+        "stretch",
+        "flex-start",
+        "center",
+        "flex-end",
+        "baseline"
+      ]
+    },
+    "justify-content": {
+      "label": "主轴对齐",
+      "type": "ChoicePicker",
+      "options": [
+        "flex-start",
+        "center",
+        "flex-end",
+        "space-between",
+        "space-around",
+        "space-evenly"
+      ]
+    }
+  },
+  "A2UIConstraints": {
+    "componentKinds": [
+      "Column",
+      "Group",
+      "Slider",
+      "ColorPicker",
+      "ChoicePicker"
+    ],
+    "minControls": 1,
+    "maxControls": 24,
+    "catalogId": "athena:element-editor:v1",
+    "surfaceId": "element-editor",
+    "controlSetBoundTo": [
+      "element.ref",
+      "surface.revision"
+    ],
+    "notes": "27 properties are allowed but one surface may expose at most 24 unique property controls; a requested control surface publishes controls without also editing the page."
+  },
+  "selectionAndSearchStates": [
+    "nothing-selected",
+    "query-text",
+    "query-css",
+    "query-empty",
+    "query-submitting",
+    "no-match",
+    "multiple-matches",
+    "truncated-result-count",
+    "selected-match",
+    "selected-inferred-semantics",
+    "selected-with-dimensions",
+    "loading-details",
+    "stale-selection",
+    "ancestor-navigation",
+    "switch-tab-clears-results",
+    "search-open-on-existing-selection",
+    "long-target-name-ellipsis",
+    "read-only-locator",
+    "reduced-motion"
+  ],
+  "previewStates": [
+    "pristine",
+    "raw-form-dirty",
+    "live-drag-queued",
+    "one-write-in-flight",
+    "latest-value-pending",
+    "gesture-final-commit",
+    "commit-readback-succeeded",
+    "preview-not-applied",
+    "preview-readback-failed",
+    "undo-available",
+    "undo-disabled",
+    "undo-busy",
+    "undo-applied",
+    "stale-element",
+    "different-tab-rejected",
+    "draft-protected-from-external-refresh",
+    "preview-only-not-source",
+    "source-handoff-with-cumulative-patches"
+  ],
+  "signature": [
+    "proportional ValueGlyph next to slider",
+    "tabular/mono exact values and unit column",
+    "thin rail + narrow vertical drag handle",
+    "weight ticks",
+    "opacity checkerboard",
+    "color swatch + editable CSS string + alpha",
+    "border-style previews inside select",
+    "four-direction insets with link toggle",
+    "section title and whitespace grouping without decorative rule"
+  ],
+  "metricsChanges": {
+    "columns": [
+      "component",
+      "metric",
+      "current",
+      "proposed",
+      "reason"
+    ],
+    "rows": [
+      [
+        "control",
+        "height",
+        34,
+        34,
+        "保留现有专用控件密度；标签16高 + 6间距 + 控件34高 = 56整行"
+      ],
+      [
+        "control",
+        "radius",
+        7,
+        12,
+        "对齐HeroUI field圆角，保留34px紧凑控件密度"
+      ],
+      [
+        "control",
+        "stroke",
+        1,
+        0,
+        "普通态以填充与轻影承载；焦点、错误与有效状态边界单独保留"
+      ],
+      [
+        "label",
+        "font/line",
+        [
+          11,
+          16
+        ],
+        [
+          12,
+          16
+        ],
+        "提高中文标签可读性，保持标签行稳定"
+      ],
+      [
+        "numeric-value",
+        "font/line",
+        [
+          12,
+          18
+        ],
+        [
+          12,
+          18
+        ],
+        "继续使用等宽和tabular数字"
+      ],
+      [
+        "numeric-value",
+        "width",
+        "3–8ch",
+        "72px default / 88px long",
+        "避免值长度改变滑轨可用宽度"
+      ],
+      [
+        "property-field",
+        "label-gap",
+        5,
+        6,
+        "形成56px基础控件行"
+      ],
+      [
+        "property-grid",
+        "row/column-gap",
+        [
+          13,
+          20
+        ],
+        [
+          16,
+          16
+        ],
+        "统一4px节奏"
+      ],
+      [
+        "property-section",
+        "padding",
+        [
+          16,
+          0,
+          17
+        ],
+        [
+          16,
+          0,
+          16
+        ],
+        "以标题与留白分组，去除装饰延伸线"
+      ],
+      [
+        "property-section",
+        "heading-font/line",
+        [
+          13,
+          18
+        ],
+        [
+          13,
+          20
+        ],
+        "适配中文中等字重"
+      ],
+      [
+        "slider",
+        "rail-height",
+        3,
+        3,
+        "保留细轨"
+      ],
+      [
+        "slider",
+        "thumb",
+        [
+          10,
+          15
+        ],
+        [
+          12,
+          16
+        ],
+        "可见柄加大少量；透明点击区域至少24px"
+      ],
+      [
+        "slider",
+        "hit-height",
+        32,
+        32,
+        "不要把3px视觉轨当成点击目标"
+      ],
+      [
+        "specimen",
+        "slot-width",
+        29,
+        32,
+        "保持比例图标，不替换成通用图标"
+      ],
+      [
+        "swatch",
+        "trigger-width",
+        39,
+        40,
+        "可点击区域清楚"
+      ],
+      [
+        "swatch",
+        "sample",
+        [
+          22,
+          19
+        ],
+        [
+          22,
+          20
+        ],
+        "保留棋盘，值与alpha独立显示"
+      ],
+      [
+        "color-popover",
+        "width",
+        246,
+        264,
+        "给中文和HEX/alpha留空间"
+      ],
+      [
+        "color-popover",
+        "padding",
+        14,
+        16,
+        "稳定8px节奏"
+      ],
+      [
+        "color-popover",
+        "color-area-height",
+        132,
+        144,
+        "更准确选色且对齐网格"
+      ],
+      [
+        "color-popover",
+        "hue/alpha-visual-height",
+        10,
+        12,
+        "维持至少28px手势区"
+      ],
+      [
+        "select",
+        "option-height",
+        31,
+        32,
+        "独立预览列24、文字弹性列、check列16"
+      ],
+      [
+        "select",
+        "menu-padding",
+        4,
+        4,
+        "触发器宽度或140px最小宽；底部空间不足翻转"
+      ],
+      [
+        "four-insets",
+        "cell-gap",
+        4,
+        4,
+        "四方向图示与等宽数值；窄屏可2×2"
+      ],
+      [
+        "inspector",
+        "horizontal-padding",
+        [
+          24,
+          18
+        ],
+        [
+          24,
+          16
+        ],
+        "宽/窄两档，正文不挤压浏览器"
+      ],
+      [
+        "inspector",
+        "tabs-height",
+        36,
+        36,
+        "五个一级标签保留，不与属性分组混成同一层"
+      ],
+      [
+        "inspector",
+        "footer-actions-height",
+        30,
+        32,
+        "撤销/应用/源码移交分主次；反馈单独一行可伸展"
+      ],
+      [
+        "select",
+        "menu-radius",
+        9,
+        22,
+        "对齐HeroUI Select浮层圆角"
+      ],
+      [
+        "composer",
+        "radius",
+        16,
+        24,
+        "Athena定制；不等同原生PromptInput默认值"
+      ],
+      [
+        "tabs",
+        "track",
+        null,
+        "rounded segmented surface",
+        "保留原tab ID与导航目标，使用表面和轻影表达选择"
+      ]
+    ],
+    "status": "Proposed refinements are design recommendations, not implemented values.",
+    "currentEvidence": [
+      {
+        "file": "packages/element-inspector/src/style.css",
+        "lines": "2-18"
+      },
+      {
+        "file": "packages/element-inspector/src/style.css",
+        "lines": "36-119"
+      },
+      {
+        "file": "packages/element-inspector/src/style.css",
+        "lines": "154-233"
+      },
+      {
+        "file": "packages/element-inspector/src/style.css",
+        "lines": "246-308"
+      },
+      {
+        "file": "packages/element-inspector/src/style.css",
+        "lines": "336-527"
+      },
+      {
+        "file": "src/renderer/styles.css",
+        "lines": "1140-1518"
+      },
+      {
+        "file": "src/renderer/styles.css",
+        "lines": "2167-2189"
+      }
+    ]
+  },
+  "cssAliasMapping": "design-tokens.json#/inspectorAliases",
+  "implementationLegend": {
+    "current-behavior-new-visual": "现有控件行为的精修视觉规格，不表示新版视觉已经写入代码。",
+    "extension": "显式前瞻状态；实现与最终视觉验收仍待确认。"
+  },
+  "invariants": [
+    "调整 tab 即时预览；内容、CSS 与动效 tab 使用显式应用。",
+    "同一次连续手势合并为一次撤销；新值与元素身份绑定。",
+    "数字草稿与已提交页面值区分；Esc 恢复原值，不新增撤销项。",
+    "原始 CSS、alpha、宽色域值保留；拾色器展示与原始字符串不可混淆。",
+    "页面、frame、tab 或元素身份失效时拒绝旧操作并要求重新选择。",
+    "控件面板切换不改变右侧权威浏览器视口。",
+    "MCP/A2UI 提供调整控件本身不等于已经修改网页。"
+  ],
+  "authoringRule": "notes 和行为说明仅用于设计/开发交接；界面只显示属性名、值、有效反馈与相关动作。",
+  "finalSelectionBehavior": {
+    "inferredButton": {
+      "breadcrumbLeaf": "div",
+      "semanticType": "button",
+      "inferred": true
+    },
+    "longTargetName": {
+      "width": 282,
+      "truncation": "ENDING",
+      "fullTextTooltip": true
+    },
+    "emptySearch": {
+      "placeholder": "查找文字、标题或按钮",
+      "duplicateStandaloneHint": false
+    }
+  },
+  "updatedAt": "2026-11-02",
+  "activeThemeRevision": "monochrome-2026-11-02",
+  "activeDesignRevision": "heroui-surface-2026-11-02",
+  "surfaceRefinement": {
+    "revision": "heroui-surface-2026-11-02",
+    "normalFieldBorderWidth": 0,
+    "radius": 12,
+    "nestedFieldRule": "卡片/浮层内与深色字段使用次级填充，无第二层drop shadow。",
+    "hoverCases": [
+      "N02",
+      "I03"
+    ],
+    "focusRingWidth": 2,
+    "evidence": "verification/heroui-surface-refinement.json"
+  }
+}

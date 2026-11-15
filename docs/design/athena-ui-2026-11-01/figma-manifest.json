@@ -1,0 +1,428 @@
+{
+  "fileKey": "vEL0JeDlefvuvLjUQQh5SB",
+  "url": "https://www.figma.com/design/vEL0JeDlefvuvLjUQQh5SB",
+  "name": "Athena — 冷光 / UI Design System 01",
+  "date": "2026-11-01",
+  "deliverable": "Editable Figma design proposal, not an implementation",
+  "pages": {
+    "overview": "0:1",
+    "screens": "2:256",
+    "system": "2:257",
+    "states": "2:258"
+  },
+  "frames": [
+    {
+      "id": "4:2",
+      "name": "01 / 新对话 · 1440",
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "id": "4:170",
+      "name": "02 / 对话与浏览器 · 执行中",
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "id": "4:479",
+      "name": "03 / 元素编辑 · 即时预览",
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "id": "5:287",
+      "name": "04 / 执行记录 · 等待人工处理",
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "id": "5:600",
+      "name": "05 / 用量概览 · 部分数据",
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "id": "5:819",
+      "name": "06 / 设置与连接 · 本机 Agent",
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "id": "5:1006",
+      "name": "07 / 共享页面 · 权限与控制权",
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "id": "10:902",
+      "name": "11 / 元素编辑 · 深色主题",
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "id": "7:2",
+      "name": "08 / 窄窗口 · 1024 × 768",
+      "width": 1024,
+      "height": 768
+    },
+    {
+      "id": "7:142",
+      "name": "09 / 共享页面 · 移动端查看者",
+      "width": 390,
+      "height": 844
+    },
+    {
+      "id": "7:186",
+      "name": "10 / 状态矩阵 · 真实任务与恢复",
+      "width": 1440,
+      "height": 1120
+    },
+    {
+      "id": "9:246",
+      "name": "Foundations / 冷光设计语言",
+      "width": 1440,
+      "height": 1180
+    },
+    {
+      "id": "9:344",
+      "name": "Components / 核心组件与变体",
+      "width": 1440,
+      "height": 1320
+    },
+    {
+      "id": "11:2",
+      "name": "Athena / 冷光 · 设计总览",
+      "width": 1440,
+      "height": 1080
+    },
+    {
+      "id": "11:684",
+      "name": "Research / 参考产品与设计取舍",
+      "width": 1440,
+      "height": 1280
+    },
+    {
+      "id": "11:764",
+      "name": "Handoff / 设计决策与实现约束",
+      "width": 1440,
+      "height": 1320
+    },
+    {
+      "id": "13:392",
+      "name": "12 / 功能面板 · 录制、连接与审批",
+      "width": 1440,
+      "height": 1460
+    }
+  ],
+  "prototypeLinks": [
+    {
+      "from": "4:63",
+      "to": "5:600"
+    },
+    {
+      "from": "4:73",
+      "to": "5:819"
+    },
+    {
+      "from": "4:54",
+      "to": "5:287"
+    },
+    {
+      "from": "4:50",
+      "to": "4:170"
+    },
+    {
+      "from": "4:190",
+      "to": "4:2"
+    },
+    {
+      "from": "4:231",
+      "to": "5:600"
+    },
+    {
+      "from": "4:241",
+      "to": "5:819"
+    },
+    {
+      "from": "4:222",
+      "to": "5:287"
+    },
+    {
+      "from": "4:277",
+      "to": "4:479"
+    },
+    {
+      "from": "4:382",
+      "to": "5:1006"
+    },
+    {
+      "from": "4:499",
+      "to": "4:2"
+    },
+    {
+      "from": "4:540",
+      "to": "5:600"
+    },
+    {
+      "from": "4:550",
+      "to": "5:819"
+    },
+    {
+      "from": "4:531",
+      "to": "5:287"
+    },
+    {
+      "from": "4:527",
+      "to": "4:170"
+    },
+    {
+      "from": "4:581",
+      "to": "4:170"
+    },
+    {
+      "from": "4:719",
+      "to": "5:1006"
+    },
+    {
+      "from": "5:307",
+      "to": "4:2"
+    },
+    {
+      "from": "5:348",
+      "to": "5:600"
+    },
+    {
+      "from": "5:358",
+      "to": "5:819"
+    },
+    {
+      "from": "5:335",
+      "to": "4:170"
+    },
+    {
+      "from": "5:498",
+      "to": "5:1006"
+    },
+    {
+      "from": "5:620",
+      "to": "4:2"
+    },
+    {
+      "from": "5:671",
+      "to": "5:819"
+    },
+    {
+      "from": "5:652",
+      "to": "5:287"
+    },
+    {
+      "from": "5:648",
+      "to": "4:170"
+    },
+    {
+      "from": "5:839",
+      "to": "4:2"
+    },
+    {
+      "from": "5:880",
+      "to": "5:600"
+    },
+    {
+      "from": "5:871",
+      "to": "5:287"
+    },
+    {
+      "from": "5:867",
+      "to": "4:170"
+    },
+    {
+      "from": "5:1026",
+      "to": "4:2"
+    },
+    {
+      "from": "5:1067",
+      "to": "5:600"
+    },
+    {
+      "from": "5:1077",
+      "to": "5:819"
+    },
+    {
+      "from": "5:1058",
+      "to": "5:287"
+    },
+    {
+      "from": "5:1054",
+      "to": "4:170"
+    },
+    {
+      "from": "4:90",
+      "to": "4:170"
+    },
+    {
+      "from": "4:140",
+      "to": "4:479"
+    }
+  ],
+  "components": {
+    "Icon/Plus": "3:2",
+    "Icon/Search": "3:6",
+    "Icon/PanelLeftClose": "3:10",
+    "Icon/PanelRight": "3:15",
+    "Icon/ChevronDown": "3:19",
+    "Icon/ChevronRight": "3:22",
+    "Icon/ArrowUp": "3:25",
+    "Icon/ArrowUpRight": "3:29",
+    "Icon/ArrowLeft": "3:33",
+    "Icon/ArrowRight": "3:37",
+    "Icon/RotateCw": "3:41",
+    "Icon/Globe": "3:45",
+    "Icon/Folder": "3:50",
+    "Icon/MessageSquare": "3:53",
+    "Icon/Settings2": "3:56",
+    "Icon/ChartNoAxesCombined": "3:62",
+    "Icon/Link": "3:70",
+    "Icon/X": "3:74",
+    "Icon/Check": "3:78",
+    "Icon/Circle": "3:81",
+    "Icon/LoaderCircle": "3:84",
+    "Icon/Hand": "3:87",
+    "Icon/TriangleAlert": "3:93",
+    "Icon/SlidersHorizontal": "3:98",
+    "Icon/MousePointer2": "3:109",
+    "Icon/CircleDot": "3:112",
+    "Icon/Share2": "3:116",
+    "Icon/Copy": "3:123",
+    "Icon/ExternalLink": "3:127",
+    "Icon/Undo2": "3:132",
+    "Icon/MoreHorizontal": "3:136",
+    "Icon/Square": "3:141",
+    "Icon/ListChecks": "3:144",
+    "Icon/FileText": "3:151",
+    "Icon/Code2": "3:158",
+    "Icon/Lock": "3:163",
+    "Icon/Monitor": "3:167",
+    "Icon/CheckCheck": "3:172",
+    "Button/Primary": "3:176",
+    "Button/Secondary": "3:182",
+    "Button/Ghost": "3:188",
+    "Button/Hover": "3:194",
+    "Button/Focus": "3:200",
+    "Button/Disabled": "3:206",
+    "Status/Idle": "3:213",
+    "Status/Running": "3:218",
+    "Status/Waiting": "3:223",
+    "Status/Complete": "3:231",
+    "Status/Error": "3:236",
+    "Field/Default": "3:244",
+    "Field/Focus": "3:246",
+    "Field/Error": "3:248",
+    "Field/Disabled": "3:250",
+    "Navigation/Default": "3:253",
+    "Navigation/Selected": "3:258",
+    "FocusMark": "3:264",
+    "Composer / Default": "9:62",
+    "Composer / Context": "9:141",
+    "Execution / Plan": "9:170",
+    "Inspector / Target": "9:226",
+    "Inspector / Property": "9:243"
+  },
+  "collections": {
+    "primitives": "VariableCollectionId:2:259",
+    "semantic": "VariableCollectionId:2:260",
+    "geometry": "VariableCollectionId:2:312"
+  },
+  "variables": {
+    "canvas": "VariableID:2:263",
+    "surface": "VariableID:2:266",
+    "subtle": "VariableID:2:269",
+    "hover": "VariableID:2:272",
+    "ink": "VariableID:2:275",
+    "secondary": "VariableID:2:278",
+    "muted": "VariableID:2:281",
+    "line": "VariableID:2:284",
+    "control": "VariableID:2:287",
+    "accent": "VariableID:2:290",
+    "accentSoft": "VariableID:2:293",
+    "accentInk": "VariableID:2:296",
+    "onAccent": "VariableID:2:299",
+    "success": "VariableID:2:302",
+    "successSoft": "VariableID:2:305",
+    "danger": "VariableID:2:308",
+    "dangerSoft": "VariableID:2:311",
+    "space/2": "VariableID:2:313",
+    "space/4": "VariableID:2:314",
+    "space/6": "VariableID:2:315",
+    "space/8": "VariableID:2:316",
+    "space/12": "VariableID:2:317",
+    "space/16": "VariableID:2:318",
+    "space/20": "VariableID:2:319",
+    "space/24": "VariableID:2:320",
+    "space/32": "VariableID:2:321",
+    "space/40": "VariableID:2:322",
+    "space/48": "VariableID:2:323",
+    "space/64": "VariableID:2:324",
+    "radius/6": "VariableID:2:325",
+    "radius/8": "VariableID:2:326",
+    "radius/12": "VariableID:2:327",
+    "radius/16": "VariableID:2:328",
+    "radius/20": "VariableID:2:329"
+  },
+  "styles": {
+    "Display": "S:5d95b141ef3b7ab5eced16513a9df09156b839fe,",
+    "Heading": "S:09ce12ce4a557973472cd42df2e5a032cf1c605c,",
+    "Title": "S:47a7c3eac3b201f77113ae6fd6f65d89f5302842,",
+    "Body": "S:03add826664dccaa875d48d5d28d8874b8eb2f37,",
+    "Label": "S:3ab5935054c7258602bea533697a4f271ce4a1f9,",
+    "Caption": "S:59f1e4e36723f637b3993ac144d67ccf524e0d46,"
+  },
+  "coverage": {
+    "productScreens": 10,
+    "supportingPanels": 6,
+    "statePatterns": 12,
+    "prototypeNavigationLinks": 37
+  },
+  "sources": [
+    {
+      "name": "Codex",
+      "url": "https://openai.com/index/introducing-the-codex-app/"
+    },
+    {
+      "name": "Claude Artifacts",
+      "url": "https://support.claude.com/en/articles/9487310-what-are-artifacts-and-how-do-i-use-them"
+    },
+    {
+      "name": "OpenBot",
+      "url": "https://openbot.run/"
+    },
+    {
+      "name": "Hermes Desktop",
+      "url": "https://hermes-agent.nousresearch.com/docs/user-guide/desktop"
+    },
+    {
+      "name": "Linear 2026 interface refresh",
+      "url": "https://linear.app/now/behind-the-latest-design-refresh"
+    },
+    {
+      "name": "Apple Liquid Glass",
+      "url": "https://developer.apple.com/videos/play/wwdc2025/219/"
+    },
+    {
+      "name": "Material 3",
+      "url": "https://m3.material.io/"
+    },
+    {
+      "name": "WCAG 2.2",
+      "url": "https://www.w3.org/TR/WCAG22/"
+    }
+  ],
+  "limits": [
+    "The reference review is representative of relevant AI desktop patterns, not an exhaustive catalog of every UI style.",
+    "Product screens use illustrative task, model and usage data; no live tasks, billing or sharing were performed.",
+    "Native code retains SF Pro / PingFang SC; Figma uses Inter / Noto Sans SC because SF Pro did not render reliably in this editing environment.",
+    "Focus-eye symbol is a new secondary visual-mark proposal; production brand assets and compatibility identifiers were not replaced.",
+    "Search conversations is a proposed enhancement; it is not implemented in the existing app.",
+    "Prototype links demonstrate navigation only; they do not run the underlying tasks.",
+    "No production implementation or Code Connect mapping was performed."
+  ]
+}

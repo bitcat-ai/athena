@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-02",
+  "revision": "monochrome-2026-11-02",
+  "status": "passed-for-current-handoff-files",
+  "checks": {
+    "allJsonParses": true,
+    "historicalEvidenceFilesUnchanged": 33,
+    "agentFixtureCasesUnchanged": 175,
+    "tokenPaletteMatches": 21,
+    "inspectorColorAliasesMatch": 12,
+    "representativeVisualBoards": 13,
+    "currentPreviewFilesWithVerifiedHashes": 3,
+    "actualPageAndCoverNamesSynchronized": true,
+    "noTemporaryPathsOrAssetUrlsInCurrentJson": true
+  },
+  "limits": [
+    "This is a handoff-file consistency check, not additional Figma or runtime review.",
+    "Historical visual acceptance is not reused as current-theme screenshot evidence."
+  ]
+}

@@ -1,0 +1,1112 @@
+{
+  "schemaVersion": "1.0",
+  "documentType": "theme-revision-verification",
+  "revision": "monochrome-2026-11-02",
+  "date": "2026-11-02",
+  "title": "黑白 / 彩色标识",
+  "status": "passed-for-retheme-scope",
+  "requestedDirection": "白色为主、黑白简约，彩色 icon 与 logo；直接更新当前稿。",
+  "foundation": {
+    "status": "passed-for-actual-variable-readback",
+    "files": 2,
+    "semanticTokensPerFile": 21,
+    "resolvedColorValuesChecked": 84,
+    "matchesTargetPalette": true,
+    "readback": {
+      "main": {
+        "fileKey": "vEL0JeDlefvuvLjUQQh5SB",
+        "collections": {
+          "primitives": "VariableCollectionId:2:259",
+          "semantic": "VariableCollectionId:2:260"
+        },
+        "modes": {
+          "Light": "2:1",
+          "Dark": "2:2"
+        },
+        "tokens": {
+          "canvas": {
+            "semanticVariableId": "VariableID:2:263",
+            "resolved": {
+              "Light": {
+                "r": 0.9803921580314636,
+                "g": 0.9803921580314636,
+                "b": 0.9803921580314636,
+                "a": 1
+              },
+              "Dark": {
+                "r": 0.06666667014360428,
+                "g": 0.06666667014360428,
+                "b": 0.06666667014360428,
+                "a": 1
+              }
+            },
+            "hex": {
+              "Light": "#FAFAFA",
+              "Dark": "#111111"
+            }
+          },
+          "surface": {
+            "semanticVariableId": "VariableID:2:266",
+            "resolved": {
+              "Light": {
+                "r": 1,
+                "g": 1,
+                "b": 1,
+                "a": 1
+              },
+              "Dark": {
+                "r": 0.10980392247438431,
+                "g": 0.10980392247438431,
+                "b": 0.10980392247438431,
+                "a": 1
+              }
+            },
+            "hex": {
+              "Light": "#FFFFFF",
+              "Dark": "#1C1C1C"
+            }
+          },
+          "subtle": {
+            "semanticVariableId": "VariableID:2:269",
+            "resolved": {
+              "Light": {
+                "r": 0.9607843160629272,
+                "g": 0.9607843160629272,
+                "b": 0.9607843160629272,
+                "a": 1
+              },
+              "Dark": {
+                "r": 0.1568627506494522,
+                "g": 0.1568627506494522,
+                "b": 0.1568627506494522,
+                "a": 1
+              }
+            },
+            "hex": {
+              "Light": "#F5F5F5",
+              "Dark": "#282828"
+            }
+          },
+          "hover": {
+            "semanticVariableId": "VariableID:2:272",
+            "resolved": {
+              "Light": {
+                "r": 0.9215686321258545,
+                "g": 0.9215686321258545,
+                "b": 0.9215686321258545,
+                "a": 1
+              },
+              "Dark": {
+                "r": 0.20000000298023224,
+                "g": 0.20000000298023224,
+                "b": 0.20000000298023224,
+                "a": 1
+              }
+            },
+            "hex": {
+              "Light": "#EBEBEB",
+              "Dark": "#333333"
+            }
+          },
+          "ink": {
+            "semanticVariableId": "VariableID:2:275",
+            "resolved": {
+              "Light": {
+                "r": 0.09019608050584793,
+                "g": 0.09019608050584793,
+                "b": 0.09019608050584793,
+                "a": 1
+              },
+              "Dark": {
+                "r": 0.9607843160629272,
+                "g": 0.9607843160629272,
+                "b": 0.9607843160629272,
+                "a": 1
+              }
+            },
+            "hex": {
+              "Light": "#171717",
+              "Dark": "#F5F5F5"
+            }
+          },
+          "secondary": {
+            "semanticVariableId": "VariableID:2:278",
+            "resolved": {
+              "Light": {
+                "r": 0.32156863808631897,
+                "g": 0.32156863808631897,
+                "b": 0.32156863808631897,
+                "a": 1
+              },
+              "Dark": {
+                "r": 0.772549033164978,
+                "g": 0.772549033164978,
+                "b": 0.772549033164978,
+                "a": 1
+              }
+            },
+            "hex": {
+              "Light": "#525252",
+              "Dark": "#C5C5C5"
+            }
+          },
+          "muted": {
+            "semanticVariableId": "VariableID:2:281",
+            "resolved": {
+              "Light": {
+                "r": 0.4000000059604645,
+                "g": 0.4000000059604645,
+                "b": 0.4000000059604645,
+                "a": 1
+              },
+              "Dark": {
+                "r": 0.6666666865348816,
+                "g": 0.6666666865348816,
+                "b": 0.6666666865348816,
+                "a": 1
+              }
+            },
+            "hex": {
+              "Light": "#666666",
+              "Dark": "#AAAAAA"
+            }
+          },
+          "line": {
+            "semanticVariableId": "VariableID:2:284",
+            "resolved": {
+              "Light": {
+                "r": 0.8980392217636108,
+                "g": 0.8980392217636108,
+                "b": 0.8980392217636108,
+                "a": 1
+              },
+              "Dark": {
+                "r": 0.24705882370471954,
+                "g": 0.24705882370471954,
+                "b": 0.24705882370471954,
+                "a": 1
+              }
+            },
+            "hex": {
+              "Light": "#E5E5E5",
+              "Dark": "#3F3F3F"
+            }
+          },
+          "control": {
+            "semanticVariableId": "VariableID:2:287",
+            "resolved": {
+              "Light": {
+                "r": 0.5333333611488342,
+                "g": 0.5333333611488342,
+                "b": 0.5333333611488342,
+                "a": 1
+              },
+              "Dark": {
+                "r": 0.529411792755127,
+                "g": 0.529411792755127,
+                "b": 0.529411792755127,
+                "a": 1
+              }
+            },
+            "hex": {
+              "Light": "#888888",
+              "Dark": "#878787"
+            }
+          },
+          "accent": {
+            "semanticVariableId": "VariableID:2:290",
+            "resolved": {
+              "Light": {
+                "r": 0.09019608050584793,
+                "g": 0.09019608050584793,
+                "b": 0.09019608050584793,
+                "a": 1
+              },
+              "Dark": {
+                "r": 0.9607843160629272,
+                "g": 0.9607843160629272,
+                "b": 0.9607843160629272,
+                "a": 1
+              }
+            },
+            "hex": {
+              "Light": "#171717",
+              "Dark": "#F5F5F5"
+            }
+          },
+          "accentSoft": {
+            "semanticVariableId": "VariableID:2:293",
+            "resolved": {
+              "Light": {
+                "r": 0.9411764740943909,
+                "g": 0.9411764740943909,
+                "b": 0.9411764740943909,
+                "a": 1
+              },
+              "Dark": {
+                "r": 0.1882352977991104,
+                "g": 0.1882352977991104,
+                "b": 0.1882352977991104,
+                "a": 1
+              }
+            },
+            "hex": {
+              "Light": "#F0F0F0",
+              "Dark": "#303030"
+            }
+          },
+          "accentInk": {
+            "semanticVariableId": "VariableID:2:296",
+            "resolved": {
+              "Light": {
+                "r": 0.14901961386203766,
+                "g": 0.14901961386203766,
+                "b": 0.14901961386203766,
+                "a": 1
+              },
+              "Dark": {
+                "r": 0.9411764740943909,
+                "g": 0.9411764740943909,
+                "b": 0.9411764740943909,
+                "a": 1
+              }
+            },
+            "hex": {
+              "Light": "#262626",
+              "Dark": "#F0F0F0"
+            }
+          },
+          "onAccent": {
+            "semanticVariableId": "VariableID:2:299",
+            "resolved": {
+              "Light": {
+                "r": 1,
+                "g": 1,
+                "b": 1,
+                "a": 1
+              },
+              "Dark": {
+                "r": 0.09019608050584793,
+                "g": 0.09019608050584793,
+                "b": 0.09019608050584793,
+                "a": 1
+              }
+            },
+            "hex": {
+              "Light": "#FFFFFF",
+              "Dark": "#171717"
+            }
+          },
+          "success": {
+            "semanticVariableId": "VariableID:2:302",
+            "resolved": {
+              "Light": {
+                "r": 0.250980406999588,
+                "g": 0.250980406999588,
+                "b": 0.250980406999588,
+                "a": 1
+              },
+              "Dark": {
+                "r": 0.8313725590705872,
+                "g": 0.8313725590705872,
+                "b": 0.8313725590705872,
+                "a": 1
+              }
+            },
+            "hex": {
+              "Light": "#404040",
+              "Dark": "#D4D4D4"
+            }
+          },
+          "successSoft": {
+            "semanticVariableId": "VariableID:2:305",
+            "resolved": {
+              "Light": {
+                "r": 0.9607843160629272,
+                "g": 0.9607843160629272,
+                "b": 0.9607843160629272,
+                "a": 1
+              },
+              "Dark": {
+                "r": 0.14509804546833038,
+                "g": 0.14509804546833038,
+                "b": 0.14509804546833038,
+                "a": 1
+              }
+            },
+            "hex": {
+              "Light": "#F5F5F5",
+              "Dark": "#252525"
+            }
+          },
+          "danger": {
+            "semanticVariableId": "VariableID:2:308",
+            "resolved": {
+              "Light": {
+                "r": 0.14901961386203766,
+                "g": 0.14901961386203766,
+                "b": 0.14901961386203766,
+                "a": 1
+              },
+              "Dark": {
+                "r": 0.8980392217636108,
+                "g": 0.8980392217636108,
+                "b": 0.8980392217636108,
+                "a": 1
+              }
+            },
+            "hex": {
+              "Light": "#262626",
+              "Dark": "#E5E5E5"
+            }
+          },
+          "dangerSoft": {
+            "semanticVariableId": "VariableID:2:311",
+            "resolved": {
+              "Light": {
+                "r": 0.9607843160629272,
+                "g": 0.9607843160629272,
+                "b": 0.9607843160629272,
+                "a": 1
+              },
+              "Dark": {
+                "r": 0.16862745583057404,
+                "g": 0.16862745583057404,
+                "b": 0.16862745583057404,
+                "a": 1
+              }
+            },
+            "hex": {
+              "Light": "#F5F5F5",
+              "Dark": "#2B2B2B"
+            }
+          },
+          "brandBlue": {
+            "semanticVariableId": "VariableID:73:143",
+            "resolved": {
+              "Light": {
+                "r": 0.14509804546833038,
+                "g": 0.38823530077934265,
+                "b": 0.9215686321258545,
+                "a": 1
+              },
+              "Dark": {
+                "r": 0.43921568989753723,
+                "g": 0.6274510025978088,
+                "b": 1,
+                "a": 1
+              }
+            },
+            "hex": {
+              "Light": "#2563EB",
+              "Dark": "#70A0FF"
+            }
+          },
+          "brandTeal": {
+            "semanticVariableId": "VariableID:73:146",
+            "resolved": {
+              "Light": {
+                "r": 0.05098039284348488,
+                "g": 0.5803921818733215,
+                "b": 0.5333333611488342,
+                "a": 1
+              },
+              "Dark": {
+                "r": 0.3686274588108063,
+                "g": 0.9176470637321472,
+                "b": 0.8313725590705872,
+                "a": 1
+              }
+            },
+            "hex": {
+              "Light": "#0D9488",
+              "Dark": "#5EEAD4"
+            }
+          },
+          "statusGreen": {
+            "semanticVariableId": "VariableID:73:149",
+            "resolved": {
+              "Light": {
+                "r": 0.08627451211214066,
+                "g": 0.501960813999176,
+                "b": 0.29019609093666077,
+                "a": 1
+              },
+              "Dark": {
+                "r": 0.4313725531101227,
+                "g": 0.843137264251709,
+                "b": 0.6313725709915161,
+                "a": 1
+              }
+            },
+            "hex": {
+              "Light": "#16804A",
+              "Dark": "#6ED7A1"
+            }
+          },
+          "statusRed": {
+            "semanticVariableId": "VariableID:73:152",
+            "resolved": {
+              "Light": {
+                "r": 0.7843137383460999,
+                "g": 0.23137255012989044,
+                "b": 0.23137255012989044,
+                "a": 1
+              },
+              "Dark": {
+                "r": 1,
+                "g": 0.5411764979362488,
+                "b": 0.5411764979362488,
+                "a": 1
+              }
+            },
+            "hex": {
+              "Light": "#C83B3B",
+              "Dark": "#FF8A8A"
+            }
+          }
+        }
+      },
+      "agent": {
+        "fileKey": "jIaBK8NMvfZsjuMktNwpfO",
+        "collections": {
+          "primitives": "VariableCollectionId:1:9",
+          "semantic": "VariableCollectionId:1:10"
+        },
+        "modes": {
+          "Light": "1:1",
+          "Dark": "1:2"
+        },
+        "tokens": {
+          "canvas": {
+            "semanticVariableId": "VariableID:1:13",
+            "resolved": {
+              "Light": {
+                "r": 0.9803921580314636,
+                "g": 0.9803921580314636,
+                "b": 0.9803921580314636,
+                "a": 1
+              },
+              "Dark": {
+                "r": 0.06666667014360428,
+                "g": 0.06666667014360428,
+                "b": 0.06666667014360428,
+                "a": 1
+              }
+            },
+            "hex": {
+              "Light": "#FAFAFA",
+              "Dark": "#111111"
+            }
+          },
+          "surface": {
+            "semanticVariableId": "VariableID:1:16",
+            "resolved": {
+              "Light": {
+                "r": 1,
+                "g": 1,
+                "b": 1,
+                "a": 1
+              },
+              "Dark": {
+                "r": 0.10980392247438431,
+                "g": 0.10980392247438431,
+                "b": 0.10980392247438431,
+                "a": 1
+              }
+            },
+            "hex": {
+              "Light": "#FFFFFF",
+              "Dark": "#1C1C1C"
+            }
+          },
+          "subtle": {
+            "semanticVariableId": "VariableID:1:19",
+            "resolved": {
+              "Light": {
+                "r": 0.9607843160629272,
+                "g": 0.9607843160629272,
+                "b": 0.9607843160629272,
+                "a": 1
+              },
+              "Dark": {
+                "r": 0.1568627506494522,
+                "g": 0.1568627506494522,
+                "b": 0.1568627506494522,
+                "a": 1
+              }
+            },
+            "hex": {
+              "Light": "#F5F5F5",
+              "Dark": "#282828"
+            }
+          },
+          "hover": {
+            "semanticVariableId": "VariableID:1:22",
+            "resolved": {
+              "Light": {
+                "r": 0.9215686321258545,
+                "g": 0.9215686321258545,
+                "b": 0.9215686321258545,
+                "a": 1
+              },
+              "Dark": {
+                "r": 0.20000000298023224,
+                "g": 0.20000000298023224,
+                "b": 0.20000000298023224,
+                "a": 1
+              }
+            },
+            "hex": {
+              "Light": "#EBEBEB",
+              "Dark": "#333333"
+            }
+          },
+          "ink": {
+            "semanticVariableId": "VariableID:1:25",
+            "resolved": {
+              "Light": {
+                "r": 0.09019608050584793,
+                "g": 0.09019608050584793,
+                "b": 0.09019608050584793,
+                "a": 1
+              },
+              "Dark": {
+                "r": 0.9607843160629272,
+                "g": 0.9607843160629272,
+                "b": 0.9607843160629272,
+                "a": 1
+              }
+            },
+            "hex": {
+              "Light": "#171717",
+              "Dark": "#F5F5F5"
+            }
+          },
+          "secondary": {
+            "semanticVariableId": "VariableID:1:28",
+            "resolved": {
+              "Light": {
+                "r": 0.32156863808631897,
+                "g": 0.32156863808631897,
+                "b": 0.32156863808631897,
+                "a": 1
+              },
+              "Dark": {
+                "r": 0.772549033164978,
+                "g": 0.772549033164978,
+                "b": 0.772549033164978,
+                "a": 1
+              }
+            },
+            "hex": {
+              "Light": "#525252",
+              "Dark": "#C5C5C5"
+            }
+          },
+          "muted": {
+            "semanticVariableId": "VariableID:1:31",
+            "resolved": {
+              "Light": {
+                "r": 0.4000000059604645,
+                "g": 0.4000000059604645,
+                "b": 0.4000000059604645,
+                "a": 1
+              },
+              "Dark": {
+                "r": 0.6666666865348816,
+                "g": 0.6666666865348816,
+                "b": 0.6666666865348816,
+                "a": 1
+              }
+            },
+            "hex": {
+              "Light": "#666666",
+              "Dark": "#AAAAAA"
+            }
+          },
+          "line": {
+            "semanticVariableId": "VariableID:1:34",
+            "resolved": {
+              "Light": {
+                "r": 0.8980392217636108,
+                "g": 0.8980392217636108,
+                "b": 0.8980392217636108,
+                "a": 1
+              },
+              "Dark": {
+                "r": 0.24705882370471954,
+                "g": 0.24705882370471954,
+                "b": 0.24705882370471954,
+                "a": 1
+              }
+            },
+            "hex": {
+              "Light": "#E5E5E5",
+              "Dark": "#3F3F3F"
+            }
+          },
+          "control": {
+            "semanticVariableId": "VariableID:1:37",
+            "resolved": {
+              "Light": {
+                "r": 0.5333333611488342,
+                "g": 0.5333333611488342,
+                "b": 0.5333333611488342,
+                "a": 1
+              },
+              "Dark": {
+                "r": 0.529411792755127,
+                "g": 0.529411792755127,
+                "b": 0.529411792755127,
+                "a": 1
+              }
+            },
+            "hex": {
+              "Light": "#888888",
+              "Dark": "#878787"
+            }
+          },
+          "accent": {
+            "semanticVariableId": "VariableID:1:40",
+            "resolved": {
+              "Light": {
+                "r": 0.09019608050584793,
+                "g": 0.09019608050584793,
+                "b": 0.09019608050584793,
+                "a": 1
+              },
+              "Dark": {
+                "r": 0.9607843160629272,
+                "g": 0.9607843160629272,
+                "b": 0.9607843160629272,
+                "a": 1
+              }
+            },
+            "hex": {
+              "Light": "#171717",
+              "Dark": "#F5F5F5"
+            }
+          },
+          "accentSoft": {
+            "semanticVariableId": "VariableID:1:43",
+            "resolved": {
+              "Light": {
+                "r": 0.9411764740943909,
+                "g": 0.9411764740943909,
+                "b": 0.9411764740943909,
+                "a": 1
+              },
+              "Dark": {
+                "r": 0.1882352977991104,
+                "g": 0.1882352977991104,
+                "b": 0.1882352977991104,
+                "a": 1
+              }
+            },
+            "hex": {
+              "Light": "#F0F0F0",
+              "Dark": "#303030"
+            }
+          },
+          "accentInk": {
+            "semanticVariableId": "VariableID:1:46",
+            "resolved": {
+              "Light": {
+                "r": 0.14901961386203766,
+                "g": 0.14901961386203766,
+                "b": 0.14901961386203766,
+                "a": 1
+              },
+              "Dark": {
+                "r": 0.9411764740943909,
+                "g": 0.9411764740943909,
+                "b": 0.9411764740943909,
+                "a": 1
+              }
+            },
+            "hex": {
+              "Light": "#262626",
+              "Dark": "#F0F0F0"
+            }
+          },
+          "onAccent": {
+            "semanticVariableId": "VariableID:1:49",
+            "resolved": {
+              "Light": {
+                "r": 1,
+                "g": 1,
+                "b": 1,
+                "a": 1
+              },
+              "Dark": {
+                "r": 0.09019608050584793,
+                "g": 0.09019608050584793,
+                "b": 0.09019608050584793,
+                "a": 1
+              }
+            },
+            "hex": {
+              "Light": "#FFFFFF",
+              "Dark": "#171717"
+            }
+          },
+          "success": {
+            "semanticVariableId": "VariableID:1:52",
+            "resolved": {
+              "Light": {
+                "r": 0.250980406999588,
+                "g": 0.250980406999588,
+                "b": 0.250980406999588,
+                "a": 1
+              },
+              "Dark": {
+                "r": 0.8313725590705872,
+                "g": 0.8313725590705872,
+                "b": 0.8313725590705872,
+                "a": 1
+              }
+            },
+            "hex": {
+              "Light": "#404040",
+              "Dark": "#D4D4D4"
+            }
+          },
+          "successSoft": {
+            "semanticVariableId": "VariableID:1:55",
+            "resolved": {
+              "Light": {
+                "r": 0.9607843160629272,
+                "g": 0.9607843160629272,
+                "b": 0.9607843160629272,
+                "a": 1
+              },
+              "Dark": {
+                "r": 0.14509804546833038,
+                "g": 0.14509804546833038,
+                "b": 0.14509804546833038,
+                "a": 1
+              }
+            },
+            "hex": {
+              "Light": "#F5F5F5",
+              "Dark": "#252525"
+            }
+          },
+          "danger": {
+            "semanticVariableId": "VariableID:1:58",
+            "resolved": {
+              "Light": {
+                "r": 0.14901961386203766,
+                "g": 0.14901961386203766,
+                "b": 0.14901961386203766,
+                "a": 1
+              },
+              "Dark": {
+                "r": 0.8980392217636108,
+                "g": 0.8980392217636108,
+                "b": 0.8980392217636108,
+                "a": 1
+              }
+            },
+            "hex": {
+              "Light": "#262626",
+              "Dark": "#E5E5E5"
+            }
+          },
+          "dangerSoft": {
+            "semanticVariableId": "VariableID:1:61",
+            "resolved": {
+              "Light": {
+                "r": 0.9607843160629272,
+                "g": 0.9607843160629272,
+                "b": 0.9607843160629272,
+                "a": 1
+              },
+              "Dark": {
+                "r": 0.16862745583057404,
+                "g": 0.16862745583057404,
+                "b": 0.16862745583057404,
+                "a": 1
+              }
+            },
+            "hex": {
+              "Light": "#F5F5F5",
+              "Dark": "#2B2B2B"
+            }
+          },
+          "brandBlue": {
+            "semanticVariableId": "VariableID:37:155",
+            "resolved": {
+              "Light": {
+                "r": 0.14509804546833038,
+                "g": 0.38823530077934265,
+                "b": 0.9215686321258545,
+                "a": 1
+              },
+              "Dark": {
+                "r": 0.43921568989753723,
+                "g": 0.6274510025978088,
+                "b": 1,
+                "a": 1
+              }
+            },
+            "hex": {
+              "Light": "#2563EB",
+              "Dark": "#70A0FF"
+            }
+          },
+          "brandTeal": {
+            "semanticVariableId": "VariableID:37:158",
+            "resolved": {
+              "Light": {
+                "r": 0.05098039284348488,
+                "g": 0.5803921818733215,
+                "b": 0.5333333611488342,
+                "a": 1
+              },
+              "Dark": {
+                "r": 0.3686274588108063,
+                "g": 0.9176470637321472,
+                "b": 0.8313725590705872,
+                "a": 1
+              }
+            },
+            "hex": {
+              "Light": "#0D9488",
+              "Dark": "#5EEAD4"
+            }
+          },
+          "statusGreen": {
+            "semanticVariableId": "VariableID:37:161",
+            "resolved": {
+              "Light": {
+                "r": 0.08627451211214066,
+                "g": 0.501960813999176,
+                "b": 0.29019609093666077,
+                "a": 1
+              },
+              "Dark": {
+                "r": 0.4313725531101227,
+                "g": 0.843137264251709,
+                "b": 0.6313725709915161,
+                "a": 1
+              }
+            },
+            "hex": {
+              "Light": "#16804A",
+              "Dark": "#6ED7A1"
+            }
+          },
+          "statusRed": {
+            "semanticVariableId": "VariableID:37:164",
+            "resolved": {
+              "Light": {
+                "r": 0.7843137383460999,
+                "g": 0.23137255012989044,
+                "b": 0.23137255012989044,
+                "a": 1
+              },
+              "Dark": {
+                "r": 1,
+                "g": 0.5411764979362488,
+                "b": 0.5411764979362488,
+                "a": 1
+              }
+            },
+            "hex": {
+              "Light": "#C83B3B",
+              "Dark": "#FF8A8A"
+            }
+          }
+        }
+      }
+    }
+  },
+  "contrast": {
+    "status": "passed-for-selected-token-combinations",
+    "passed": 96,
+    "total": 96,
+    "textAndControlPairs": 48,
+    "coloredIconPairs": 48,
+    "evidence": "monochrome-contrast-audit.json"
+  },
+  "visualReview": {
+    "status": "passed-for-13-representative-boards",
+    "mainBoards": [
+      "31:229",
+      "25:229",
+      "31:1079",
+      "31:1290",
+      "35:297",
+      "26:3330",
+      "26:4425",
+      "44:5286"
+    ],
+    "agentBoards": [
+      "7:128",
+      "9:3819",
+      "9:10819",
+      "14:1092",
+      "17:10970"
+    ],
+    "reviewedBoardCount": 13,
+    "mainEvidence": "monochrome-main-visual-review.json",
+    "agentEvidence": "monochrome-agent-visual-review.json",
+    "findingsResolved": [
+      {
+        "id": "MONO-01",
+        "issue": "Hardcoded blue SVG slider/measurement/inset paints did not follow variable updates",
+        "resolution": "Rebound structural control paints to neutral tokens; preserved CSS color samples and color-picker data"
+      },
+      {
+        "id": "MONO-02",
+        "issue": "Opacity range still used blue gradient stops",
+        "resolution": "Neutral RGB ramp applied to five affected controls, preserving alpha and the rendered light/dark mode"
+      },
+      {
+        "id": "MONO-03",
+        "issue": "Five behavior annotations and overview palette labels referred to the previous ice-blue theme",
+        "resolution": "Updated the existing labels and overview name in place; fixture user messages and literal CSS color data retained"
+      }
+    ],
+    "full101BoardReauditClaimed": false,
+    "canonical175StateSemanticReauditClaimed": false,
+    "method": "Actual native Figma node screenshots reviewed by the agents responsible for the main and Agent files; fixes were followed by targeted readback and light/dark rechecks."
+  },
+  "brandAndIconReview": {
+    "status": "passed-for-reviewed-brand-and-icon-scope",
+    "mainBrand": {
+      "status": "passed",
+      "brackets": "brandBlue",
+      "eye": "ink",
+      "pupil": "brandTeal",
+      "rule": "Color is limited to brand marks, selected service/file icons and small status indicators; body copy, action fills, selection backgrounds and focus borders use neutral tokens."
+    },
+    "agentIconReadback": [
+      {
+        "nodeId": "2:276",
+        "name": "Athena / Icon / Bot",
+        "color": "#2563eb",
+        "status": "passed"
+      },
+      {
+        "nodeId": "2:188",
+        "name": "Athena / Icon / WandSparkles",
+        "role": "Skill",
+        "color": "#0d9488",
+        "status": "passed"
+      },
+      {
+        "nodeId": "2:181",
+        "name": "Athena / Icon / PlugZap",
+        "role": "MCP",
+        "color": "#2563eb",
+        "status": "passed"
+      }
+    ],
+    "evidence": [
+      "monochrome-main-visual-review.json",
+      "monochrome-agent-visual-review.json"
+    ]
+  },
+  "finalStructureReadback": {
+    "status": "passed-for-node-existence",
+    "files": {
+      "main": {
+        "pages": 6,
+        "majorBoards": 49,
+        "missing": 0
+      },
+      "agent": {
+        "pages": 8,
+        "majorBoards": 52,
+        "missing": 0
+      }
+    },
+    "pages": 14,
+    "majorBoards": 101,
+    "missing": 0,
+    "evidence": "monochrome-structure-readback.json",
+    "note": "101 is a structure-existence count, not the count of screenshots visually reviewed in this revision."
+  },
+  "historicalEvidence": {
+    "theme": "冰蓝 / 石墨灰",
+    "summary": "design-acceptance-summary.json",
+    "majorBoardsPreviouslyReviewed": 101,
+    "appliesToCurrentTheme": false,
+    "preservation": "Existing verification reports and previews are historical; this revision does not relabel their old results as new evidence."
+  },
+  "preservedContent": [
+    "网页取色、CSS、diff 与任务样例中的 #176B89 和冰蓝文本是内容数据，保持原值。",
+    "现有字号、尺寸、控件属性、状态语义与运行边界保持兼容。"
+  ],
+  "scopeLimits": [
+    "本轮视觉复查覆盖13张代表画板：主稿8张、Agent稿5张；没有重新截图验收全部101张主要画板。",
+    "本轮结构回读确认14页和101张主要画板存在，不等于重新执行内容、语义、原型或运行验收。",
+    "换肤前的视觉、语义、几何和原型检查保留为历史基线，不自动成为本轮新证据。",
+    "未修改应用源码或部署；没有运行真实键盘、读屏、IME、授权、取消、媒体播放或网络业务动作。",
+    "96组指定语义配色的数值对比度检查不等于完整运行时WCAG审计。"
+  ],
+  "followupChanges": {
+    "evidence": "monochrome-followup-changes.json",
+    "structuralPaintRule": "Neutralize structural SVG paints and checkerboards; preserve webpage color samples and alpha values.",
+    "opacityGradientNodes": [
+      "29:4948",
+      "25:484",
+      "43:1525",
+      "43:2172",
+      "35:493"
+    ],
+    "behaviorAnnotationNodes": [
+      "26:825",
+      "26:3119",
+      "26:4162",
+      "26:4939",
+      "26:5232"
+    ],
+    "actualNames": [
+      {
+        "id": "19:246",
+        "name": "00 · 设计总览"
+      },
+      {
+        "id": "44:5286",
+        "name": "Athena / 黑白 · Color accents"
+      }
+    ]
+  },
+  "previews": [
+    {
+      "file": "main",
+      "nodeId": "31:229",
+      "path": "../previews/monochrome/new-chat.png",
+      "width": 1600,
+      "height": 1000,
+      "bytes": 56459,
+      "sha256": "a27fd2fde9b8355ced68165bb83a6e99f2beafd9de35524d95890778d56fe7be"
+    },
+    {
+      "file": "main",
+      "nodeId": "25:229",
+      "path": "../previews/monochrome/element-inspector-light.png",
+      "width": 1600,
+      "height": 1000,
+      "bytes": 95502,
+      "sha256": "412f714d82d2035ab9b4c5eea03727b1ea0dc275d96f2c811aef14c718ebcbe5"
+    },
+    {
+      "file": "agent",
+      "nodeId": "14:1092",
+      "path": "../previews/monochrome/agent-interaction.png",
+      "width": 1600,
+      "height": 1000,
+      "bytes": 89737,
+      "sha256": "f36506b882c2b4e10e250d072b2b5f9198424b3324a2fc541ded87fc7a711528"
+    }
+  ],
+  "handoffConsistency": {
+    "status": "passed-for-current-handoff-files",
+    "evidence": "monochrome-handoff-check.json"
+  }
+}

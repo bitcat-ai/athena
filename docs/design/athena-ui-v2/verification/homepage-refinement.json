@@ -1,0 +1,450 @@
+{
+  "schemaVersion": "1.0",
+  "documentType": "homepage-refinement-verification",
+  "revision": "homepage-2026-11-02",
+  "date": "2026-11-02",
+  "status": "passed-for-homepage-design-scope",
+  "fileKey": "vEL0JeDlefvuvLjUQQh5SB",
+  "pageId": "19:244",
+  "sectionId": "104:1874",
+  "scope": "Homepage only; prior global review remains historical.",
+  "artifacts": {
+    "revision": "homepage-2026-11-02",
+    "sectionId": "104:1874",
+    "pageId": "19:244",
+    "directFrameCount": 21,
+    "fullScreenHomeViews": 13,
+    "existingHomeViews": 3,
+    "newHomeViews": 10,
+    "stateBoards": 6,
+    "navigationAndGuideBoards": 2,
+    "frames": [
+      {
+        "id": "31:229",
+        "name": "首页 / 默认",
+        "width": 1600,
+        "height": 1000,
+        "origin": "existing-homepage-frame",
+        "role": "full-screen-homepage-view",
+        "pageId": "19:244",
+        "parentId": "104:1874",
+        "x": 80,
+        "y": 80
+      },
+      {
+        "id": "46:1696",
+        "name": "首页 / 浏览器展开",
+        "width": 1600,
+        "height": 1000,
+        "origin": "existing-homepage-frame",
+        "role": "full-screen-homepage-view",
+        "pageId": "19:244",
+        "parentId": "104:1874",
+        "x": 1800,
+        "y": 80
+      },
+      {
+        "id": "46:2082",
+        "name": "首页 / 选取页面元素",
+        "width": 1600,
+        "height": 1000,
+        "origin": "existing-homepage-frame",
+        "role": "full-screen-homepage-view",
+        "pageId": "19:244",
+        "parentId": "104:1874",
+        "x": 3520,
+        "y": 80
+      },
+      {
+        "id": "107:2874",
+        "name": "首页 / 模型与浏览器前置状态",
+        "role": "state-board",
+        "pageId": "19:244",
+        "parentId": "104:1874",
+        "x": 1800,
+        "y": 2440,
+        "width": 1440,
+        "height": 2016
+      },
+      {
+        "id": "107:3451",
+        "role": "state-board",
+        "label": "Agent选择状态",
+        "pageId": "19:244",
+        "parentId": "104:1874",
+        "x": 3520,
+        "y": 4640,
+        "width": 1440,
+        "height": 718,
+        "name": "首页 / Agent 选择"
+      },
+      {
+        "id": "108:2172",
+        "name": "01 用户入口与上下文菜单",
+        "x": 3520,
+        "y": 2440,
+        "width": 1600,
+        "height": 640,
+        "role": "state-board",
+        "pageId": "19:244",
+        "parentId": "104:1874"
+      },
+      {
+        "id": "108:2359",
+        "name": "02 对话搜索",
+        "x": 3520,
+        "y": 3200,
+        "width": 1600,
+        "height": 1072,
+        "role": "state-board",
+        "pageId": "19:244",
+        "parentId": "104:1874"
+      },
+      {
+        "id": "109:2320",
+        "name": "03 输入与任务状态",
+        "x": 80,
+        "y": 2440,
+        "width": 1600,
+        "height": 1554,
+        "role": "state-board",
+        "pageId": "19:244",
+        "parentId": "104:1874"
+      },
+      {
+        "id": "109:2640",
+        "name": "04 工作目录、侧栏与快捷入口",
+        "x": 80,
+        "y": 5800,
+        "width": 1600,
+        "height": 1124,
+        "role": "state-board",
+        "pageId": "19:244",
+        "parentId": "104:1874"
+      },
+      {
+        "id": "113:2468",
+        "name": "首页 / 用户菜单展开",
+        "x": 80,
+        "y": 1240,
+        "width": 1600,
+        "height": 1000,
+        "origin": "new-homepage-frame",
+        "role": "full-screen-homepage-view",
+        "pageId": "19:244",
+        "parentId": "104:1874"
+      },
+      {
+        "id": "113:2690",
+        "name": "首页 / 模型选择展开",
+        "x": 1800,
+        "y": 1240,
+        "width": 1600,
+        "height": 1000,
+        "origin": "new-homepage-frame",
+        "role": "full-screen-homepage-view",
+        "pageId": "19:244",
+        "parentId": "104:1874"
+      },
+      {
+        "id": "113:2891",
+        "name": "首页 / 网页上下文菜单",
+        "x": 3520,
+        "y": 1240,
+        "width": 1600,
+        "height": 1000,
+        "origin": "new-homepage-frame",
+        "role": "full-screen-homepage-view",
+        "pageId": "19:244",
+        "parentId": "104:1874"
+      },
+      {
+        "id": "113:3090",
+        "name": "首页 / Agent 选择展开",
+        "x": 1800,
+        "y": 4640,
+        "width": 1600,
+        "height": 1000,
+        "origin": "new-homepage-frame",
+        "role": "full-screen-homepage-view",
+        "pageId": "19:244",
+        "parentId": "104:1874"
+      },
+      {
+        "id": "113:3334",
+        "name": "首页 / 对话搜索展开",
+        "x": 3520,
+        "y": 5800,
+        "width": 1600,
+        "height": 1000,
+        "origin": "new-homepage-frame",
+        "role": "full-screen-homepage-view",
+        "pageId": "19:244",
+        "parentId": "104:1874"
+      },
+      {
+        "id": "113:3556",
+        "name": "首页 / 对话搜索结果",
+        "x": 3520,
+        "y": 7040,
+        "width": 1600,
+        "height": 1000,
+        "origin": "new-homepage-frame",
+        "role": "full-screen-homepage-view",
+        "pageId": "19:244",
+        "parentId": "104:1874"
+      },
+      {
+        "id": "113:3771",
+        "name": "首页 / 工作目录入口",
+        "x": 1800,
+        "y": 7040,
+        "width": 1600,
+        "height": 1000,
+        "origin": "new-homepage-frame",
+        "role": "full-screen-homepage-view",
+        "pageId": "19:244",
+        "parentId": "104:1874"
+      },
+      {
+        "id": "113:3964",
+        "name": "首页 / 侧栏收起",
+        "x": 80,
+        "y": 4640,
+        "width": 1600,
+        "height": 1000,
+        "origin": "new-homepage-frame",
+        "role": "full-screen-homepage-view",
+        "pageId": "19:244",
+        "parentId": "104:1874"
+      },
+      {
+        "id": "113:4147",
+        "name": "首页 / 查看页面 · 草稿就绪",
+        "x": 80,
+        "y": 7040,
+        "width": 1600,
+        "height": 1000,
+        "origin": "new-homepage-frame",
+        "role": "full-screen-homepage-view",
+        "pageId": "19:244",
+        "parentId": "104:1874"
+      },
+      {
+        "id": "113:4432",
+        "name": "首页 / 录制网页操作",
+        "x": 1800,
+        "y": 5800,
+        "width": 1600,
+        "height": 1000,
+        "origin": "new-homepage-frame",
+        "role": "full-screen-homepage-view",
+        "pageId": "19:244",
+        "parentId": "104:1874"
+      },
+      {
+        "id": "116:3403",
+        "role": "navigation-index",
+        "pageId": "19:244",
+        "parentId": "104:1874",
+        "name": "首页 / 板块索引",
+        "x": 80,
+        "y": 20,
+        "width": 5040,
+        "height": 40
+      },
+      {
+        "id": "116:3429",
+        "role": "behavior-guide",
+        "pageId": "19:244",
+        "parentId": "104:1874",
+        "name": "首页 / 行为与能力边界",
+        "x": 80,
+        "y": 4060,
+        "width": 1600,
+        "height": 350
+      }
+    ],
+    "inputStateCount": 11,
+    "modelStateCount": 12,
+    "browserPrerequisiteStateCount": 4,
+    "agentSelectionStateCount": 3,
+    "countingRule": "These 21 frames overlap the historical inventory by the three moved homepage frames. They are tracked separately, not added blindly to the historical 101-board review count.",
+    "stateSpec": "homepage-state-spec.json",
+    "verification": "verification/homepage-refinement.json",
+    "section": {
+      "id": "104:1874",
+      "name": "01 · 首页 / 页面与交互",
+      "x": 3660,
+      "y": 100,
+      "width": 5200,
+      "height": 8120
+    },
+    "finalStructureEvidence": "verification/homepage-final-structure.json",
+    "uiFramesVisuallyReviewed": 19,
+    "auxiliaryFramesStructureOnly": 2
+  },
+  "avatarComponent": {
+    "componentSetId": "103:269",
+    "variants": {
+      "Default": "103:221",
+      "Hover": "103:233",
+      "Focus": "103:245",
+      "Open": "103:257"
+    },
+    "fallback": "D",
+    "userLabel": "Dylan",
+    "supportingLabel": "本机工作区",
+    "avatarSize": 40,
+    "triggerHeight": 56,
+    "photoProvided": false,
+    "accountLoginSubscriptionAdded": false
+  },
+  "modelAgentBoardEvidence": "homepage-model-agent-block.json",
+  "sourceBoardPreserved": {
+    "sourceId": "54:2116",
+    "sourceParentId": "51:1722",
+    "beforeCount": 573,
+    "afterCount": 573,
+    "diffs": []
+  },
+  "prototype": {
+    "status": "passed-for-recorded-target-existence",
+    "totalReadbackTargets": 152,
+    "navigationCounts": {
+      "NAVIGATE": 150,
+      "SCROLL_TO": 2
+    },
+    "brokenTargets": 0,
+    "countingRule": "Count of recorded navigation actions, not unique destination nodes or completed real business actions.",
+    "evidence": "homepage-final-structure.json",
+    "includesScrollToStateDemonstrations": true,
+    "fullRuntimeExecutionClaimed": false,
+    "notSimulated": [
+      "Real text input or IME handling",
+      "Search indexing and queries",
+      "Native directory picker",
+      "Model loading or saving",
+      "Task execution or recording persistence"
+    ],
+    "documentedTransitions": [
+      "New conversation while already on empty homepage is visually unchanged",
+      "Removing selected context preserves the same draft",
+      "Stopping the global task preserves the homepage draft",
+      "Submission/recording exits to downstream application views; only selected sample navigation is wired"
+    ],
+    "intermediateBuildLinksAreNotFinalEvidence": true
+  },
+  "visualReview": {
+    "status": "passed-for-19-static-ui-frames",
+    "fullHomepageViewsReviewed": [
+      "31:229",
+      "46:1696",
+      "46:2082",
+      "113:2468",
+      "113:2690",
+      "113:2891",
+      "113:3090",
+      "113:3334",
+      "113:3556",
+      "113:3771",
+      "113:3964",
+      "113:4147",
+      "113:4432"
+    ],
+    "stateBoardsReviewed": [
+      "108:2172",
+      "108:2359",
+      "109:2320",
+      "109:2640",
+      "107:2874",
+      "107:3451"
+    ],
+    "uiFramesReviewed": 19,
+    "auxiliaryFramesGeometryOnly": [
+      "116:3403",
+      "116:3429"
+    ],
+    "openFindings": 0,
+    "postFixChecks": [
+      "Avatar fallback foreground/background contrast",
+      "Recording-toolbar fixed width",
+      "Model popover hugs actual content at 432×144",
+      "Recording indicator uses recording red",
+      "Context removal and stopped draft specimens retain input text"
+    ],
+    "evidence": [
+      "homepage-final-review.json",
+      "homepage-interaction-visual-audit.json",
+      "homepage-model-agent-block.json"
+    ],
+    "globalReviewInherited": false
+  },
+  "historicalBaselines": [
+    "heroui-surface-refinement.json",
+    "monochrome-retheme.json",
+    "design-acceptance-summary.json"
+  ],
+  "scopeLimits": [
+    "本轮仅首页Section和首页用户入口组件，不代表其他页面的重新设计或全文件全量重审。",
+    "搜索、用户菜单与＋网页上下文入口是设计新增；当前应用源码尚未实现这些入口。",
+    "Figma目标节点存在、静态状态和SCROLL_TO连接不代表真实业务可运行。",
+    "未模拟真实输入、搜索索引、模型保存、系统目录选择、任务执行或录制持久化。",
+    "未新增登录、订阅、文件上传或任务队列；用户默认头像D不表示已接入账号系统。"
+  ],
+  "structure": {
+    "status": "passed-for-homepage-section",
+    "directFrames": 21,
+    "fullHomepageViews": 13,
+    "stateBoards": 6,
+    "auxiliaryFrames": 2,
+    "overlaps": 0,
+    "unintendedOverflow": 0,
+    "intentionalOverflow": {
+      "nodeId": "109:2615",
+      "width": 712,
+      "height": 160,
+      "clipsContent": true,
+      "overflowDirection": "VERTICAL",
+      "intentional": true
+    },
+    "evidence": "homepage-final-structure.json"
+  },
+  "capabilityBoundary": {
+    "current": "Home input, local agent/model selection, workspace picking, browser/selection/recording entry points and task state constraints were checked against the current source",
+    "designExtensions": [
+      "User avatar and local user menu",
+      "Web-context plus menu",
+      "Conversation search"
+    ],
+    "notAdded": [
+      "Account sign-in or subscription UI",
+      "File upload or attachment pipeline",
+      "Automatic send queue"
+    ]
+  },
+  "previews": [
+    {
+      "path": "../previews/homepage/home.png",
+      "nodeId": "31:229",
+      "width": 1600,
+      "height": 1000,
+      "bytes": 69899,
+      "sha256": "2c815a44f7122c88c1facf768095eca2c9472006ee0913ccc5b17203ac1db4cf"
+    },
+    {
+      "path": "../previews/homepage/user-menu.png",
+      "nodeId": "113:2468",
+      "width": 1600,
+      "height": 1000,
+      "bytes": 91050,
+      "sha256": "f094ea7b86fb18c702603187f4abb4b94d34c457676363dab017784fe6b4cb80"
+    }
+  ],
+  "finalSourceOfTruth": "homepage-final-structure.json",
+  "intermediateBuildLogUsedAsFinalEvidence": false,
+  "handoffConsistency": {
+    "status": "passed-for-homepage-handoff-files",
+    "evidence": "homepage-handoff-check.json"
+  }
+}

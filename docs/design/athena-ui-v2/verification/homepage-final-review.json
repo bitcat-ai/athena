@@ -1,0 +1,133 @@
+{
+  "date": "2026-11-02",
+  "status": "passed-for-homepage-design-scope",
+  "scope": {
+    "confirmed": "Homepage first; other pages will be refined later",
+    "fileKey": "vEL0JeDlefvuvLjUQQh5SB",
+    "pageId": "19:244",
+    "sectionId": "104:1874",
+    "mainHomeId": "31:229",
+    "existingHomepageViewsMoved": [
+      "31:229",
+      "46:1696",
+      "46:2082"
+    ],
+    "otherExistingPageLayoutsChanged": false,
+    "applicationSourceChanged": false
+  },
+  "avatar": {
+    "componentSetId": "103:269",
+    "variants": {
+      "Default": "103:221",
+      "Hover": "103:233",
+      "Focus": "103:245",
+      "Open": "103:257"
+    },
+    "fallback": "D",
+    "userLabel": "Dylan",
+    "supportingLabel": "本机工作区",
+    "avatarSize": 40,
+    "triggerHeight": 56,
+    "photoProvided": false,
+    "accountLoginSubscriptionAdded": false
+  },
+  "structure": {
+    "frameCount": 21,
+    "fullHomepageViews": 13,
+    "stateBoards": 6,
+    "auxiliaryFrames": 2,
+    "overlaps": [],
+    "unintendedOverflow": [],
+    "intentionalOverflow": [
+      {
+        "root": "109:2320",
+        "id": "109:2615",
+        "name": "Long draft viewport",
+        "childId": "109:2616",
+        "clipsContent": true,
+        "overflowDirection": "VERTICAL"
+      }
+    ]
+  },
+  "prototype": {
+    "totalReadbackTargets": 152,
+    "navigationCounts": {
+      "NAVIGATE": 150,
+      "SCROLL_TO": 2
+    },
+    "brokenTargets": [],
+    "scope": "Selected preset scene navigation and state-board scroll links; not live application behavior",
+    "notSimulated": [
+      "Real text input or IME handling",
+      "Search indexing and queries",
+      "Native directory picker",
+      "Model loading or saving",
+      "Task execution or recording persistence"
+    ],
+    "documentedTransitions": [
+      "New conversation while already on empty homepage is visually unchanged",
+      "Removing selected context preserves the same draft",
+      "Stopping the global task preserves the homepage draft",
+      "Submission/recording exits to downstream application views; only selected sample navigation is wired"
+    ]
+  },
+  "visualReview": {
+    "parentReviewedFullViews": [
+      "31:229",
+      "46:1696",
+      "46:2082",
+      "113:2468",
+      "113:2690",
+      "113:2891",
+      "113:3090",
+      "113:3334",
+      "113:3556",
+      "113:3771",
+      "113:3964",
+      "113:4147",
+      "113:4432"
+    ],
+    "peerStateBoards": [
+      "108:2172",
+      "108:2359",
+      "109:2320",
+      "109:2640",
+      "107:2874",
+      "107:3451"
+    ],
+    "uiFramesReviewed": 19,
+    "auxiliaryFramesGeometryOnly": [
+      "116:3403",
+      "116:3429"
+    ],
+    "openFindings": 0,
+    "postFixChecks": [
+      "Avatar fallback foreground/background contrast",
+      "Recording-toolbar fixed width",
+      "Model popover hugs actual content at 432×144",
+      "Recording indicator uses recording red",
+      "Context removal and stopped draft specimens retain input text"
+    ]
+  },
+  "capabilityBoundary": {
+    "current": "Home input, local agent/model selection, workspace picking, browser/selection/recording entry points and task state constraints were checked against the current source",
+    "designExtensions": [
+      "User avatar and local user menu",
+      "Web-context plus menu",
+      "Conversation search"
+    ],
+    "notAdded": [
+      "Account sign-in or subscription UI",
+      "File upload or attachment pipeline",
+      "Automatic send queue"
+    ]
+  },
+  "sourceReports": [
+    "homepage-interaction-visual-audit.json",
+    "homepage-model-agent-block.json"
+  ],
+  "previews": [
+    "../previews/homepage/home.png",
+    "../previews/homepage/user-menu.png"
+  ]
+}

@@ -1,0 +1,268 @@
+{
+  "date": "2026-11-01",
+  "fileKey": "jIaBK8NMvfZsjuMktNwpfO",
+  "scope": "Four confirmed semantic gaps, three observed visual defects, and one actual final-scenario filename mismatch. No application code changes.",
+  "status": "fixed-and-read-back",
+  "semanticGapFixes": [
+    {
+      "id": "msg_final",
+      "componentId": "7:355",
+      "instanceId": "7:356",
+      "change": "Added reusable Ghost button 继续追问, 76×32, inside existing 32px message-action row.",
+      "evidence": {
+        "createdNodeIds": [
+          "28:1323",
+          "I28:1323;2:509"
+        ],
+        "mutatedNodeIds": [
+          "7:355",
+          "7:343",
+          "7:356"
+        ],
+        "buttonId": "28:1323",
+        "component": {
+          "width": 624,
+          "height": 148
+        },
+        "instanceEvidence": [
+          {
+            "id": "I7:356;28:1323",
+            "label": [
+              {
+                "id": "I7:356;28:1323;2:509",
+                "text": "继续追问"
+              }
+            ],
+            "width": 76,
+            "height": 32
+          }
+        ]
+      }
+    },
+    {
+      "id": "output_media",
+      "componentId": "9:14444",
+      "instanceId": "9:14445",
+      "change": "Added 840 KB to media metadata without changing layout.",
+      "textNodeId": "9:14435"
+    },
+    {
+      "id": "artifact_generating",
+      "componentId": "9:14677",
+      "instanceId": "9:14678",
+      "change": "Retained exact filename 调研报告.pdf and PDF type during generation.",
+      "textNodeId": "9:14667"
+    },
+    {
+      "id": "artifact_preview_loading",
+      "componentId": "9:14863",
+      "instanceId": "9:14864",
+      "change": "Retained 调研报告.pdf · PDF · 2.4 MB while its preview loads.",
+      "textNodeId": "9:14856"
+    }
+  ],
+  "assetInstanceReadback": {
+    "mutatedNodeIds": [
+      "9:14435",
+      "9:14667",
+      "9:14856"
+    ],
+    "instanceEvidence": [
+      {
+        "id": "9:14445",
+        "width": 624,
+        "height": 376,
+        "text": [
+          {
+            "id": "I9:14445;9:14435",
+            "text": "页面对比图.png · 840 KB · 按钮修改前后对比"
+          }
+        ]
+      },
+      {
+        "id": "9:14678",
+        "width": 624,
+        "height": 334,
+        "text": [
+          {
+            "id": "I9:14678;9:14667",
+            "text": "调研报告.pdf · PDF"
+          }
+        ]
+      },
+      {
+        "id": "9:14864",
+        "width": 624,
+        "height": 334,
+        "text": [
+          {
+            "id": "I9:14864;9:14856",
+            "text": "调研报告.pdf · PDF · 2.4 MB"
+          }
+        ]
+      }
+    ]
+  },
+  "visualFixes": [
+    {
+      "reason": "Remove duplicate return-to-latest footer; retain the inline unread-arrival control.",
+      "mutatedNodeIds": [
+        "7:815",
+        "7:815",
+        "7:816"
+      ],
+      "removedNodeIds": [
+        "7:810",
+        "7:811",
+        "7:812",
+        "I7:812;2:497"
+      ],
+      "component": {
+        "id": "7:815",
+        "width": 624,
+        "height": 192
+      },
+      "instance": {
+        "id": "7:816",
+        "width": 624,
+        "height": 192
+      },
+      "overflow": []
+    },
+    {
+      "reason": "Remove empty nested textarea label to restore the intended field-label spacing.",
+      "mutatedNodeIds": [
+        "9:4477",
+        "9:4464",
+        "9:4478"
+      ],
+      "removedNodeIds": [
+        "9:4465"
+      ],
+      "component": {
+        "id": "9:4477",
+        "width": 624,
+        "height": 297
+      },
+      "instance": {
+        "id": "9:4478",
+        "width": 624,
+        "height": 297
+      },
+      "overflow": []
+    },
+    {
+      "reason": "Remove the verbatim duplicated citation-source summary.",
+      "mutatedNodeIds": [
+        "9:14563",
+        "9:14563",
+        "9:14564"
+      ],
+      "removedNodeIds": [
+        "9:14509"
+      ],
+      "component": {
+        "id": "9:14563",
+        "width": 624,
+        "height": 386
+      },
+      "instance": {
+        "id": "9:14564",
+        "width": 624,
+        "height": 386
+      },
+      "overflow": []
+    }
+  ],
+  "deliveryScenarioFix": {
+    "nodeId": "14:2045",
+    "change": "Corrected the artifact summary to 按钮调整报告.pdf · 2.4 MB so it matches the card title, filename and surrounding task context.",
+    "evidence": {
+      "mutatedNodeIds": [
+        "I14:2151;9:14144",
+        "14:2151"
+      ],
+      "evidence": [
+        {
+          "id": "I14:2151;9:14137",
+          "text": "按钮调整报告"
+        },
+        {
+          "id": "I14:2151;9:14144",
+          "text": "按钮调整报告.pdf · 2.4 MB"
+        },
+        {
+          "id": "I14:2151;9:14154",
+          "text": "按钮调整报告.pdf"
+        }
+      ],
+      "width": 624,
+      "height": 230
+    }
+  },
+  "postFixActualSemanticEvidence": "agent-postfix-semantic-evidence.json",
+  "postFixVisuals": "Four semantic-gap states and three visual corrections were screenshot-reviewed at scale=1; delivery artifact was separately screenshot-reviewed after the instance override.",
+  "obsoleteGeometryFindings": {
+    "disposition": "Live-read proved already resolved; no redundant changes made.",
+    "nodes": [
+      {
+        "id": "9:1550",
+        "height": 36,
+        "maxChildBottom": 35
+      },
+      {
+        "id": "9:2050",
+        "height": 36,
+        "maxChildBottom": 35
+      },
+      {
+        "id": "I9:1573;9:1550",
+        "height": 36,
+        "maxChildBottom": 35
+      },
+      {
+        "id": "I9:2068;9:2050",
+        "height": 36,
+        "maxChildBottom": 35
+      },
+      {
+        "id": "17:10971",
+        "height": 88,
+        "maxChildBottom": 86
+      },
+      {
+        "id": "17:11391",
+        "height": 88,
+        "maxChildBottom": 86
+      },
+      {
+        "id": "17:10998",
+        "height": 32,
+        "maxChildBottom": 30.5
+      },
+      {
+        "id": "17:11312",
+        "height": 32,
+        "maxChildBottom": 30.5
+      },
+      {
+        "id": "17:11416",
+        "height": 32,
+        "maxChildBottom": 30.5
+      }
+    ]
+  },
+  "handoffPreview": {
+    "path": "../previews/agent-interaction.png",
+    "nodeId": "14:1092",
+    "width": 1600,
+    "height": 1000
+  },
+  "notChanged": [
+    "Application source code",
+    "Main Athena design file",
+    "Canonical 175-state inventory",
+    "Other agents' scene geometry or source data"
+  ],
+  "knownRemainingDefects": []
+}

@@ -1,0 +1,1014 @@
+{
+  "schemaVersion": "2.0",
+  "documentType": "research-sources",
+  "date": "2026-11-01",
+  "product": "Athena",
+  "audience": "design-and-engineering",
+  "status": "design-reviewed-proposal",
+  "verification": {
+    "status": "passed-for-surface-refinement-scope",
+    "revision": "heroui-surface-2026-11-02",
+    "scope": [
+      "HeroUI-inspired radius and surface recipe",
+      "15 representative visual boards",
+      "Scoped structure and prototype-target readback"
+    ],
+    "note": "Revision04表面精修已按实际recipe和回读合并；本轮15张代表画板，前轮黑白配色与历史全量审阅仅作基线。",
+    "evidence": "verification/heroui-surface-refinement.json",
+    "completedScopedChecks": [
+      {
+        "area": "representative-surface-visual-review",
+        "status": "passed",
+        "mainBoards": 10,
+        "agentBoards": 5,
+        "totalBoards": 15,
+        "evidence": "verification/heroui-surface-refinement.json"
+      },
+      {
+        "area": "main-structure-and-prototype-targets",
+        "status": "passed-structural",
+        "boards": 49,
+        "targets": 107,
+        "missingTargets": 0,
+        "unexpectedOverflow": 0,
+        "evidence": "verification/heroui-main-geometry.json"
+      },
+      {
+        "area": "agent-surface-and-preservation",
+        "status": "passed-for-stated-scope",
+        "majorFramesPreserved": 52,
+        "canonicalStatesPreserved": 175,
+        "fullSemanticReaudit": false,
+        "evidence": "verification/heroui-agent-surface-refinement.json"
+      }
+    ],
+    "priorRefinementBaseline": {
+      "revision": "monochrome-2026-11-02",
+      "applicability": "Previous monochrome refinement; not new surface-refinement evidence",
+      "verification": {
+        "status": "passed-for-retheme-scope",
+        "revision": "monochrome-2026-11-02",
+        "scope": [
+          "Current monochrome foundation variables",
+          "Representative retheme screenshots",
+          "Color logo and icon readback"
+        ],
+        "note": "2026-11-02黑白主题独立验收：84个实际颜色值匹配目标，96组指定配色达阈值，13张代表画板完成视觉复查；14页101张主要画板结构存在。旧配色验收保留为历史基线。",
+        "evidence": "verification/monochrome-retheme.json",
+        "priorThemeBaseline": {
+          "theme": "冰蓝 / 石墨灰",
+          "applicability": "Historical baseline before the monochrome retheme; not current-theme visual evidence",
+          "verification": {
+            "status": "passed-for-design-scope",
+            "scope": [
+              "Figma final visual review",
+              "Cross-screen and state consistency review",
+              "Prototype interaction review"
+            ],
+            "note": "最终设计审阅证据已合并；适用范围与未测运行边界见scopeLimits。",
+            "scopeLimits": [
+              "本轮交付与验收针对可编辑Figma设计和明确的状态样例，不代表应用已实现或部署。",
+              "没有运行真实键盘、读屏、IME、授权、取消、媒体播放或网络业务动作。",
+              "原型导航记录与条件说明分开；未把所有状态图声称为可执行动态原型。",
+              "对比度覆盖48组指定语义组合，不等于完整运行时WCAG审计。"
+            ]
+          }
+        },
+        "scopeLimits": [
+          "本轮视觉复查覆盖13张代表画板：主稿8张、Agent稿5张；没有重新截图验收全部101张主要画板。",
+          "本轮结构回读确认14页和101张主要画板存在，不等于重新执行内容、语义、原型或运行验收。",
+          "换肤前的视觉、语义、几何和原型检查保留为历史基线，不自动成为本轮新证据。",
+          "未修改应用源码或部署；没有运行真实键盘、读屏、IME、授权、取消、媒体播放或网络业务动作。",
+          "96组指定语义配色的数值对比度检查不等于完整运行时WCAG审计。"
+        ],
+        "completedScopedChecks": [
+          {
+            "area": "theme-variable-readback",
+            "status": "passed",
+            "resolvedValues": 84,
+            "evidence": "verification/monochrome-retheme.json"
+          },
+          {
+            "area": "selected-color-contrast",
+            "status": "passed",
+            "passed": 96,
+            "total": 96,
+            "evidence": "verification/monochrome-contrast-audit.json"
+          },
+          {
+            "area": "representative-theme-visual-review",
+            "status": "passed",
+            "mainBoards": 8,
+            "agentBoards": 5,
+            "totalBoards": 13,
+            "evidence": "verification/monochrome-retheme.json"
+          },
+          {
+            "area": "current-node-existence",
+            "status": "passed-structural",
+            "pages": 14,
+            "majorBoards": 101,
+            "missing": 0,
+            "fullScreenshotAudit": false,
+            "evidence": "verification/monochrome-structure-readback.json"
+          }
+        ]
+      }
+    },
+    "scopeLimits": [
+      "本轮视觉复查15张代表画板：主稿10张、Agent稿5张；未重新截图验收全部101张主要画板。",
+      "主稿49张当前画板与107个原型目标已做结构回读；Agent报告记录52画板与175状态保留，不等于重新执行全状态语义审计。",
+      "前轮黑白配色的84个颜色值和96组对比度保留为基线，不写成本轮重新测量。",
+      "主稿包含深色代表界面复查；Agent本轮没有新增深色视觉审计。",
+      "未修改应用源码或部署；未执行真实键盘、读屏、IME、授权、媒体播放或业务动作。"
+    ]
+  },
+  "scope": "与桌面 AI 工作台和专用元素控件有关的一手协议、产品与无障碍资料；不是所有界面风格的穷尽目录。",
+  "method": "官方文档事实与针对 Athena 的设计判断分开记录；网页只保留官方 HTTP(S) 来源。",
+  "sources": [
+    {
+      "title": "Agent Skills specification",
+      "url": "https://agentskills.io/specification",
+      "publisherHost": "agentskills.io",
+      "sourceDatasetIds": [
+        "protocol:skills"
+      ],
+      "observations": [
+        "Skill 是 metadata + instructions + 可选资源的包，不是独立工具调用状态机。"
+      ],
+      "designImplications": [],
+      "versionNotes": [
+        "live-spec"
+      ],
+      "id": "S001"
+    },
+    {
+      "title": "MCP Apps overview",
+      "url": "https://apps.extensions.modelcontextprotocol.io/api/documents/overview.html",
+      "publisherHost": "apps.extensions.modelcontextprotocol.io",
+      "sourceDatasetIds": [
+        "protocol:mcp_apps"
+      ],
+      "observations": [
+        "沙箱 View 有初始化、工具输入/结果、交互和 teardown 生命周期；无 UI 支持应回退文本。"
+      ],
+      "designImplications": [],
+      "versionNotes": [
+        "live extension"
+      ],
+      "id": "S002"
+    },
+    {
+      "title": "Guardrails and human review",
+      "url": "https://developers.openai.com/api/docs/guides/agents/guardrails-approvals",
+      "publisherHost": "developers.openai.com",
+      "sourceDatasetIds": [
+        "protocol:approvals"
+      ],
+      "observations": [
+        "审批是可恢复的运行中断，拒绝/批准后恢复同一次运行。自动检查与人工审批是不同对象。"
+      ],
+      "designImplications": [],
+      "versionNotes": [
+        "live-doc"
+      ],
+      "id": "S003"
+    },
+    {
+      "title": "Reasoning summaries",
+      "url": "https://developers.openai.com/api/docs/guides/reasoning#reasoning-summaries",
+      "publisherHost": "developers.openai.com",
+      "sourceDatasetIds": [
+        "protocol:reasoning"
+      ],
+      "observations": [
+        "可选择返回模型支持的推理摘要；不暴露原始推理 tokens。"
+      ],
+      "designImplications": [],
+      "versionNotes": [
+        "live-doc"
+      ],
+      "id": "S004"
+    },
+    {
+      "title": "Streaming API responses",
+      "url": "https://developers.openai.com/api/docs/guides/streaming-responses",
+      "publisherHost": "developers.openai.com",
+      "sourceDatasetIds": [
+        "protocol:responses"
+      ],
+      "observations": [
+        "按语义事件呈现文字、函数参数和工具进度；生成中的参数不是已执行动作。"
+      ],
+      "designImplications": [],
+      "versionNotes": [
+        "live-doc"
+      ],
+      "id": "S005"
+    },
+    {
+      "title": "Nous Research / Hermes Desktop",
+      "url": "https://hermes-agent.nousresearch.com/docs/user-guide/desktop",
+      "publisherHost": "hermes-agent.nousresearch.com",
+      "sourceDatasetIds": [
+        "interaction:hermes-desktop"
+      ],
+      "observations": [
+        "官方文档明确区分隐藏与关闭有状态面板、保存阅读位置和草稿、编辑队列、折叠异步结果，以及重启丢失轮次后不自动重复执行。"
+      ],
+      "designImplications": [
+        "画稿须有阅读历史时的新内容提示、队列暂停、草稿恢复、会话恢复和未知执行结果，而不仅是运行/成功/失败三态。"
+      ],
+      "versionNotes": [],
+      "id": "S006"
+    },
+    {
+      "title": "Codex App Server",
+      "url": "https://learn.chatgpt.com/docs/app-server",
+      "publisherHost": "learn.chatgpt.com",
+      "sourceDatasetIds": [
+        "protocol:codex"
+      ],
+      "observations": [
+        "turn、item、审批、MCP、Skill、collaboration、review、compaction 与账户事件的 UI 协议来源。"
+      ],
+      "designImplications": [],
+      "versionNotes": [
+        "live-doc"
+      ],
+      "id": "S007"
+    },
+    {
+      "title": "OpenAI / Code review",
+      "url": "https://learn.chatgpt.com/docs/code-review",
+      "publisherHost": "learn.chatgpt.com",
+      "sourceDatasetIds": [
+        "interaction:codex-review"
+      ],
+      "observations": [
+        "官方审阅流程将描述、活动、检查与 Changes diff 分开；已查看标记绑定所显示的修订版本。"
+      ],
+      "designImplications": [
+        "产物被更新后，不能沿用旧版的已审阅状态；让差异、验证与评论保持可追溯。"
+      ],
+      "versionNotes": [],
+      "id": "S008"
+    },
+    {
+      "title": "OpenAI / Long-running work",
+      "url": "https://learn.chatgpt.com/docs/long-running-work",
+      "publisherHost": "learn.chatgpt.com",
+      "sourceDatasetIds": [
+        "interaction:codex-goals"
+      ],
+      "observations": [
+        "官方文档区分目标、约束、完成标准；进度行可暂停、恢复、编辑或清除目标，任务运行时可以继续补充方向。开始长期目标不扩大既有权限。"
+      ],
+      "designImplications": [
+        "目标进度行应与普通回复、当前轮次、工具调用分开；编辑目标不能悄悄清空历史或产物。"
+      ],
+      "versionNotes": [],
+      "id": "S009"
+    },
+    {
+      "title": "MCP prompts",
+      "url": "https://modelcontextprotocol.io/specification/2025-11-25/server/prompts",
+      "publisherHost": "modelcontextprotocol.io",
+      "sourceDatasetIds": [
+        "protocol:mcp_prompts"
+      ],
+      "observations": [
+        "用户主动选择模板与参数。2026 索引仍列此能力，但本次正文核验使用 2025-11-25 版本，避免声称已核验新正文。"
+      ],
+      "designImplications": [],
+      "versionNotes": [
+        "2025-11-25 verified; current 2026 URL indexed but fetch unavailable"
+      ],
+      "id": "S010"
+    },
+    {
+      "title": "MCP authorization",
+      "url": "https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization",
+      "publisherHost": "modelcontextprotocol.io",
+      "sourceDatasetIds": [
+        "protocol:mcp_auth"
+      ],
+      "observations": [
+        "HTTP OAuth 与本地 stdio 凭据路径不同；有增量 scope 授权，授权成功不等于工具执行成功。"
+      ],
+      "designImplications": [],
+      "versionNotes": [
+        "2026-07-28"
+      ],
+      "id": "S011"
+    },
+    {
+      "title": "MCP cancellation",
+      "url": "https://modelcontextprotocol.io/specification/2026-07-28/basic/patterns/cancellation",
+      "publisherHost": "modelcontextprotocol.io",
+      "sourceDatasetIds": [
+        "protocol:mcp_cancel"
+      ],
+      "observations": [
+        "请求取消与最终结果可能竞争；HTTP 关闭请求流与 stdio cancellation 通知不同。UI 要表达取消请求中。"
+      ],
+      "designImplications": [],
+      "versionNotes": [
+        "2026-07-28"
+      ],
+      "id": "S012"
+    },
+    {
+      "title": "MCP progress",
+      "url": "https://modelcontextprotocol.io/specification/2026-07-28/basic/patterns/progress",
+      "publisherHost": "modelcontextprotocol.io",
+      "sourceDatasetIds": [
+        "protocol:mcp_progress"
+      ],
+      "observations": [
+        "progress 必须递增，total 可缺失；无 total 时不应编造百分比。"
+      ],
+      "designImplications": [],
+      "versionNotes": [
+        "2026-07-28"
+      ],
+      "id": "S013"
+    },
+    {
+      "title": "MCP 2026-07-28 changes",
+      "url": "https://modelcontextprotocol.io/specification/2026-07-28/changelog",
+      "publisherHost": "modelcontextprotocol.io",
+      "sourceDatasetIds": [
+        "protocol:mcp_change"
+      ],
+      "observations": [
+        "当前协议为按请求携带能力的无状态协议；兼容旧协议需展示能力差异，而不假定所有服务都有旧式握手。"
+      ],
+      "designImplications": [],
+      "versionNotes": [
+        "2026-07-28"
+      ],
+      "id": "S014"
+    },
+    {
+      "title": "MCP elicitation",
+      "url": "https://modelcontextprotocol.io/specification/2026-07-28/client/elicitation",
+      "publisherHost": "modelcontextprotocol.io",
+      "sourceDatasetIds": [
+        "protocol:mcp_elicit"
+      ],
+      "observations": [
+        "区分 form/URL；明确请求来源、用途以及 accept/decline/cancel。form 不承载密码、API keys、支付凭据。"
+      ],
+      "designImplications": [],
+      "versionNotes": [
+        "2026-07-28"
+      ],
+      "id": "S015"
+    },
+    {
+      "title": "MCP Sampling",
+      "url": "https://modelcontextprotocol.io/specification/2026-07-28/client/sampling",
+      "publisherHost": "modelcontextprotocol.io",
+      "sourceDatasetIds": [
+        "protocol:mcp_sampling"
+      ],
+      "observations": [
+        "仅作为旧服务兼容面板；新实现不应主动采用。"
+      ],
+      "designImplications": [],
+      "versionNotes": [
+        "deprecated since 2026-07-28"
+      ],
+      "id": "S016"
+    },
+    {
+      "title": "MCP resources",
+      "url": "https://modelcontextprotocol.io/specification/2026-07-28/server/resources",
+      "publisherHost": "modelcontextprotocol.io",
+      "sourceDatasetIds": [
+        "protocol:mcp_resources"
+      ],
+      "observations": [
+        "资源由宿主组织与选择；资源读取、订阅变更不应伪装成动作执行。"
+      ],
+      "designImplications": [],
+      "versionNotes": [
+        "2026-07-28"
+      ],
+      "id": "S017"
+    },
+    {
+      "title": "MCP tools",
+      "url": "https://modelcontextprotocol.io/specification/2026-07-28/server/tools",
+      "publisherHost": "modelcontextprotocol.io",
+      "sourceDatasetIds": [
+        "protocol:mcp_tools"
+      ],
+      "observations": [
+        "工具可返回普通内容、structured content、资源、isError 或 input_required。"
+      ],
+      "designImplications": [],
+      "versionNotes": [
+        "2026-07-28"
+      ],
+      "id": "S018"
+    },
+    {
+      "title": "Agents SDK handoffs",
+      "url": "https://openai.github.io/openai-agents-python/handoffs/",
+      "publisherHost": "openai.github.io",
+      "sourceDatasetIds": [
+        "protocol:sdk_handoff"
+      ],
+      "observations": [
+        "handoff 交接当前执行 Agent；需要显式表达当前责任主体。"
+      ],
+      "designImplications": [],
+      "versionNotes": [
+        "live-doc"
+      ],
+      "id": "S019"
+    },
+    {
+      "title": "Agents SDK human-in-the-loop",
+      "url": "https://openai.github.io/openai-agents-python/human_in_the_loop/",
+      "publisherHost": "openai.github.io",
+      "sourceDatasetIds": [
+        "protocol:sdk_hitl"
+      ],
+      "observations": [
+        "审批可来自嵌套 Agent；待决状态应保存于可信服务端，返回客户端的是获准查看的细节。"
+      ],
+      "designImplications": [],
+      "versionNotes": [
+        "live-doc"
+      ],
+      "id": "S020"
+    },
+    {
+      "title": "Agents SDK streaming",
+      "url": "https://openai.github.io/openai-agents-python/streaming/",
+      "publisherHost": "openai.github.io",
+      "sourceDatasetIds": [
+        "protocol:sdk_stream"
+      ],
+      "observations": [
+        "原始事件与高层运行事件并存；最后一个可见 token 不等于运行结束。"
+      ],
+      "designImplications": [],
+      "versionNotes": [
+        "live-doc"
+      ],
+      "id": "S021"
+    },
+    {
+      "title": "OpenBot / A Shared Workspace for AI Agents",
+      "url": "https://openbot.run/news/introducing-openbot",
+      "publisherHost": "openbot.run",
+      "sourceDatasetIds": [
+        "interaction:openbot-workspace"
+      ],
+      "observations": [
+        "官方将 Agent 定义为具有独立角色、工作区、对话、队列与上下文的持续成员；可以并行交换消息和文件。"
+      ],
+      "designImplications": [
+        "将任务所有者、依赖、队列与最后结果分开表达。Athena 未实现的多 Agent 协作只作为前瞻设计。"
+      ],
+      "versionNotes": [],
+      "id": "S022"
+    },
+    {
+      "title": "Claude Agent Skills overview",
+      "url": "https://platform.claude.com/docs/en/agents-and-tools/agent-skills/overview",
+      "publisherHost": "platform.claude.com",
+      "sourceDatasetIds": [
+        "protocol:claude_skills"
+      ],
+      "observations": [
+        "按需加载 metadata、instructions、resources，支持渐进披露。"
+      ],
+      "designImplications": [],
+      "versionNotes": [
+        "live-doc"
+      ],
+      "id": "S023"
+    },
+    {
+      "title": "Claude tool-use loop",
+      "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/how-tool-use-works",
+      "publisherHost": "platform.claude.com",
+      "sourceDatasetIds": [
+        "protocol:claude_loop"
+      ],
+      "observations": [
+        "tool_use 是交还客户端执行工具，end_turn/max_tokens/refusal 等不能视为同一种完成。"
+      ],
+      "designImplications": [],
+      "versionNotes": [
+        "live-doc"
+      ],
+      "id": "S024"
+    },
+    {
+      "title": "Claude server tools",
+      "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/server-tools",
+      "publisherHost": "platform.claude.com",
+      "sourceDatasetIds": [
+        "protocol:claude_server"
+      ],
+      "observations": [
+        "pause_turn 表示服务端工具循环暂停，需续接；不同于等待客户端 tool_result。"
+      ],
+      "designImplications": [],
+      "versionNotes": [
+        "live-doc"
+      ],
+      "id": "S025"
+    },
+    {
+      "title": "Claude stop reasons",
+      "url": "https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons",
+      "publisherHost": "platform.claude.com",
+      "sourceDatasetIds": [
+        "protocol:claude_stop"
+      ],
+      "observations": [
+        "需区分完成、截断、暂停、工具调用、拒绝，避免统一勾号。"
+      ],
+      "designImplications": [],
+      "versionNotes": [
+        "live-doc"
+      ],
+      "id": "S026"
+    },
+    {
+      "title": "Claude streaming",
+      "url": "https://platform.claude.com/docs/en/build-with-claude/streaming",
+      "publisherHost": "platform.claude.com",
+      "sourceDatasetIds": [
+        "protocol:claude_stream"
+      ],
+      "observations": [
+        "流中有文字与不完整 JSON 参数分片；不能提前把分片当完整参数。"
+      ],
+      "designImplications": [],
+      "versionNotes": [
+        "live-doc"
+      ],
+      "id": "S027"
+    },
+    {
+      "title": "Claude Managed Agents event stream",
+      "url": "https://platform.claude.com/docs/en/managed-agents/events-and-streaming",
+      "publisherHost": "platform.claude.com",
+      "sourceDatasetIds": [
+        "protocol:claude_session"
+      ],
+      "observations": [
+        "session requires_action、运行中重定向、事件流重连与历史去重支持持久任务界面。"
+      ],
+      "designImplications": [],
+      "versionNotes": [
+        "beta/live-doc"
+      ],
+      "id": "S028"
+    },
+    {
+      "title": "Anthropic / Get started with Claude Cowork",
+      "url": "https://support.claude.com/en/articles/13345190-get-started-with-claude-cowork",
+      "publisherHost": "support.claude.com",
+      "sourceDatasetIds": [
+        "interaction:claude-cowork"
+      ],
+      "observations": [
+        "官方描述了执行进度、中途引导、回答问题和多 Agent 协作；权限模式与连接器权限相互作用。桌面、本机资源与云会话的可用性有不同依赖。"
+      ],
+      "designImplications": [
+        "界面应明确正在等待谁、运行在哪里，以及一个动作为什么需要处理；不可把本机离线写成云任务失败。"
+      ],
+      "versionNotes": [],
+      "id": "S029"
+    },
+    {
+      "title": "Anthropic / Artifacts",
+      "url": "https://support.claude.com/en/articles/17153992-what-are-artifacts-and-how-do-i-use-them",
+      "publisherHost": "support.claude.com",
+      "sourceDatasetIds": [
+        "interaction:claude-artifacts"
+      ],
+      "observations": [
+        "Artifact 在对话旁打开，可再次访问、直接编辑、共享或导出；它是独立可复用的成果，而不只是聊天文字。"
+      ],
+      "designImplications": [
+        "消息内只呈现摘要与结果卡，预览、版本和后续操作放到工作面；共享或导出是单独的可见动作。"
+      ],
+      "versionNotes": [],
+      "id": "S030"
+    },
+    {
+      "title": "MCP Tasks extension",
+      "url": "https://tasks.extensions.modelcontextprotocol.io/",
+      "publisherHost": "tasks.extensions.modelcontextprotocol.io",
+      "sourceDatasetIds": [
+        "protocol:mcp_tasks"
+      ],
+      "observations": [
+        "working/input_required/completed/failed/cancelled；耐久任务需轮询或订阅。取消为协作式，不保证 cancelled 终态。"
+      ],
+      "designImplications": [],
+      "versionNotes": [
+        "2026-07-28 extension"
+      ],
+      "id": "S031"
+    },
+    {
+      "title": "W3C / WAI-ARIA 1.2",
+      "url": "https://www.w3.org/TR/wai-aria-1.2/",
+      "publisherHost": "www.w3.org",
+      "sourceDatasetIds": [
+        "interaction:aria"
+      ],
+      "observations": [
+        "log 隐含 polite live-region；aria-busy 可把一组更新组织成一次可理解的播报；进度值未知时不应编造 aria-valuenow。"
+      ],
+      "designImplications": [
+        "流式正文分块播报，持续工具日志默认折叠，普通状态不抢焦点。"
+      ],
+      "versionNotes": [],
+      "id": "S032"
+    },
+    {
+      "title": "W3C APG / Checkbox",
+      "url": "https://www.w3.org/WAI/ARIA/apg/patterns/checkbox/",
+      "publisherHost": "www.w3.org",
+      "sourceDatasetIds": [
+        "interaction:checkbox"
+      ],
+      "observations": [
+        "Checkbox 支持勾选、未勾选与混合状态，Space 切换。"
+      ],
+      "designImplications": [
+        "多选 QA 与批量结果选择使用 checkbox，不用看似按钮的多选标签代替语义。"
+      ],
+      "versionNotes": [],
+      "id": "S033"
+    },
+    {
+      "title": "W3C APG / Modal dialog",
+      "url": "https://www.w3.org/WAI/ARIA/apg/patterns/dialog-modal/",
+      "publisherHost": "www.w3.org",
+      "sourceDatasetIds": [
+        "interaction:dialog"
+      ],
+      "observations": [
+        "Modal 背景不可交互；焦点进入对话框并保持在其 Tab 序列，Esc 关闭；复杂内容可将初始焦点放在标题或静态内容，关闭后通常归还调用入口。"
+      ],
+      "designImplications": [
+        "普通 QA 使用对话内非模态面板；只有必须立刻隔离的决定才使用 modal。"
+      ],
+      "versionNotes": [],
+      "id": "S034"
+    },
+    {
+      "title": "W3C APG / Radio group",
+      "url": "https://www.w3.org/WAI/ARIA/apg/patterns/radio/",
+      "publisherHost": "www.w3.org",
+      "sourceDatasetIds": [
+        "interaction:radio"
+      ],
+      "observations": [
+        "Radio group 表达互斥选择，提供方向键和 Space 等键盘操作。"
+      ],
+      "designImplications": [
+        "推荐选项不等于用户已提交；确认按钮是独立动作。"
+      ],
+      "versionNotes": [],
+      "id": "S035"
+    },
+    {
+      "title": "W3C / Animation from Interactions 2.3.3 AAA",
+      "url": "https://www.w3.org/WAI/WCAG22/Understanding/animation-from-interactions.html",
+      "publisherHost": "www.w3.org",
+      "sourceDatasetIds": [
+        "interaction:motion"
+      ],
+      "observations": [
+        "非必要的交互触发动效应可关闭。该条是 AAA，而非 AA。"
+      ],
+      "designImplications": [
+        "跟随系统减少动态效果，取消滑移、扫光和循环脉冲；状态仍用静态图标与文字表达。"
+      ],
+      "versionNotes": [],
+      "id": "S036"
+    },
+    {
+      "title": "W3C / Contrast Minimum 1.4.3 AA",
+      "url": "https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html",
+      "publisherHost": "www.w3.org",
+      "sourceDatasetIds": [
+        "interaction:text-contrast"
+      ],
+      "observations": [
+        "一般文字至少4.5:1；大号文字有3:1要求及其他适用例外。"
+      ],
+      "designImplications": [
+        "Athena主要正文和辅助正文统一以4.5:1为设计下限。"
+      ],
+      "versionNotes": [],
+      "id": "S037"
+    },
+    {
+      "title": "W3C / Focus Not Obscured 2.4.11 AA",
+      "url": "https://www.w3.org/WAI/WCAG22/Understanding/focus-not-obscured-minimum.html",
+      "publisherHost": "www.w3.org",
+      "sourceDatasetIds": [
+        "interaction:focus"
+      ],
+      "observations": [
+        "获得键盘焦点的控件不能被作者创建的内容完全挡住。"
+      ],
+      "designImplications": [
+        "固定输入框、底部操作条和弹层不能盖住 QA、工具详情或编辑控件的当前焦点。"
+      ],
+      "versionNotes": [],
+      "id": "S038"
+    },
+    {
+      "title": "W3C / Non-text Contrast 1.4.11 AA",
+      "url": "https://www.w3.org/WAI/WCAG22/Understanding/non-text-contrast.html",
+      "publisherHost": "www.w3.org",
+      "sourceDatasetIds": [
+        "interaction:nontext-contrast"
+      ],
+      "observations": [
+        "识别用户界面组件和状态所需的视觉信息通常要求与相邻颜色至少3:1，另有适用例外。"
+      ],
+      "designImplications": [
+        "区分装饰分隔线与必须识别的输入边界、选中状态和图标。"
+      ],
+      "versionNotes": [],
+      "id": "S039"
+    },
+    {
+      "title": "W3C / Pause Stop Hide 2.2.2 A",
+      "url": "https://www.w3.org/WAI/WCAG22/Understanding/pause-stop-hide.html",
+      "publisherHost": "www.w3.org",
+      "sourceDatasetIds": [
+        "interaction:pause"
+      ],
+      "observations": [
+        "符合条件的自动运动、滚动或自动更新内容，需要暂停、停止、隐藏或更新频率控制；文档区分自动内容与用户主动触发内容。"
+      ],
+      "designImplications": [
+        "避免把每个流式 token 都做成动画，长时间日志与后台面板允许停止跟随和收起。"
+      ],
+      "versionNotes": [],
+      "id": "S040"
+    },
+    {
+      "title": "W3C / Status Messages (4.1.3 AA)",
+      "url": "https://www.w3.org/WAI/WCAG22/Understanding/status-messages.html",
+      "publisherHost": "www.w3.org",
+      "sourceDatasetIds": [
+        "interaction:status"
+      ],
+      "observations": [
+        "等待、进度、成功和错误等不接管焦点的状态消息，应能通过语义被辅助技术识别。"
+      ],
+      "designImplications": [
+        "Toast、完成标签、排队结果和后台更新都需要可播报的状态文本。"
+      ],
+      "versionNotes": [],
+      "id": "S041"
+    },
+    {
+      "title": "W3C / Target Size Minimum 2.5.8 AA",
+      "url": "https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum.html",
+      "publisherHost": "www.w3.org",
+      "sourceDatasetIds": [
+        "interaction:target-size"
+      ],
+      "observations": [
+        "指针目标的24×24 CSS px下限包含间距、等效控件等例外。"
+      ],
+      "designImplications": [
+        "Athena采用32px桌面图标命中区与44px移动主操作，是设计选择；不把可见16px图标当作整个命中区域。"
+      ],
+      "versionNotes": [],
+      "id": "S042"
+    },
+    {
+      "title": "W3C WAI / Form notifications",
+      "url": "https://www.w3.org/WAI/tutorials/forms/notifications/",
+      "publisherHost": "www.w3.org",
+      "sourceDatasetIds": [
+        "interaction:forms"
+      ],
+      "observations": [
+        "表单应清楚标识成功和错误，错误需要指出相关字段、问题与可修复方式。"
+      ],
+      "designImplications": [
+        "QA 需要字段级错误、提交中、保留输入、过期和已回答状态。"
+      ],
+      "versionNotes": [],
+      "id": "S043"
+    }
+  ],
+  "sourceAliases": {
+    "protocol:skills": "S001",
+    "protocol:mcp_apps": "S002",
+    "protocol:approvals": "S003",
+    "protocol:reasoning": "S004",
+    "protocol:responses": "S005",
+    "interaction:hermes-desktop": "S006",
+    "protocol:codex": "S007",
+    "interaction:codex-review": "S008",
+    "interaction:codex-goals": "S009",
+    "protocol:mcp_prompts": "S010",
+    "protocol:mcp_auth": "S011",
+    "protocol:mcp_cancel": "S012",
+    "protocol:mcp_progress": "S013",
+    "protocol:mcp_change": "S014",
+    "protocol:mcp_elicit": "S015",
+    "protocol:mcp_sampling": "S016",
+    "protocol:mcp_resources": "S017",
+    "protocol:mcp_tools": "S018",
+    "protocol:sdk_handoff": "S019",
+    "protocol:sdk_hitl": "S020",
+    "protocol:sdk_stream": "S021",
+    "interaction:openbot-workspace": "S022",
+    "protocol:claude_skills": "S023",
+    "protocol:claude_loop": "S024",
+    "protocol:claude_server": "S025",
+    "protocol:claude_stop": "S026",
+    "protocol:claude_stream": "S027",
+    "protocol:claude_session": "S028",
+    "interaction:claude-cowork": "S029",
+    "interaction:claude-artifacts": "S030",
+    "protocol:mcp_tasks": "S031",
+    "interaction:aria": "S032",
+    "interaction:checkbox": "S033",
+    "interaction:dialog": "S034",
+    "interaction:radio": "S035",
+    "interaction:motion": "S036",
+    "interaction:text-contrast": "S037",
+    "interaction:focus": "S038",
+    "interaction:nontext-contrast": "S039",
+    "interaction:pause": "S040",
+    "interaction:status": "S041",
+    "interaction:target-size": "S042",
+    "interaction:forms": "S043"
+  },
+  "repositoryEvidence": [
+    {
+      "id": "protocol:athena",
+      "file": "src/shared/types.ts",
+      "summary": "WebExecutionEvent 明确仅公开事实；outcome 包含 verified/not_applied/unknown。"
+    },
+    {
+      "id": "protocol:athena_qa",
+      "file": "src/main/agents.ts",
+      "summary": "忽略 autoResolutionMs，永不替用户自动回答；回答/审批属于当前 conversation/turn。"
+    }
+  ],
+  "protocolBoundaries": [
+    "任务、轮次、Agent、工具调用、审批请求、资源、交互 View、后台 taskId 是不同层级的对象；必须各自保留 identity 与状态。",
+    "item/completed 是单项权威终态，turn/completed 是轮次终态；两者均不自动证明用户目标或外部副作用已核验。",
+    "生成中的文字可以流式展示；参数分片/不完整 JSON 只能表示准备，不能暗示工具已运行。",
+    "不展示、重建或臆造隐藏推理。Athena 当前事件契约只允许公开执行事实；供应商支持的摘要需明确为摘要。",
+    "QA 的推荐选项、默认值、超时都不是用户同意。Athena 当前明确忽略 autoResolutionMs。",
+    "工具调用、Skills、MCP service、MCP Apps View 四者不是同一种对象；Skill 不是独立 RPC，MCP App 不是工具日志。",
+    "审批决策必须绑定当前 task/turn/request，resolved/expired/interrupted 的请求不能继续点击。",
+    "正在停止与已停止分开；已经发生的副作用不因取消自动回滚。",
+    "返回失败、连接失败、结果未知、明确未生效四种恢复路径不同。",
+    "只有实际 progress+total 能产生百分比。无总量采用活动标记、已完成项与最近更新时间。",
+    "外部授权页面完成后仍须核验授权结果；授权成功不是业务动作成功。",
+    "当前 MCP 2026-07-28 不是旧式有状态协议；Tasks 与 Apps 是扩展。Sampling 已弃用，只在兼容附录设计。"
+  ],
+  "interactionSynthesis": {
+    "core": "以一个稳定的任务对象组织交互：回复、执行、决策、产物、证据分别建模，在需要时组合，不把所有事都压成一个状态徽章。",
+    "factsVsRecommendations": "sources.fact 是官方资料摘要；implication、layout、families、copy、尺寸和动效为 Athena 设计建议。",
+    "completionRule": "工具已完成、轮次已结束、任务目标已验证完成是三种不同状态。",
+    "breadthRule": "状态是有限的规范类别；并发和事件顺序可产生组合，需用优先级与组合规则覆盖，不声称穷尽任意未来协议。"
+  },
+  "accessibilityRecommendations": [
+    {
+      "id": "a11y.stream",
+      "rule": "为对话历史提供有名称的 log 语义；将流式内容按可理解的块提交给辅助技术，避免每token assertive播报。",
+      "kind": "normative basis + design recommendation",
+      "sourceIds": [
+        "S032",
+        "S041"
+      ]
+    },
+    {
+      "id": "a11y.progress",
+      "rule": "进度条有可访问名称；未知进度不设置伪造数值；优先宣布阶段转换而非每秒计时。",
+      "kind": "normative basis + design recommendation",
+      "sourceIds": [
+        "S032"
+      ]
+    },
+    {
+      "id": "a11y.status",
+      "rule": "普通完成、等待、错误等状态无需夺取焦点即可被宣布；重要决定使用明确问题面板。",
+      "kind": "WCAG AA target",
+      "sourceIds": [
+        "S041"
+      ]
+    },
+    {
+      "id": "a11y.dialog",
+      "rule": "真正的modal让背景inert，焦点在dialog内部循环，Esc关闭，关闭后返回原入口或合理后继；复杂内容初始焦点可落标题。",
+      "kind": "APG pattern",
+      "sourceIds": [
+        "S034"
+      ]
+    },
+    {
+      "id": "a11y.qa",
+      "rule": "单选/多选各用radio/checkbox语义和键盘操作；选中不等于提交，推荐不是默认同意。",
+      "kind": "APG pattern + design recommendation",
+      "sourceIds": [
+        "S035",
+        "S033"
+      ]
+    },
+    {
+      "id": "a11y.errors",
+      "rule": "提交失败保留答案，字段级说明错误与修复方式；可提供错误摘要，焦点不跳到无关位置。",
+      "kind": "WAI guidance",
+      "sourceIds": [
+        "S043"
+      ]
+    },
+    {
+      "id": "a11y.focus",
+      "rule": "固定输入区和浮层不能完全遮住获得焦点的控件；预留scroll-padding，目标进入可视区。",
+      "kind": "WCAG AA target",
+      "sourceIds": [
+        "S038"
+      ]
+    },
+    {
+      "id": "a11y.motion",
+      "rule": "响应prefers-reduced-motion；交互动效可关闭是AAA要求，作为本项目质量标准采用而非误称AA。",
+      "kind": "WCAG AAA adopted preference",
+      "sourceIds": [
+        "S036"
+      ]
+    },
+    {
+      "id": "a11y.pause",
+      "rule": "不要把所有自动更新都解释为必要；提供停止跟随、收起日志或控制自动更新的方式。",
+      "kind": "WCAG A applicability assessment + design recommendation",
+      "sourceIds": [
+        "S040"
+      ]
+    },
+    {
+      "id": "a11y.keyboard",
+      "rule": "展开行使用button并暴露aria-expanded；表单与工具细节保持DOM和视觉顺序一致；代码、表格的横向滚动不能陷住Tab。",
+      "kind": "design recommendation based on APG",
+      "sourceIds": [
+        "S034",
+        "S032"
+      ]
+    },
+    {
+      "id": "a11y.contrast",
+      "rule": "正文≥4.5:1，交互边界和可见图标≥3:1；颜色不独立承担状态。灰色文本仍须可读，禁用原因用正常对比度说明。",
+      "kind": "design target",
+      "sourceIds": [
+        "S037",
+        "S039"
+      ]
+    },
+    {
+      "id": "a11y.zoom",
+      "rule": "静态Figma只能验证图形；真正读屏、Tab顺序、200%缩放、IME行为须实现后验收，不能由画板截图证明。",
+      "kind": "verification boundary",
+      "sourceIds": []
+    }
+  ],
+  "researchLimitations": [
+    "研究矩阵描述协议支持与设计建议；Athena 当前支持范围以实现边界说明为准。",
+    "当前 Athena 只把少量外部协议状态映射到 starting/thinking/working/waiting/idle 与 ToolCall running/done/error；细粒度视图会需要适配层。",
+    "通用 MCP Apps/Tasks、独立 Skill 生命周期、多 Agent 与细分权限面板属于扩展设计；当前范围以 implementation-boundaries.json 为准。",
+    "MCP 2026 prompts 正文抓取失败；2026 索引确认该能力存在，具体模板交互语义引用已核验的 2025-11-25 正文。",
+    "Managed Agents 来源目前标记 beta；只用于未来兼容设计，不宣称 Athena 已采用。"
+  ],
+  "versionNotice": "MCP 2026-07-28、Tasks/Apps 扩展与旧协议边界已分别注明；旧版本正文不能冒充新版本验证。",
+  "authoringRule": "本文件给设计和开发阅读，不作为产品页面文案。",
+  "updatedAt": "2026-11-02",
+  "activeThemeRevision": "monochrome-2026-11-02",
+  "activeDesignRevision": "heroui-surface-2026-11-02",
+  "surfaceRefinementReference": {
+    "evidence": "verification/heroui-native-reference.json",
+    "recipe": "verification/heroui-surface-recipe.json",
+    "verifiedAt": "2026-11-02",
+    "scope": "HeroUI当前原生CSS/default theme与Athena定制的边界；不声明本机安装包版本。",
+    "nativeVsCustomRule": "Card24和Input12等有原生依据；Composer24、导航选择影和darkOverlay alpha0.22为Athena定制。"
+  }
+}

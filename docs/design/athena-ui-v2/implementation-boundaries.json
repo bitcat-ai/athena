@@ -1,0 +1,1574 @@
+{
+  "schemaVersion": "2.0",
+  "documentType": "implementation-boundaries",
+  "date": "2026-11-01",
+  "product": "Athena",
+  "audience": "design-and-engineering",
+  "status": "design-reviewed-proposal",
+  "verification": {
+    "status": "passed-for-surface-refinement-scope",
+    "revision": "heroui-surface-2026-11-02",
+    "scope": [
+      "HeroUI-inspired radius and surface recipe",
+      "15 representative visual boards",
+      "Scoped structure and prototype-target readback"
+    ],
+    "note": "Revision04表面精修已按实际recipe和回读合并；本轮15张代表画板，前轮黑白配色与历史全量审阅仅作基线。",
+    "evidence": "verification/heroui-surface-refinement.json",
+    "completedScopedChecks": [
+      {
+        "area": "representative-surface-visual-review",
+        "status": "passed",
+        "mainBoards": 10,
+        "agentBoards": 5,
+        "totalBoards": 15,
+        "evidence": "verification/heroui-surface-refinement.json"
+      },
+      {
+        "area": "main-structure-and-prototype-targets",
+        "status": "passed-structural",
+        "boards": 49,
+        "targets": 107,
+        "missingTargets": 0,
+        "unexpectedOverflow": 0,
+        "evidence": "verification/heroui-main-geometry.json"
+      },
+      {
+        "area": "agent-surface-and-preservation",
+        "status": "passed-for-stated-scope",
+        "majorFramesPreserved": 52,
+        "canonicalStatesPreserved": 175,
+        "fullSemanticReaudit": false,
+        "evidence": "verification/heroui-agent-surface-refinement.json"
+      }
+    ],
+    "priorRefinementBaseline": {
+      "revision": "monochrome-2026-11-02",
+      "applicability": "Previous monochrome refinement; not new surface-refinement evidence",
+      "verification": {
+        "status": "passed-for-retheme-scope",
+        "revision": "monochrome-2026-11-02",
+        "scope": [
+          "Current monochrome foundation variables",
+          "Representative retheme screenshots",
+          "Color logo and icon readback"
+        ],
+        "note": "2026-11-02黑白主题独立验收：84个实际颜色值匹配目标，96组指定配色达阈值，13张代表画板完成视觉复查；14页101张主要画板结构存在。旧配色验收保留为历史基线。",
+        "evidence": "verification/monochrome-retheme.json",
+        "priorThemeBaseline": {
+          "theme": "冰蓝 / 石墨灰",
+          "applicability": "Historical baseline before the monochrome retheme; not current-theme visual evidence",
+          "verification": {
+            "status": "passed-for-design-scope",
+            "scope": [
+              "Figma final visual review",
+              "Cross-screen and state consistency review",
+              "Prototype interaction review"
+            ],
+            "note": "最终设计审阅证据已合并；适用范围与未测运行边界见scopeLimits。",
+            "scopeLimits": [
+              "本轮交付与验收针对可编辑Figma设计和明确的状态样例，不代表应用已实现或部署。",
+              "没有运行真实键盘、读屏、IME、授权、取消、媒体播放或网络业务动作。",
+              "原型导航记录与条件说明分开；未把所有状态图声称为可执行动态原型。",
+              "对比度覆盖48组指定语义组合，不等于完整运行时WCAG审计。"
+            ]
+          }
+        },
+        "scopeLimits": [
+          "本轮视觉复查覆盖13张代表画板：主稿8张、Agent稿5张；没有重新截图验收全部101张主要画板。",
+          "本轮结构回读确认14页和101张主要画板存在，不等于重新执行内容、语义、原型或运行验收。",
+          "换肤前的视觉、语义、几何和原型检查保留为历史基线，不自动成为本轮新证据。",
+          "未修改应用源码或部署；没有运行真实键盘、读屏、IME、授权、取消、媒体播放或网络业务动作。",
+          "96组指定语义配色的数值对比度检查不等于完整运行时WCAG审计。"
+        ],
+        "completedScopedChecks": [
+          {
+            "area": "theme-variable-readback",
+            "status": "passed",
+            "resolvedValues": 84,
+            "evidence": "verification/monochrome-retheme.json"
+          },
+          {
+            "area": "selected-color-contrast",
+            "status": "passed",
+            "passed": 96,
+            "total": 96,
+            "evidence": "verification/monochrome-contrast-audit.json"
+          },
+          {
+            "area": "representative-theme-visual-review",
+            "status": "passed",
+            "mainBoards": 8,
+            "agentBoards": 5,
+            "totalBoards": 13,
+            "evidence": "verification/monochrome-retheme.json"
+          },
+          {
+            "area": "current-node-existence",
+            "status": "passed-structural",
+            "pages": 14,
+            "majorBoards": 101,
+            "missing": 0,
+            "fullScreenshotAudit": false,
+            "evidence": "verification/monochrome-structure-readback.json"
+          }
+        ]
+      }
+    },
+    "scopeLimits": [
+      "本轮视觉复查15张代表画板：主稿10张、Agent稿5张；未重新截图验收全部101张主要画板。",
+      "主稿49张当前画板与107个原型目标已做结构回读；Agent报告记录52画板与175状态保留，不等于重新执行全状态语义审计。",
+      "前轮黑白配色的84个颜色值和96组对比度保留为基线，不写成本轮重新测量。",
+      "主稿包含深色代表界面复查；Agent本轮没有新增深色视觉审计。",
+      "未修改应用源码或部署；未执行真实键盘、读屏、IME、授权、媒体播放或业务动作。"
+    ]
+  },
+  "sourceSnapshot": {
+    "gitHead": "4b0f0bf152a4c9049ba9d78e7b42a2e57822bcea",
+    "packageVersion": "0.6.1",
+    "basis": "当前工作树源码与现有数据契约；非运行验收证明。"
+  },
+  "designImplementationLabels": {
+    "current": "当前工作树已有该可见状态/数据契约；不代表此新视觉稿已经实现或完成运行验收。",
+    "mixed": "已有部分数据/动作，但新面板、细分状态或交互需要扩展。",
+    "extension": "仅为覆盖完整交互所设计的前瞻能力；不得在当前产品主屏伪装已可用。"
+  },
+  "currentCorrections": [
+    "0.6.1 contains packages/element-inspector in the main repository.",
+    "Preserve five inspector tabs; property groups are nested inside Adjust.",
+    "Ordinary user browsing does not cancel the entire Agent turn.",
+    "Tool returned, plan completed and verified business outcome are separate states.",
+    "Only Codex executes; other CLIs are detected.",
+    "Native desktop computer use remains research.",
+    "MCP host integration exists through Neo; general MCP lifecycle UI is not implemented."
+  ],
+  "areas": [
+    {
+      "area": "execution-provider",
+      "status": "implemented-boundary",
+      "detail": "Only Codex has supported=true; Claude Code/OpenCode/Gemini are installation detection only.",
+      "evidence": [
+        {
+          "file": "src/main/agents.ts",
+          "lines": "85-100"
+        }
+      ]
+    },
+    {
+      "area": "desktop-computer-use",
+      "status": "not-implemented",
+      "detail": "Only browser control is implemented. Native macOS application control and isolated desktops remain research.",
+      "evidence": [
+        {
+          "file": "docs/computer-use-handoff.md",
+          "lines": "15-27"
+        }
+      ]
+    },
+    {
+      "area": "MCP",
+      "status": "partial-host-integration",
+      "detail": "Neo native MCP exists behind Athena host dynamic tools. Codex sessions explicitly disable inherited mcp_servers/apps/plugins/hooks. General MCP server management, OAuth, discovery, resources/prompts and separate lifecycle panels are proposed.",
+      "evidence": [
+        {
+          "file": "src/main/agents.ts",
+          "lines": "246-255"
+        },
+        {
+          "file": "src/main/agents.ts",
+          "lines": "998-1030"
+        },
+        {
+          "file": "src/main/neo-browser.ts",
+          "lines": "398-435"
+        }
+      ]
+    },
+    {
+      "area": "skills",
+      "status": "no-dedicated-UI-or-event-model",
+      "detail": "There is no distinct skill discovery/load/run/result state in AgentEvent or the renderer. Design as an extension; do not equate reading a skill file with successful execution.",
+      "evidence": [
+        {
+          "file": "src/shared/types.ts",
+          "lines": "380-409"
+        },
+        {
+          "file": "src/main/agents.ts",
+          "lines": "246-255"
+        }
+      ]
+    },
+    {
+      "area": "approvals-network",
+      "status": "generic-permissions-only",
+      "detail": "Command/file/permissions request adapters exist. Generic permission JSON may include network capabilities, but UI has no per-domain choice or persistent grant. Return scope is turn only.",
+      "evidence": [
+        {
+          "file": "src/main/agents.ts",
+          "lines": "546-557"
+        },
+        {
+          "file": "src/main/agents.ts",
+          "lines": "1162-1224"
+        }
+      ]
+    },
+    {
+      "area": "QA-advanced",
+      "status": "not-in-current-UI",
+      "detail": "Multi-select, date/time, file chooser, URL-specific validation, repeatable form groups, nonblocking answer queue, skip-one-question, remembered default answers require new UI/protocol support. Backend array answers alone do not prove multi-select UI.",
+      "evidence": [
+        {
+          "file": "src/renderer/RequestPanel.tsx",
+          "lines": "84-185"
+        },
+        {
+          "file": "src/main/agents.ts",
+          "lines": "562-600"
+        }
+      ]
+    },
+    {
+      "area": "rich-results",
+      "status": "proposed",
+      "detail": "Plain Markdown text/links and verified-file reveal are implemented. Inline image, audio, video, chart, table-with-actions, artifact canvas, diff review, citation hovercards are new design work.",
+      "evidence": [
+        {
+          "file": "src/renderer/App.tsx",
+          "lines": "857-908"
+        },
+        {
+          "file": "src/renderer/ExecutionPanel.tsx",
+          "lines": "353-377"
+        }
+      ]
+    },
+    {
+      "area": "multi-agent-background",
+      "status": "not-evidenced",
+      "detail": "The visible renderer has another-task-busy hint and global busy behavior, but no child-agent graph, parallel run timeline or background task manager. Treat these as proposed extensions.",
+      "evidence": [
+        {
+          "file": "src/renderer/App.tsx",
+          "lines": "1053-1067"
+        }
+      ]
+    }
+  ],
+  "currentAgentStateGroups": [
+    {
+      "id": "connection",
+      "states": [
+        "idle",
+        "starting/prewarming",
+        "ready",
+        "error/disconnected",
+        "willRetry-connecting"
+      ],
+      "evidence": [
+        {
+          "file": "src/shared/types.ts",
+          "lines": "462-466"
+        },
+        {
+          "file": "src/main/agents.ts",
+          "lines": "1034-1038"
+        }
+      ]
+    },
+    {
+      "id": "run-lifecycle",
+      "states": [
+        "starting",
+        "thinking/public-working-label",
+        "working",
+        "waiting",
+        "stopping-await-confirmation",
+        "idle",
+        "complete",
+        "error/interrupted"
+      ],
+      "evidence": [
+        {
+          "file": "src/shared/types.ts",
+          "lines": "380-409"
+        },
+        {
+          "file": "src/main/agents.ts",
+          "lines": "519-540"
+        },
+        {
+          "file": "src/main/agents.ts",
+          "lines": "1272-1287"
+        }
+      ],
+      "note": "thinking is a generic public label, not exposed private reasoning."
+    },
+    {
+      "id": "message",
+      "states": [
+        "user-text",
+        "assistant-streaming",
+        "assistant-done",
+        "assistant-error-with-partial-text",
+        "copied",
+        "source-feishu",
+        "attached-page-context"
+      ],
+      "evidence": [
+        {
+          "file": "src/shared/types.ts",
+          "lines": "410-424"
+        },
+        {
+          "file": "src/renderer/App.tsx",
+          "lines": "810-908"
+        }
+      ],
+      "note": "Markdown text/links are rendered. Images are explicitly suppressed by img:()=>null; chart/image/video/audio result cards are not implemented."
+    },
+    {
+      "id": "public-plan",
+      "states": [
+        "pending",
+        "inProgress",
+        "completed",
+        "interrupted-derived-from-ended-run",
+        "unfinished-plan-after-run"
+      ],
+      "evidence": [
+        {
+          "file": "src/shared/types.ts",
+          "lines": "327-329"
+        },
+        {
+          "file": "src/renderer/ExecutionPanel.tsx",
+          "lines": "100-125"
+        },
+        {
+          "file": "src/renderer/ExecutionPanel.tsx",
+          "lines": "166-204"
+        }
+      ],
+      "note": "Only observed public execution facts; no fabricated percentage or private reasoning."
+    },
+    {
+      "id": "tool-call",
+      "states": [
+        "running",
+        "done-returned",
+        "error",
+        "expanded-result",
+        "collapsed-parameters",
+        "earlier-actions-collapsed",
+        "duration-available",
+        "duplicate-call-rejected",
+        "late-call-rejected",
+        "unauthorized-or-invalid-arguments-rejected"
+      ],
+      "evidence": [
+        {
+          "file": "src/shared/types.ts",
+          "lines": "317-326"
+        },
+        {
+          "file": "src/main/agents.ts",
+          "lines": "987-1031"
+        },
+        {
+          "file": "src/main/agents.ts",
+          "lines": "1099-1159"
+        },
+        {
+          "file": "src/renderer/ExecutionPanel.tsx",
+          "lines": "241-320"
+        }
+      ],
+      "note": "commandExecution/fileChange/dynamicToolCall/mcpToolCall normalize to generic tool events; done means returned, not task success. Output is truncated to 6000 characters by current adapter."
+    },
+    {
+      "id": "reconciliation",
+      "states": [
+        "operation-dispatched",
+        "observation-recorded",
+        "checkpoint-verified",
+        "checkpoint-not_applied",
+        "checkpoint-unknown",
+        "recovery-blocked",
+        "recovery-reobserved",
+        "recovery-cleared",
+        "verified-replay-prohibited"
+      ],
+      "evidence": [
+        {
+          "file": "src/shared/types.ts",
+          "lines": "331-357"
+        },
+        {
+          "file": "src/main/web-execution.ts",
+          "lines": "90-172"
+        }
+      ],
+      "note": "After uncertain mutations, safe next actions are observe and reconcile; never surface an immediate blindly-repeat-submit action."
+    },
+    {
+      "id": "human-browser-help",
+      "states": [
+        "requested",
+        "waiting-for-person",
+        "declined/stopped",
+        "handback-confirmed",
+        "reobserve-required",
+        "help-session-not-established"
+      ],
+      "evidence": [
+        {
+          "file": "src/main/neo-browser.ts",
+          "lines": "510-550"
+        },
+        {
+          "file": "src/renderer/RequestPanel.tsx",
+          "lines": "63-81"
+        }
+      ],
+      "note": "Ordinary human clicks/typing/scrolling do not cancel the full Agent task. Invalidated browser operations require fresh observation and reconciliation; explicit stop ends task."
+    },
+    {
+      "id": "approval",
+      "states": [
+        "command",
+        "file-change",
+        "generic-permissions",
+        "browser-script",
+        "browser-upload",
+        "browser-help",
+        "pending",
+        "submitting",
+        "accepted-once-or-turn-scope",
+        "declined",
+        "expired-or-wrong-task",
+        "cancelled-at-turn-end"
+      ],
+      "evidence": [
+        {
+          "file": "src/shared/types.ts",
+          "lines": "359-365"
+        },
+        {
+          "file": "src/main/agents.ts",
+          "lines": "546-559"
+        },
+        {
+          "file": "src/main/agents.ts",
+          "lines": "1162-1224"
+        },
+        {
+          "file": "src/main/neo-browser.ts",
+          "lines": "411-427"
+        }
+      ],
+      "note": "Current UI is approve/decline whole request. Generic permissions are displayed as JSON; scope is turn. No persistent always-allow, domain-by-domain network panel or grant duration editor."
+    },
+    {
+      "id": "questions",
+      "states": [
+        "batch-1-to-3",
+        "single-select",
+        "other-freeform",
+        "free-text",
+        "secret-password",
+        "unanswered",
+        "answered",
+        "invalid-or-incomplete",
+        "submitting",
+        "resolved",
+        "cancelled",
+        "stale-request"
+      ],
+      "evidence": [
+        {
+          "file": "src/main/agents.ts",
+          "lines": "200-243"
+        },
+        {
+          "file": "src/main/agents.ts",
+          "lines": "562-600"
+        },
+        {
+          "file": "src/renderer/RequestPanel.tsx",
+          "lines": "84-185"
+        }
+      ],
+      "note": "At most 10 options per question. Current UI supports one selected answer per question; backend arrays can contain multiple values but no multi-select control exists. isBlocking is required in protocol but not retained in the UI model. autoResolutionMs is deliberately ignored."
+    },
+    {
+      "id": "model-control",
+      "states": [
+        "loading-catalog",
+        "catalog-ready",
+        "empty-catalog",
+        "refresh-error",
+        "selected-model-unavailable",
+        "default-model",
+        "effort-slider-draft",
+        "effort-saving",
+        "save-error",
+        "reset-effort-default",
+        "busy-locked",
+        "requested-unconfirmed",
+        "thread-confirmed",
+        "turn-context-confirmed",
+        "rerouted"
+      ],
+      "evidence": [
+        {
+          "file": "src/renderer/ModelPicker.tsx",
+          "lines": "29-96"
+        },
+        {
+          "file": "src/renderer/ModelPicker.tsx",
+          "lines": "133-218"
+        },
+        {
+          "file": "src/shared/usage.ts",
+          "lines": "19-38"
+        }
+      ],
+      "note": "Only current model/list choices and its efforts should be selectable; do not fabricate a universal set of reasoning levels. Choice applies to next turn; task execution locks changes."
+    },
+    {
+      "id": "artifact",
+      "states": [
+        "verified-local-file",
+        "filename-and-bytes",
+        "reveal-in-Finder"
+      ],
+      "evidence": [
+        {
+          "file": "src/renderer/ExecutionPanel.tsx",
+          "lines": "353-377"
+        },
+        {
+          "file": "src/shared/types.ts",
+          "lines": "356"
+        }
+      ],
+      "note": "Rich artifact type viewers and inline editable document canvases are proposed, not currently implemented."
+    },
+    {
+      "id": "browser-runtime",
+      "states": [
+        "missing",
+        "starting",
+        "ready",
+        "error",
+        "stopped",
+        "page-loading",
+        "tab-switching",
+        "frame-epoch-stale",
+        "inspecting",
+        "element-selected",
+        "preview-edits",
+        "recording"
+      ],
+      "evidence": [
+        {
+          "file": "src/shared/types.ts",
+          "lines": "208-234"
+        },
+        {
+          "file": "src/shared/types.ts",
+          "lines": "267-305"
+        }
+      ]
+    },
+    {
+      "id": "sharing",
+      "states": [
+        "inactive",
+        "active",
+        "invite-valid",
+        "invite-expired",
+        "participant-pending",
+        "viewer-connected",
+        "editor-connected",
+        "participant-disconnected",
+        "requested-control",
+        "changing-control",
+        "controller-held",
+        "ended"
+      ],
+      "evidence": [
+        {
+          "file": "src/shared/share.ts",
+          "lines": "3-29"
+        },
+        {
+          "file": "src/main/main.ts",
+          "lines": "755-781"
+        }
+      ],
+      "note": "Starting share stops active turn; active sharing auto-records and rejects manual recording toggles. Shared actions are a narrow browser whitelist, not host/Agent access."
+    },
+    {
+      "id": "usage",
+      "states": [
+        "running",
+        "completed",
+        "cancelled",
+        "failed",
+        "interrupted",
+        "legacy-untracked",
+        "observed",
+        "partial",
+        "unknown-token-fields",
+        "missing-pricing",
+        "API-equivalent-estimate-not-bill"
+      ],
+      "evidence": [
+        {
+          "file": "src/shared/usage.ts",
+          "lines": "39-98"
+        },
+        {
+          "file": "src/shared/usage.ts",
+          "lines": "120-129"
+        }
+      ]
+    },
+    {
+      "id": "session-continuity",
+      "states": [
+        "resume",
+        "resume-failed-new-conversation-required",
+        "tool-fingerprint-changed",
+        "new-execution-session-with-visible-history",
+        "history-missing-upgrade-refused",
+        "old-refs-revalidation"
+      ],
+      "evidence": [
+        {
+          "file": "src/main/agents.ts",
+          "lines": "615-715"
+        }
+      ],
+      "note": "New execution session is not full internal continuation. Keep old IDs and histories; no automatic replay."
+    }
+  ],
+  "connections": {
+    "stateCount": 29,
+    "states": [
+      {
+        "id": "browser_ready",
+        "condition": {
+          "browser.status": "ready"
+        },
+        "visible": [
+          "BrowserOS neo",
+          "已连接",
+          "应用位置"
+        ],
+        "allowedActionsShown": [
+          "选择 BrowserOS neo",
+          "下载 BrowserOS neo"
+        ],
+        "evidence": [
+          {
+            "file": "src/renderer/App.tsx",
+            "lines": "1263-1302"
+          }
+        ]
+      },
+      {
+        "id": "browser_missing",
+        "condition": {
+          "browser.status": "missing",
+          "binaryPath": null
+        },
+        "visible": [
+          "未连接",
+          "尚未选择 BrowserOS neo"
+        ],
+        "allowedActionsShown": [
+          "选择 BrowserOS neo"
+        ],
+        "evidence": [
+          {
+            "file": "src/shared/types.ts",
+            "lines": "216-234"
+          },
+          {
+            "file": "src/renderer/App.tsx",
+            "lines": "1273-1289"
+          }
+        ]
+      },
+      {
+        "id": "browser_starting",
+        "condition": {
+          "browser.status": "starting"
+        },
+        "visible": [
+          "连接中",
+          "正在打开 BrowserOS neo…"
+        ],
+        "allowedActionsShown": [
+          "选择 BrowserOS neo"
+        ],
+        "evidence": [
+          {
+            "file": "src/renderer/App.tsx",
+            "lines": "1273-1289"
+          }
+        ]
+      },
+      {
+        "id": "browser_error",
+        "condition": {
+          "browser.status": "error",
+          "browser.error": "bounded failure message"
+        },
+        "visible": [
+          "未连接",
+          "具体连接失败信息"
+        ],
+        "allowedActionsShown": [
+          "选择 BrowserOS neo"
+        ],
+        "evidence": [
+          {
+            "file": "src/renderer/App.tsx",
+            "lines": "1291-1294"
+          }
+        ]
+      },
+      {
+        "id": "browser_stopped",
+        "condition": {
+          "browser.status": "stopped",
+          "binaryPath": "retained configured path"
+        },
+        "visible": [
+          "未连接",
+          "保留应用位置"
+        ],
+        "allowedActionsShown": [
+          "选择 BrowserOS neo"
+        ],
+        "evidence": [
+          {
+            "file": "src/shared/types.ts",
+            "lines": "216-234"
+          },
+          {
+            "file": "src/renderer/App.tsx",
+            "lines": "1273-1289"
+          }
+        ]
+      },
+      {
+        "id": "model_loading",
+        "condition": {
+          "loading": true
+        },
+        "visible": [
+          "读取模型…",
+          "正在读取可用模型…"
+        ],
+        "allowedActionsShown": [
+          "关闭"
+        ],
+        "evidence": [
+          {
+            "file": "src/renderer/ModelPicker.tsx",
+            "lines": "29-67"
+          },
+          {
+            "file": "src/renderer/ModelPicker.tsx",
+            "lines": "111-138"
+          },
+          {
+            "file": "src/renderer/ModelPicker.tsx",
+            "lines": "209-218"
+          }
+        ]
+      },
+      {
+        "id": "model_load_error",
+        "condition": {
+          "models": [],
+          "error": "load failure",
+          "loading": false
+        },
+        "visible": [
+          "沿用 Codex 当前模型",
+          "无法读取模型，请检查 Codex 连接后重试。"
+        ],
+        "allowedActionsShown": [
+          "刷新",
+          "关闭"
+        ],
+        "evidence": [
+          {
+            "file": "src/renderer/ModelPicker.tsx",
+            "lines": "56-67"
+          },
+          {
+            "file": "src/renderer/ModelPicker.tsx",
+            "lines": "133-149"
+          },
+          {
+            "file": "src/renderer/ModelPicker.tsx",
+            "lines": "204-218"
+          }
+        ]
+      },
+      {
+        "id": "model_list",
+        "condition": {
+          "models": [
+            "alpha",
+            "beta",
+            "basic"
+          ],
+          "selection.model": "alpha",
+          "open": true
+        },
+        "visible": [
+          "Alpha / Beta / Basic",
+          "Alpha selected"
+        ],
+        "allowedActionsShown": [
+          "选择可用模型",
+          "刷新",
+          "关闭"
+        ],
+        "evidence": [
+          {
+            "file": "src/renderer/ModelPicker.tsx",
+            "lines": "133-154"
+          },
+          {
+            "file": "tests/interaction-controls.e2e.ts",
+            "lines": "21-23"
+          }
+        ]
+      },
+      {
+        "id": "model_effort_ready",
+        "condition": {
+          "selection.model": "alpha",
+          "selection.effort": "medium",
+          "efforts": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "visible": [
+          "均衡",
+          "3档离散滑轨",
+          "轻快 / 深入端点"
+        ],
+        "allowedActionsShown": [
+          "调整推理档位",
+          "恢复默认推理强度"
+        ],
+        "evidence": [
+          {
+            "file": "src/renderer/ModelPicker.tsx",
+            "lines": "156-201"
+          },
+          {
+            "file": "tests/interaction-controls.e2e.ts",
+            "lines": "21-23"
+          }
+        ]
+      },
+      {
+        "id": "model_effort_draft",
+        "condition": {
+          "draftIndex": 2,
+          "selection.effort": "medium"
+        },
+        "visible": [
+          "深入",
+          "滑柄正在拖动"
+        ],
+        "allowedActionsShown": [
+          "继续拖动",
+          "松开后保存"
+        ],
+        "evidence": [
+          {
+            "file": "src/renderer/ModelPicker.tsx",
+            "lines": "43-54"
+          },
+          {
+            "file": "src/renderer/ModelPicker.tsx",
+            "lines": "165-170"
+          }
+        ]
+      },
+      {
+        "id": "model_saving",
+        "condition": {
+          "saving": true
+        },
+        "visible": [
+          "正在保存…",
+          "模型和推理控件禁用"
+        ],
+        "allowedActionsShown": [
+          "关闭"
+        ],
+        "evidence": [
+          {
+            "file": "src/renderer/ModelPicker.tsx",
+            "lines": "77-96"
+          },
+          {
+            "file": "src/renderer/ModelPicker.tsx",
+            "lines": "117"
+          },
+          {
+            "file": "src/renderer/ModelPicker.tsx",
+            "lines": "209-218"
+          }
+        ]
+      },
+      {
+        "id": "model_busy",
+        "condition": {
+          "busy": true,
+          "loading": false,
+          "saving": false
+        },
+        "visible": [
+          "任务结束后可调整",
+          "模型与推理控件禁用"
+        ],
+        "allowedActionsShown": [
+          "刷新目录",
+          "关闭"
+        ],
+        "evidence": [
+          {
+            "file": "src/renderer/ModelPicker.tsx",
+            "lines": "45"
+          },
+          {
+            "file": "src/renderer/ModelPicker.tsx",
+            "lines": "117"
+          },
+          {
+            "file": "src/renderer/ModelPicker.tsx",
+            "lines": "164-184"
+          },
+          {
+            "file": "src/renderer/ModelPicker.tsx",
+            "lines": "209-218"
+          }
+        ]
+      },
+      {
+        "id": "model_unavailable",
+        "condition": {
+          "selection.model": "retired",
+          "current": null,
+          "models": [
+            "alpha",
+            "beta",
+            "basic"
+          ]
+        },
+        "visible": [
+          "retired · 暂不可用",
+          "原模型选项禁用但选择器仍可打开"
+        ],
+        "allowedActionsShown": [
+          "选择当前可用模型",
+          "刷新"
+        ],
+        "evidence": [
+          {
+            "file": "src/renderer/ModelPicker.tsx",
+            "lines": "139-149"
+          },
+          {
+            "file": "tests/interaction-controls.e2e.ts",
+            "lines": "166-171"
+          }
+        ]
+      },
+      {
+        "id": "model_save_error",
+        "condition": {
+          "saving": false,
+          "error": "所选模型或推理强度不在 CLI 可用列表中，请刷新后重试"
+        },
+        "visible": [
+          "保留已保存的模型选择",
+          "具体错误"
+        ],
+        "allowedActionsShown": [
+          "刷新",
+          "重新选择"
+        ],
+        "evidence": [
+          {
+            "file": "src/renderer/ModelPicker.tsx",
+            "lines": "77-96"
+          },
+          {
+            "file": "src/main/main.ts",
+            "lines": "806-818"
+          }
+        ]
+      },
+      {
+        "id": "model_default",
+        "condition": {
+          "selection": null
+        },
+        "visible": [
+          "沿用 Codex 当前模型",
+          "使用 Codex 默认配置",
+          "不出现无依据的推理档位"
+        ],
+        "allowedActionsShown": [
+          "选择模型"
+        ],
+        "evidence": [
+          {
+            "file": "src/renderer/ModelPicker.tsx",
+            "lines": "38-41"
+          },
+          {
+            "file": "src/renderer/ModelPicker.tsx",
+            "lines": "137"
+          },
+          {
+            "file": "src/renderer/ModelPicker.tsx",
+            "lines": "156"
+          },
+          {
+            "file": "src/renderer/ModelPicker.tsx",
+            "lines": "216-218"
+          }
+        ]
+      },
+      {
+        "id": "model_no_efforts",
+        "condition": {
+          "selection.model": "basic",
+          "efforts": []
+        },
+        "visible": [
+          "Basic",
+          "不显示推理滑块"
+        ],
+        "allowedActionsShown": [
+          "选择模型"
+        ],
+        "evidence": [
+          {
+            "file": "src/renderer/ModelPicker.tsx",
+            "lines": "156-203"
+          },
+          {
+            "file": "tests/interaction-controls.e2e.ts",
+            "lines": "21-23"
+          }
+        ]
+      },
+      {
+        "id": "model_effort_unavailable",
+        "condition": {
+          "current": "available model",
+          "selection.effort": "old",
+          "selectedIndex": -1
+        },
+        "visible": [
+          "old · 暂不可用",
+          "保留可用档位与默认恢复入口"
+        ],
+        "allowedActionsShown": [
+          "恢复默认推理强度",
+          "选择可用档位"
+        ],
+        "evidence": [
+          {
+            "file": "src/renderer/ModelPicker.tsx",
+            "lines": "42-54"
+          },
+          {
+            "file": "src/renderer/ModelPicker.tsx",
+            "lines": "178-187"
+          }
+        ]
+      },
+      {
+        "id": "feishu_disconnected",
+        "condition": {
+          "status": "disconnected",
+          "appId": null,
+          "hasSavedCredentials": false
+        },
+        "visible": [
+          "创建专用机器人",
+          "使用已有应用凭据"
+        ],
+        "allowedActionsShown": [
+          "创建专用机器人",
+          "展开已有凭据表单"
+        ],
+        "evidence": [
+          {
+            "file": "src/renderer/App.tsx",
+            "lines": "1413-1444"
+          },
+          {
+            "file": "src/renderer/App.tsx",
+            "lines": "1462-1510"
+          }
+        ]
+      },
+      {
+        "id": "feishu_creating",
+        "condition": {
+          "status": "configuring",
+          "setupQr": null
+        },
+        "visible": [
+          "创建准备中的等待指示",
+          "取消创建"
+        ],
+        "allowedActionsShown": [
+          "取消创建"
+        ],
+        "evidence": [
+          {
+            "file": "src/main/feishu.ts",
+            "lines": "318-356"
+          },
+          {
+            "file": "src/renderer/App.tsx",
+            "lines": "1345-1370"
+          }
+        ]
+      },
+      {
+        "id": "feishu_waiting_scan",
+        "condition": {
+          "status": "configuring",
+          "setupQr": "non-encoded illustration only",
+          "setupUrl": "not present in artifact"
+        },
+        "visible": [
+          "使用飞书扫码",
+          "二维码示意"
+        ],
+        "allowedActionsShown": [
+          "在浏览器中打开（仅示意）",
+          "取消创建"
+        ],
+        "evidence": [
+          {
+            "file": "src/main/feishu.ts",
+            "lines": "374-392"
+          },
+          {
+            "file": "src/renderer/App.tsx",
+            "lines": "1345-1370"
+          }
+        ]
+      },
+      {
+        "id": "feishu_expired",
+        "condition": {
+          "status": "error",
+          "setupQr": null,
+          "errorCode": "expired_token",
+          "hasSavedCredentials": false
+        },
+        "visible": [
+          "二维码已过期，请重新连接飞书。",
+          "旧二维码移除"
+        ],
+        "allowedActionsShown": [
+          "创建专用机器人"
+        ],
+        "evidence": [
+          {
+            "file": "src/main/feishu.ts",
+            "lines": "419-432"
+          },
+          {
+            "file": "src/renderer/App.tsx",
+            "lines": "1413-1446"
+          }
+        ]
+      },
+      {
+        "id": "feishu_connecting",
+        "condition": {
+          "status": "connecting",
+          "appId": "saved"
+        },
+        "visible": [
+          "连接中",
+          "连接按钮禁用"
+        ],
+        "allowedActionsShown": [],
+        "evidence": [
+          {
+            "file": "src/main/feishu.ts",
+            "lines": "465-495"
+          },
+          {
+            "file": "src/renderer/App.tsx",
+            "lines": "1314-1323"
+          },
+          {
+            "file": "src/renderer/App.tsx",
+            "lines": "1425-1438"
+          }
+        ]
+      },
+      {
+        "id": "feishu_waiting_pair",
+        "condition": {
+          "status": "connected",
+          "paired": false
+        },
+        "visible": [
+          "连接已建立，再完成一次配对",
+          "绑定 WB-…",
+          "仅接受已配对操作者"
+        ],
+        "allowedActionsShown": [
+          "复制配对消息（已掩码示意）",
+          "打开飞书机器人（仅示意）"
+        ],
+        "evidence": [
+          {
+            "file": "src/renderer/App.tsx",
+            "lines": "1372-1410"
+          },
+          {
+            "file": "src/main/feishu.ts",
+            "lines": "748-752"
+          }
+        ]
+      },
+      {
+        "id": "feishu_connected",
+        "condition": {
+          "status": "connected",
+          "paired": true
+        },
+        "visible": [
+          "已配对",
+          "飞书已准备好",
+          "回答与审批在桌面完成"
+        ],
+        "allowedActionsShown": [
+          "断开连接"
+        ],
+        "evidence": [
+          {
+            "file": "src/renderer/App.tsx",
+            "lines": "1377-1382"
+          },
+          {
+            "file": "src/renderer/App.tsx",
+            "lines": "1447-1458"
+          },
+          {
+            "file": "src/main/feishu.ts",
+            "lines": "856-876"
+          }
+        ]
+      },
+      {
+        "id": "feishu_restoring",
+        "condition": {
+          "status": "restoring"
+        },
+        "visible": [
+          "正在恢复飞书连接",
+          "需要时由用户处理macOS钥匙串授权"
+        ],
+        "allowedActionsShown": [],
+        "evidence": [
+          {
+            "file": "src/renderer/App.tsx",
+            "lines": "1326-1331"
+          },
+          {
+            "file": "src/main/feishu.ts",
+            "lines": "245-282"
+          }
+        ]
+      },
+      {
+        "id": "feishu_restore_failed",
+        "condition": {
+          "status": "error",
+          "restoreFailed": true
+        },
+        "visible": [
+          "暂时无法读取飞书配置",
+          "原有配置不会被覆盖",
+          "没有创建或手动凭据入口"
+        ],
+        "allowedActionsShown": [
+          "重试恢复连接"
+        ],
+        "evidence": [
+          {
+            "file": "src/renderer/App.tsx",
+            "lines": "1332-1344"
+          },
+          {
+            "file": "src/renderer/App.tsx",
+            "lines": "1462-1465"
+          },
+          {
+            "file": "src/main/feishu.ts",
+            "lines": "285-295"
+          }
+        ]
+      },
+      {
+        "id": "feishu_connection_failed",
+        "condition": {
+          "status": "error",
+          "appId": "saved"
+        },
+        "visible": [
+          "飞书长连接失败的具体原因"
+        ],
+        "allowedActionsShown": [
+          "连接已保存的机器人",
+          "新建另一个机器人"
+        ],
+        "evidence": [
+          {
+            "file": "src/main/feishu.ts",
+            "lines": "502-520"
+          },
+          {
+            "file": "src/renderer/App.tsx",
+            "lines": "1413-1446"
+          }
+        ]
+      },
+      {
+        "id": "feishu_saved_disconnected",
+        "condition": {
+          "status": "disconnected",
+          "appId": "saved"
+        },
+        "visible": [
+          "连接已保存的机器人"
+        ],
+        "allowedActionsShown": [
+          "连接已保存的机器人",
+          "新建另一个机器人"
+        ],
+        "evidence": [
+          {
+            "file": "src/renderer/App.tsx",
+            "lines": "1413-1443"
+          },
+          {
+            "file": "src/main/feishu.ts",
+            "lines": "567-583"
+          }
+        ]
+      },
+      {
+        "id": "feishu_manual_credentials",
+        "condition": {
+          "status": "disconnected",
+          "hasSavedCredentials": false,
+          "restoreFailed": false
+        },
+        "visible": [
+          "App ID空输入及cli_…占位",
+          "App Secret空密码输入"
+        ],
+        "allowedActionsShown": [
+          "保存并连接（仅示意，空字段依required验证）"
+        ],
+        "evidence": [
+          {
+            "file": "src/renderer/App.tsx",
+            "lines": "1462-1510"
+          }
+        ]
+      }
+    ],
+    "additionalSourceConditions": [
+      {
+        "condition": "QR acquisition timeout or rendering failure",
+        "evidence": [
+          {
+            "file": "src/main/feishu.ts",
+            "lines": "347-355"
+          },
+          {
+            "file": "src/main/feishu.ts",
+            "lines": "383-392"
+          }
+        ],
+        "presentation": "Uses the same no-saved-credentials error+create surface as feishu_expired with the actual error text; not claimed as an additional unique rendered case."
+      },
+      {
+        "condition": "Server access_denied",
+        "evidence": [
+          {
+            "file": "src/main/feishu.ts",
+            "lines": "425-431"
+          }
+        ],
+        "presentation": "Creation cancellation enters error, clears QR; same intro/error surface with cancellation text."
+      },
+      {
+        "condition": "User clicks cancel creation",
+        "evidence": [
+          {
+            "file": "src/renderer/App.tsx",
+            "lines": "1364-1369"
+          },
+          {
+            "file": "src/main/feishu.ts",
+            "lines": "567-583"
+          }
+        ],
+        "presentation": "Disconnect aborts setup and clears QR; return to disconnected state, without silently creating a replacement."
+      },
+      {
+        "condition": "One available effort value",
+        "evidence": [
+          {
+            "file": "src/renderer/ModelPicker.tsx",
+            "lines": "156-164"
+          }
+        ],
+        "presentation": "Same discrete slider layout, disabled when efforts.length < 2; not drawn as a separate unique case."
+      }
+    ],
+    "invariants": [
+      "Settings navigation includes only 本机 Agent / 浏览器 / 飞书; no new integration categories.",
+      "Browser download and application selection are existing actions; no new refresh/test-connection/credential-import actions.",
+      "Only Codex executes current browser tasks; no added provider integration.",
+      "Model options and effort levels are derived from actual CLI model/list. Alpha/Beta/Basic are pre-existing test fixtures, not claimed as account models.",
+      "busy disables model/effort/reset, but does not disable catalog refresh; loading or saving disables refresh.",
+      "Changing a slider draft updates label locally; saving happens on gesture end.",
+      "Feishu connected is distinct from paired. Pairing completes via bot private message; no message is sent by these scripts.",
+      "Restore failure preserves saved encrypted configuration and hides create/manual credential branches.",
+      "Manual App ID/App Secret fields remain empty; no fake keys or fees.",
+      "9x9 diagram has no encoded content or real QR finder structure and cannot be used to log in; all pairing strings are masked.",
+      "Full-page connected states are design scenarios, not a claim about the current live service. App ID is redacted and no credential files were read.",
+      "UI actions are visual only; no protocol requests, browser navigation, service creation or authorization are performed."
+    ],
+    "screens": {
+      "browserSettings": {
+        "size": [
+          1600,
+          1000
+        ],
+        "evidence": [
+          {
+            "file": "src/renderer/App.tsx",
+            "lines": "1263-1302"
+          }
+        ]
+      },
+      "feishuSettings": {
+        "size": [
+          1600,
+          1000
+        ],
+        "evidence": [
+          {
+            "file": "src/renderer/App.tsx",
+            "lines": "1304-1460"
+          }
+        ]
+      },
+      "modelAndBrowserBoard": {
+        "size": [
+          1440,
+          2016
+        ],
+        "states": 16
+      },
+      "feishuBoard": {
+        "size": [
+          1440,
+          1760
+        ],
+        "states": 12
+      }
+    }
+  },
+  "inspectorBoundary": {
+    "adjustLivePreview": true,
+    "contentCssMotionRequireApply": true,
+    "propertyCount": 27,
+    "surfaceControlLimit": 24,
+    "sourceHandoffSeparateFromDOMPreview": true,
+    "sampledWebColorIndependentOfHostTheme": true
+  },
+  "preservedIdentifiers": [
+    "app.agent.workbench",
+    "WORKBENCH_*",
+    "workbench_browser_*",
+    "athena:element-editor:v1",
+    "element-editor"
+  ],
+  "notChangedByThisDelivery": [
+    "应用源代码与运行时行为",
+    "现有数据与凭据",
+    "本机 CLI 登录",
+    "浏览器 profile",
+    "兼容标识",
+    "生产部署",
+    "Code Connect"
+  ],
+  "pendingAcceptance": [],
+  "notClaimed": [
+    "原生 macOS 桌面 Computer Use 已实现",
+    "其他 CLI 已能执行 Athena 任务",
+    "通用 MCP 管理/OAuth/Apps/Tasks 已实现",
+    "多 Agent/后台调度/消息队列已实现",
+    "本轮设计已部署到应用",
+    "完整功能或无障碍运行验收已通过"
+  ],
+  "updatedAt": "2026-11-02",
+  "activeThemeRevision": "monochrome-2026-11-02",
+  "priorThemeCompletedDesignAcceptance": [
+    "主要画板按实际nodeId并集：主稿49/49，Agent52/52。",
+    "Agent175状态实际节点语义175/175，1188检查证明、1合理不适用。",
+    "Inspector16项已关闭，25板实际看过，20受影响实例关系保留。",
+    "当前主稿107条导航目标存在；Agent6点击与1自动演示分别记录。"
+  ],
+  "completedDesignAcceptance": [
+    "主稿10张、Agent稿5张代表画板完成本轮表面视觉复查。",
+    "主稿49画板与107个原型目标结构完整，无非预期溢出；T05大文本在448×72垂直滚动视口内有意裁切。",
+    "Agent52画板与175状态保留；本轮未重新执行全状态语义审计。",
+    "圆角、字段无默认描边、浅色原生轻影、嵌套/深色字段无叠影已按实际recipe同步。"
+  ],
+  "activeDesignRevision": "heroui-surface-2026-11-02",
+  "priorMonochromeCompletedDesignAcceptance": [
+    "两份Figma各21个语义颜色Token，浅深色共84个实际颜色值已读回并匹配目标palette。",
+    "本轮96组指定文字/控件与彩色图标配色数值达到各自阈值。",
+    "本轮13张代表画板完成视觉复查：主稿8张、Agent稿5张；SVG结构颜色、5处opacity梯度和5处主题注释已修复。",
+    "本轮实际结构回读确认14页、101张主要画板存在；该数量不是本轮截图审阅数量。"
+  ]
+}

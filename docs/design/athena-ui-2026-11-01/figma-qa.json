@@ -1,0 +1,170 @@
+{
+  "date": "2026-11-01",
+  "fileKey": "vEL0JeDlefvuvLjUQQh5SB",
+  "structuralAudit": [
+    {
+      "page": "00 · 设计方向",
+      "frames": [
+        {
+          "id": "11:2",
+          "name": "Athena / 冷光 · 设计总览",
+          "width": 1440,
+          "height": 1080
+        },
+        {
+          "id": "11:684",
+          "name": "Research / 参考产品与设计取舍",
+          "width": 1440,
+          "height": 1280
+        },
+        {
+          "id": "11:764",
+          "name": "Handoff / 设计决策与实现约束",
+          "width": 1440,
+          "height": 1320
+        }
+      ],
+      "componentCount": 0,
+      "componentSetCount": 0,
+      "texts": 198,
+      "instances": 80,
+      "bindings": 642,
+      "images": 0,
+      "links": 0,
+      "emptyText": [],
+      "overflow": []
+    },
+    {
+      "page": "01 · 桌面界面",
+      "frames": [
+        {
+          "id": "4:2",
+          "name": "01 / 新对话 · 1440",
+          "width": 1440,
+          "height": 900
+        },
+        {
+          "id": "4:170",
+          "name": "02 / 对话与浏览器 · 执行中",
+          "width": 1440,
+          "height": 900
+        },
+        {
+          "id": "4:479",
+          "name": "03 / 元素编辑 · 即时预览",
+          "width": 1440,
+          "height": 900
+        },
+        {
+          "id": "5:287",
+          "name": "04 / 执行记录 · 等待人工处理",
+          "width": 1440,
+          "height": 900
+        },
+        {
+          "id": "5:600",
+          "name": "05 / 用量概览 · 部分数据",
+          "width": 1440,
+          "height": 900
+        },
+        {
+          "id": "5:819",
+          "name": "06 / 设置与连接 · 本机 Agent",
+          "width": 1440,
+          "height": 900
+        },
+        {
+          "id": "5:1006",
+          "name": "07 / 共享页面 · 权限与控制权",
+          "width": 1440,
+          "height": 900
+        },
+        {
+          "id": "10:902",
+          "name": "11 / 元素编辑 · 深色主题",
+          "width": 1440,
+          "height": 900
+        }
+      ],
+      "componentCount": 0,
+      "componentSetCount": 0,
+      "texts": 427,
+      "instances": 234,
+      "bindings": 2723,
+      "images": 0,
+      "links": 37,
+      "emptyText": [],
+      "overflow": []
+    },
+    {
+      "page": "02 · 设计系统",
+      "frames": [
+        {
+          "id": "9:246",
+          "name": "Foundations / 冷光设计语言",
+          "width": 1440,
+          "height": 1180
+        },
+        {
+          "id": "9:344",
+          "name": "Components / 核心组件与变体",
+          "width": 1440,
+          "height": 1320
+        }
+      ],
+      "componentCount": 61,
+      "componentSetCount": 4,
+      "texts": 82,
+      "instances": 50,
+      "bindings": 562,
+      "images": 0,
+      "links": 0,
+      "emptyText": [],
+      "overflow": []
+    },
+    {
+      "page": "03 · 状态与适配",
+      "frames": [
+        {
+          "id": "7:2",
+          "name": "08 / 窄窗口 · 1024 × 768",
+          "width": 1024,
+          "height": 768
+        },
+        {
+          "id": "7:142",
+          "name": "09 / 共享页面 · 移动端查看者",
+          "width": 390,
+          "height": 844
+        },
+        {
+          "id": "7:186",
+          "name": "10 / 状态矩阵 · 真实任务与恢复",
+          "width": 1440,
+          "height": 1120
+        },
+        {
+          "id": "13:392",
+          "name": "12 / 功能面板 · 录制、连接与审批",
+          "width": 1440,
+          "height": 1460
+        }
+      ],
+      "componentCount": 0,
+      "componentSetCount": 0,
+      "texts": 148,
+      "instances": 89,
+      "bindings": 1134,
+      "images": 0,
+      "links": 0,
+      "emptyText": [],
+      "overflow": []
+    }
+  ],
+  "visualCheck": "All 17 top-level review frames were screenshot-reviewed; targeted layout, font, focus, theme, and contrast defects were corrected. Primary inspector export reflects final state.",
+  "notPerformed": [
+    "Running application implementation",
+    "Full interactive or keyboard accessibility testing",
+    "Production integration / Code Connect"
+  ]
+}

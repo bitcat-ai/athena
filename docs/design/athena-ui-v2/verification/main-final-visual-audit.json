@@ -1,0 +1,64 @@
+{
+  "fileKey": "vEL0JeDlefvuvLjUQQh5SB",
+  "method": "Human-visible tool screenshot inspection plus bounded live Plugin API geometry reads.",
+  "status": "passed-with-stated-scope",
+  "viewedNodeIds": [
+    "31:229",
+    "31:409",
+    "31:750",
+    "31:1079",
+    "31:1290",
+    "31:1494",
+    "31:1696",
+    "31:1842",
+    "35:297",
+    "54:1720",
+    "54:1914",
+    "54:2116",
+    "25:229",
+    "25:847",
+    "25:1195",
+    "25:1624",
+    "25:1991",
+    "43:1326",
+    "43:1973",
+    "46:1696",
+    "46:2082",
+    "44:5286",
+    "44:5715",
+    "44:5366",
+    "44:5784"
+  ],
+  "viewedCount": 25,
+  "visualFindings": [
+    {
+      "id": "MAIN-01",
+      "issue": "Empty composers showed an enabled send action in ten scenes.",
+      "status": "fixed",
+      "evidence": "main-empty-send-fix.json",
+      "postFixRepresentativeImages": [
+        "review/main-25_229-final.png",
+        "review/main-35_297-final.png"
+      ]
+    },
+    {
+      "id": "MAIN-02",
+      "issue": "Light muted text on hover and control border on subtle missed selected contrast thresholds.",
+      "status": "fixed-in-both-files",
+      "evidence": "final-contrast-audit.json"
+    }
+  ],
+  "liveGeometry": {
+    "evidence": "main-final-geometry.json",
+    "frames": 21,
+    "overflowFindings": 0,
+    "navigationDestinationsChecked": 107,
+    "missingDestinations": 0
+  },
+  "scopeLimits": [
+    "The screenshot check is visual, not a running application interaction test.",
+    "Color-only fixes were checked on representative light/dark scenes; the selected contrast pairs are not a full WCAG audit.",
+    "Inspector edge cases and the Agent Atlas are verified in separate reports."
+  ],
+  "applicationCodeModified": false
+}

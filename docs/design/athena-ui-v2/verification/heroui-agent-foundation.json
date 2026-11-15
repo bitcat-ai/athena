@@ -1,0 +1,81 @@
+{
+  "createdVariableIds": [
+    "VariableID:44:11721",
+    "VariableID:44:11722",
+    "VariableID:44:11723",
+    "VariableID:44:11724",
+    "VariableID:44:11725",
+    "VariableID:44:11726",
+    "VariableID:44:11727",
+    "VariableID:44:11728",
+    "VariableID:44:11729",
+    "VariableID:44:11730",
+    "VariableID:44:11731",
+    "VariableID:44:11732",
+    "VariableID:44:11733"
+  ],
+  "mutatedVariableIds": [
+    "VariableID:44:11721",
+    "VariableID:44:11723",
+    "VariableID:44:11724",
+    "VariableID:44:11725",
+    "VariableID:44:11727",
+    "VariableID:44:11728",
+    "VariableID:44:11729",
+    "VariableID:44:11730",
+    "VariableID:44:11732",
+    "VariableID:44:11733"
+  ],
+  "createdStyleIds": [
+    "S:9bd8f31744cec2f22a7a1d214accd75bbdc52893,",
+    "S:ff95729c2f54d810e87b015db5b0c6f5feb50cca,",
+    "S:3a0c35d0087fd8c946e323ec248f9447157a128d,",
+    "S:97fc0d4eff42a93f6bb7e4b49abc62ccbcec12f2,",
+    "S:cfeeb981370b028be51157d7da8d4e146326e5d4,"
+  ],
+  "mutatedStyleIds": [
+    "S:9bd8f31744cec2f22a7a1d214accd75bbdc52893,",
+    "S:ff95729c2f54d810e87b015db5b0c6f5feb50cca,",
+    "S:3a0c35d0087fd8c946e323ec248f9447157a128d,",
+    "S:97fc0d4eff42a93f6bb7e4b49abc62ccbcec12f2,",
+    "S:cfeeb981370b028be51157d7da8d4e146326e5d4,"
+  ],
+  "radiusIds": {
+    "control": "VariableID:44:11721",
+    "button": "VariableID:44:11723",
+    "panel": "VariableID:44:11724",
+    "composer": "VariableID:44:11725",
+    "overlay": "VariableID:44:11727",
+    "navigation": "VariableID:44:11728",
+    "option": "VariableID:44:11729",
+    "window": "VariableID:44:11730",
+    "chip": "VariableID:44:11732",
+    "iconButton": "VariableID:44:11733"
+  },
+  "primitiveRadiusIds": {
+    "12": "VariableID:1:87",
+    "16": "VariableID:1:88",
+    "22": "VariableID:44:11726",
+    "24": "VariableID:44:11722",
+    "999": "VariableID:44:11731"
+  },
+  "effectStyleIds": {
+    "field": "S:9bd8f31744cec2f22a7a1d214accd75bbdc52893,",
+    "surface": "S:ff95729c2f54d810e87b015db5b0c6f5feb50cca,",
+    "overlay": "S:3a0c35d0087fd8c946e323ec248f9447157a128d,",
+    "selected": "S:97fc0d4eff42a93f6bb7e4b49abc62ccbcec12f2,",
+    "darkOverlay": "S:cfeeb981370b028be51157d7da8d4e146326e5d4,"
+  },
+  "geometryCollection": "VariableCollectionId:1:62",
+  "semanticCollection": "VariableCollectionId:1:10",
+  "darkMode": "1:2",
+  "semanticIds": {
+    "surface": "VariableID:1:16",
+    "subtle": "VariableID:1:19",
+    "hover": "VariableID:1:22",
+    "line": "VariableID:1:34",
+    "accent": "VariableID:1:40",
+    "danger": "VariableID:1:58",
+    "accentSoft": "VariableID:1:43"
+  }
+}

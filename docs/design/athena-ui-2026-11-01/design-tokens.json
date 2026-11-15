@@ -1,0 +1,159 @@
+{
+  "name": "Athena / Cold Light",
+  "status": "design-proposal",
+  "date": "2026-11-01",
+  "modes": [
+    "light",
+    "dark"
+  ],
+  "colors": {
+    "canvas": {
+      "light": "#F6F7FA",
+      "dark": "#111318"
+    },
+    "surface": {
+      "light": "#FFFFFF",
+      "dark": "#191C23"
+    },
+    "subtle": {
+      "light": "#EFF1F6",
+      "dark": "#232731"
+    },
+    "hover": {
+      "light": "#E8EBF2",
+      "dark": "#2C3240"
+    },
+    "ink": {
+      "light": "#202530",
+      "dark": "#EEF1F7"
+    },
+    "secondary": {
+      "light": "#535D70",
+      "dark": "#B4BDCE"
+    },
+    "muted": {
+      "light": "#667186",
+      "dark": "#98A4B8"
+    },
+    "line": {
+      "light": "#E2E6EE",
+      "dark": "#343B49"
+    },
+    "control": {
+      "light": "#7A8496",
+      "dark": "#7C899F"
+    },
+    "accent": {
+      "light": "#515BD4",
+      "dark": "#A3AAFF"
+    },
+    "accentSoft": {
+      "light": "#ECEEFC",
+      "dark": "#2B3058"
+    },
+    "accentInk": {
+      "light": "#444DBA",
+      "dark": "#CCD0FF"
+    },
+    "onAccent": {
+      "light": "#FFFFFF",
+      "dark": "#13182F"
+    },
+    "success": {
+      "light": "#107684",
+      "dark": "#79CED9"
+    },
+    "successSoft": {
+      "light": "#EAF5F7",
+      "dark": "#193A42"
+    },
+    "danger": {
+      "light": "#984678",
+      "dark": "#E9A8D2"
+    },
+    "dangerSoft": {
+      "light": "#F6EDF4",
+      "dark": "#3C2636"
+    }
+  },
+  "spacing": [
+    2,
+    4,
+    6,
+    8,
+    12,
+    16,
+    20,
+    24,
+    32,
+    40,
+    48,
+    64
+  ],
+  "radius": [
+    6,
+    8,
+    12,
+    16,
+    20
+  ],
+  "typography": {
+    "implementation": {
+      "sans": "-apple-system, BlinkMacSystemFont, SF Pro Text, PingFang SC, Helvetica Neue, sans-serif",
+      "mono": "SFMono-Regular, Menlo, Consolas, monospace"
+    },
+    "figma": {
+      "latin": "Inter",
+      "cjk": "Noto Sans SC"
+    },
+    "scale": {
+      "display": [
+        36,
+        48
+      ],
+      "heading": [
+        24,
+        36
+      ],
+      "title": [
+        18,
+        28
+      ],
+      "body": [
+        14,
+        24
+      ],
+      "label": [
+        13,
+        20
+      ],
+      "caption": [
+        12,
+        18
+      ]
+    }
+  },
+  "motion": {
+    "hoverMs": 120,
+    "panelMs": 180,
+    "reducedMotion": "Remove translations and looping animation; preserve status via text and icons"
+  },
+  "geometry": {
+    "sidebar": 216,
+    "conversation": 456,
+    "browser": 768,
+    "desktop": 1440,
+    "compact": 1024,
+    "sharedViewer": 390,
+    "buttonHeight": 34,
+    "iconTarget": 32,
+    "mobilePrimaryTarget": 44,
+    "focusRing": 2
+  },
+  "accessibility": {
+    "normalTextContrast": 4.5,
+    "controlContrast": 3,
+    "targetMinimum": 24,
+    "statusRequiresTextOrIcon": true
+  }
+}

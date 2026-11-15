@@ -1,0 +1,974 @@
+{
+  "schemaVersion": "1.0",
+  "documentType": "selected-color-contrast-audit",
+  "revision": "monochrome-2026-11-02",
+  "date": "2026-11-02",
+  "source": "Actual Figma semantic variable RGB values captured after the monochrome retheme",
+  "valueEvidence": "monochrome-retheme.json#/foundation/readback",
+  "formula": "sRGB linearized relative luminance; (lighter + 0.05) / (darker + 0.05)",
+  "scope": "48 selected text/control combinations plus 48 colored-icon combinations across two files and both themes; numeric token check, not full visual or runtime accessibility acceptance",
+  "results": [
+    {
+      "file": "main",
+      "mode": "Light",
+      "fg": "ink",
+      "bg": "surface",
+      "category": "text-or-control",
+      "ratio": 17.928,
+      "minimum": 4.5,
+      "pass": true
+    },
+    {
+      "file": "main",
+      "mode": "Light",
+      "fg": "secondary",
+      "bg": "surface",
+      "category": "text-or-control",
+      "ratio": 7.814,
+      "minimum": 4.5,
+      "pass": true
+    },
+    {
+      "file": "main",
+      "mode": "Light",
+      "fg": "muted",
+      "bg": "surface",
+      "category": "text-or-control",
+      "ratio": 5.742,
+      "minimum": 4.5,
+      "pass": true
+    },
+    {
+      "file": "main",
+      "mode": "Light",
+      "fg": "muted",
+      "bg": "subtle",
+      "category": "text-or-control",
+      "ratio": 5.267,
+      "minimum": 4.5,
+      "pass": true
+    },
+    {
+      "file": "main",
+      "mode": "Light",
+      "fg": "muted",
+      "bg": "hover",
+      "category": "text-or-control",
+      "ratio": 4.816,
+      "minimum": 4.5,
+      "pass": true
+    },
+    {
+      "file": "main",
+      "mode": "Light",
+      "fg": "accent",
+      "bg": "surface",
+      "category": "text-or-control",
+      "ratio": 17.928,
+      "minimum": 4.5,
+      "pass": true
+    },
+    {
+      "file": "main",
+      "mode": "Light",
+      "fg": "accentInk",
+      "bg": "accentSoft",
+      "category": "text-or-control",
+      "ratio": 13.28,
+      "minimum": 4.5,
+      "pass": true
+    },
+    {
+      "file": "main",
+      "mode": "Light",
+      "fg": "success",
+      "bg": "successSoft",
+      "category": "text-or-control",
+      "ratio": 9.51,
+      "minimum": 4.5,
+      "pass": true
+    },
+    {
+      "file": "main",
+      "mode": "Light",
+      "fg": "danger",
+      "bg": "dangerSoft",
+      "category": "text-or-control",
+      "ratio": 13.881,
+      "minimum": 4.5,
+      "pass": true
+    },
+    {
+      "file": "main",
+      "mode": "Light",
+      "fg": "onAccent",
+      "bg": "accent",
+      "category": "text-or-control",
+      "ratio": 17.928,
+      "minimum": 4.5,
+      "pass": true
+    },
+    {
+      "file": "main",
+      "mode": "Light",
+      "fg": "control",
+      "bg": "surface",
+      "category": "text-or-control",
+      "ratio": 3.545,
+      "minimum": 3,
+      "pass": true
+    },
+    {
+      "file": "main",
+      "mode": "Light",
+      "fg": "control",
+      "bg": "subtle",
+      "category": "text-or-control",
+      "ratio": 3.251,
+      "minimum": 3,
+      "pass": true
+    },
+    {
+      "file": "main",
+      "mode": "Light",
+      "fg": "brandBlue",
+      "bg": "canvas",
+      "category": "colored-icon",
+      "ratio": 4.952,
+      "minimum": 3,
+      "pass": true
+    },
+    {
+      "file": "main",
+      "mode": "Light",
+      "fg": "brandBlue",
+      "bg": "surface",
+      "category": "colored-icon",
+      "ratio": 5.169,
+      "minimum": 3,
+      "pass": true
+    },
+    {
+      "file": "main",
+      "mode": "Light",
+      "fg": "brandBlue",
+      "bg": "subtle",
+      "category": "colored-icon",
+      "ratio": 4.741,
+      "minimum": 3,
+      "pass": true
+    },
+    {
+      "file": "main",
+      "mode": "Light",
+      "fg": "brandTeal",
+      "bg": "canvas",
+      "category": "colored-icon",
+      "ratio": 3.587,
+      "minimum": 3,
+      "pass": true
+    },
+    {
+      "file": "main",
+      "mode": "Light",
+      "fg": "brandTeal",
+      "bg": "surface",
+      "category": "colored-icon",
+      "ratio": 3.744,
+      "minimum": 3,
+      "pass": true
+    },
+    {
+      "file": "main",
+      "mode": "Light",
+      "fg": "brandTeal",
+      "bg": "subtle",
+      "category": "colored-icon",
+      "ratio": 3.434,
+      "minimum": 3,
+      "pass": true
+    },
+    {
+      "file": "main",
+      "mode": "Light",
+      "fg": "statusGreen",
+      "bg": "canvas",
+      "category": "colored-icon",
+      "ratio": 4.767,
+      "minimum": 3,
+      "pass": true
+    },
+    {
+      "file": "main",
+      "mode": "Light",
+      "fg": "statusGreen",
+      "bg": "surface",
+      "category": "colored-icon",
+      "ratio": 4.976,
+      "minimum": 3,
+      "pass": true
+    },
+    {
+      "file": "main",
+      "mode": "Light",
+      "fg": "statusGreen",
+      "bg": "subtle",
+      "category": "colored-icon",
+      "ratio": 4.564,
+      "minimum": 3,
+      "pass": true
+    },
+    {
+      "file": "main",
+      "mode": "Light",
+      "fg": "statusRed",
+      "bg": "canvas",
+      "category": "colored-icon",
+      "ratio": 4.854,
+      "minimum": 3,
+      "pass": true
+    },
+    {
+      "file": "main",
+      "mode": "Light",
+      "fg": "statusRed",
+      "bg": "surface",
+      "category": "colored-icon",
+      "ratio": 5.067,
+      "minimum": 3,
+      "pass": true
+    },
+    {
+      "file": "main",
+      "mode": "Light",
+      "fg": "statusRed",
+      "bg": "subtle",
+      "category": "colored-icon",
+      "ratio": 4.647,
+      "minimum": 3,
+      "pass": true
+    },
+    {
+      "file": "main",
+      "mode": "Dark",
+      "fg": "ink",
+      "bg": "surface",
+      "category": "text-or-control",
+      "ratio": 15.632,
+      "minimum": 4.5,
+      "pass": true
+    },
+    {
+      "file": "main",
+      "mode": "Dark",
+      "fg": "secondary",
+      "bg": "surface",
+      "category": "text-or-control",
+      "ratio": 9.874,
+      "minimum": 4.5,
+      "pass": true
+    },
+    {
+      "file": "main",
+      "mode": "Dark",
+      "fg": "muted",
+      "bg": "surface",
+      "category": "text-or-control",
+      "ratio": 7.336,
+      "minimum": 4.5,
+      "pass": true
+    },
+    {
+      "file": "main",
+      "mode": "Dark",
+      "fg": "muted",
+      "bg": "subtle",
+      "category": "text-or-control",
+      "ratio": 6.346,
+      "minimum": 4.5,
+      "pass": true
+    },
+    {
+      "file": "main",
+      "mode": "Dark",
+      "fg": "muted",
+      "bg": "hover",
+      "category": "text-or-control",
+      "ratio": 5.439,
+      "minimum": 4.5,
+      "pass": true
+    },
+    {
+      "file": "main",
+      "mode": "Dark",
+      "fg": "accent",
+      "bg": "surface",
+      "category": "text-or-control",
+      "ratio": 15.632,
+      "minimum": 4.5,
+      "pass": true
+    },
+    {
+      "file": "main",
+      "mode": "Dark",
+      "fg": "accentInk",
+      "bg": "accentSoft",
+      "category": "text-or-control",
+      "ratio": 11.581,
+      "minimum": 4.5,
+      "pass": true
+    },
+    {
+      "file": "main",
+      "mode": "Dark",
+      "fg": "success",
+      "bg": "successSoft",
+      "category": "text-or-control",
+      "ratio": 10.341,
+      "minimum": 4.5,
+      "pass": true
+    },
+    {
+      "file": "main",
+      "mode": "Dark",
+      "fg": "danger",
+      "bg": "dangerSoft",
+      "category": "text-or-control",
+      "ratio": 11.24,
+      "minimum": 4.5,
+      "pass": true
+    },
+    {
+      "file": "main",
+      "mode": "Dark",
+      "fg": "onAccent",
+      "bg": "accent",
+      "category": "text-or-control",
+      "ratio": 16.444,
+      "minimum": 4.5,
+      "pass": true
+    },
+    {
+      "file": "main",
+      "mode": "Dark",
+      "fg": "control",
+      "bg": "surface",
+      "category": "text-or-control",
+      "ratio": 4.744,
+      "minimum": 3,
+      "pass": true
+    },
+    {
+      "file": "main",
+      "mode": "Dark",
+      "fg": "control",
+      "bg": "subtle",
+      "category": "text-or-control",
+      "ratio": 4.104,
+      "minimum": 3,
+      "pass": true
+    },
+    {
+      "file": "main",
+      "mode": "Dark",
+      "fg": "brandBlue",
+      "bg": "canvas",
+      "category": "colored-icon",
+      "ratio": 7.339,
+      "minimum": 3,
+      "pass": true
+    },
+    {
+      "file": "main",
+      "mode": "Dark",
+      "fg": "brandBlue",
+      "bg": "surface",
+      "category": "colored-icon",
+      "ratio": 6.623,
+      "minimum": 3,
+      "pass": true
+    },
+    {
+      "file": "main",
+      "mode": "Dark",
+      "fg": "brandBlue",
+      "bg": "subtle",
+      "category": "colored-icon",
+      "ratio": 5.73,
+      "minimum": 3,
+      "pass": true
+    },
+    {
+      "file": "main",
+      "mode": "Dark",
+      "fg": "brandTeal",
+      "bg": "canvas",
+      "category": "colored-icon",
+      "ratio": 12.765,
+      "minimum": 3,
+      "pass": true
+    },
+    {
+      "file": "main",
+      "mode": "Dark",
+      "fg": "brandTeal",
+      "bg": "surface",
+      "category": "colored-icon",
+      "ratio": 11.52,
+      "minimum": 3,
+      "pass": true
+    },
+    {
+      "file": "main",
+      "mode": "Dark",
+      "fg": "brandTeal",
+      "bg": "subtle",
+      "category": "colored-icon",
+      "ratio": 9.966,
+      "minimum": 3,
+      "pass": true
+    },
+    {
+      "file": "main",
+      "mode": "Dark",
+      "fg": "statusGreen",
+      "bg": "canvas",
+      "category": "colored-icon",
+      "ratio": 10.698,
+      "minimum": 3,
+      "pass": true
+    },
+    {
+      "file": "main",
+      "mode": "Dark",
+      "fg": "statusGreen",
+      "bg": "surface",
+      "category": "colored-icon",
+      "ratio": 9.655,
+      "minimum": 3,
+      "pass": true
+    },
+    {
+      "file": "main",
+      "mode": "Dark",
+      "fg": "statusGreen",
+      "bg": "subtle",
+      "category": "colored-icon",
+      "ratio": 8.353,
+      "minimum": 3,
+      "pass": true
+    },
+    {
+      "file": "main",
+      "mode": "Dark",
+      "fg": "statusRed",
+      "bg": "canvas",
+      "category": "colored-icon",
+      "ratio": 8.321,
+      "minimum": 3,
+      "pass": true
+    },
+    {
+      "file": "main",
+      "mode": "Dark",
+      "fg": "statusRed",
+      "bg": "surface",
+      "category": "colored-icon",
+      "ratio": 7.51,
+      "minimum": 3,
+      "pass": true
+    },
+    {
+      "file": "main",
+      "mode": "Dark",
+      "fg": "statusRed",
+      "bg": "subtle",
+      "category": "colored-icon",
+      "ratio": 6.497,
+      "minimum": 3,
+      "pass": true
+    },
+    {
+      "file": "agent",
+      "mode": "Light",
+      "fg": "ink",
+      "bg": "surface",
+      "category": "text-or-control",
+      "ratio": 17.928,
+      "minimum": 4.5,
+      "pass": true
+    },
+    {
+      "file": "agent",
+      "mode": "Light",
+      "fg": "secondary",
+      "bg": "surface",
+      "category": "text-or-control",
+      "ratio": 7.814,
+      "minimum": 4.5,
+      "pass": true
+    },
+    {
+      "file": "agent",
+      "mode": "Light",
+      "fg": "muted",
+      "bg": "surface",
+      "category": "text-or-control",
+      "ratio": 5.742,
+      "minimum": 4.5,
+      "pass": true
+    },
+    {
+      "file": "agent",
+      "mode": "Light",
+      "fg": "muted",
+      "bg": "subtle",
+      "category": "text-or-control",
+      "ratio": 5.267,
+      "minimum": 4.5,
+      "pass": true
+    },
+    {
+      "file": "agent",
+      "mode": "Light",
+      "fg": "muted",
+      "bg": "hover",
+      "category": "text-or-control",
+      "ratio": 4.816,
+      "minimum": 4.5,
+      "pass": true
+    },
+    {
+      "file": "agent",
+      "mode": "Light",
+      "fg": "accent",
+      "bg": "surface",
+      "category": "text-or-control",
+      "ratio": 17.928,
+      "minimum": 4.5,
+      "pass": true
+    },
+    {
+      "file": "agent",
+      "mode": "Light",
+      "fg": "accentInk",
+      "bg": "accentSoft",
+      "category": "text-or-control",
+      "ratio": 13.28,
+      "minimum": 4.5,
+      "pass": true
+    },
+    {
+      "file": "agent",
+      "mode": "Light",
+      "fg": "success",
+      "bg": "successSoft",
+      "category": "text-or-control",
+      "ratio": 9.51,
+      "minimum": 4.5,
+      "pass": true
+    },
+    {
+      "file": "agent",
+      "mode": "Light",
+      "fg": "danger",
+      "bg": "dangerSoft",
+      "category": "text-or-control",
+      "ratio": 13.881,
+      "minimum": 4.5,
+      "pass": true
+    },
+    {
+      "file": "agent",
+      "mode": "Light",
+      "fg": "onAccent",
+      "bg": "accent",
+      "category": "text-or-control",
+      "ratio": 17.928,
+      "minimum": 4.5,
+      "pass": true
+    },
+    {
+      "file": "agent",
+      "mode": "Light",
+      "fg": "control",
+      "bg": "surface",
+      "category": "text-or-control",
+      "ratio": 3.545,
+      "minimum": 3,
+      "pass": true
+    },
+    {
+      "file": "agent",
+      "mode": "Light",
+      "fg": "control",
+      "bg": "subtle",
+      "category": "text-or-control",
+      "ratio": 3.251,
+      "minimum": 3,
+      "pass": true
+    },
+    {
+      "file": "agent",
+      "mode": "Light",
+      "fg": "brandBlue",
+      "bg": "canvas",
+      "category": "colored-icon",
+      "ratio": 4.952,
+      "minimum": 3,
+      "pass": true
+    },
+    {
+      "file": "agent",
+      "mode": "Light",
+      "fg": "brandBlue",
+      "bg": "surface",
+      "category": "colored-icon",
+      "ratio": 5.169,
+      "minimum": 3,
+      "pass": true
+    },
+    {
+      "file": "agent",
+      "mode": "Light",
+      "fg": "brandBlue",
+      "bg": "subtle",
+      "category": "colored-icon",
+      "ratio": 4.741,
+      "minimum": 3,
+      "pass": true
+    },
+    {
+      "file": "agent",
+      "mode": "Light",
+      "fg": "brandTeal",
+      "bg": "canvas",
+      "category": "colored-icon",
+      "ratio": 3.587,
+      "minimum": 3,
+      "pass": true
+    },
+    {
+      "file": "agent",
+      "mode": "Light",
+      "fg": "brandTeal",
+      "bg": "surface",
+      "category": "colored-icon",
+      "ratio": 3.744,
+      "minimum": 3,
+      "pass": true
+    },
+    {
+      "file": "agent",
+      "mode": "Light",
+      "fg": "brandTeal",
+      "bg": "subtle",
+      "category": "colored-icon",
+      "ratio": 3.434,
+      "minimum": 3,
+      "pass": true
+    },
+    {
+      "file": "agent",
+      "mode": "Light",
+      "fg": "statusGreen",
+      "bg": "canvas",
+      "category": "colored-icon",
+      "ratio": 4.767,
+      "minimum": 3,
+      "pass": true
+    },
+    {
+      "file": "agent",
+      "mode": "Light",
+      "fg": "statusGreen",
+      "bg": "surface",
+      "category": "colored-icon",
+      "ratio": 4.976,
+      "minimum": 3,
+      "pass": true
+    },
+    {
+      "file": "agent",
+      "mode": "Light",
+      "fg": "statusGreen",
+      "bg": "subtle",
+      "category": "colored-icon",
+      "ratio": 4.564,
+      "minimum": 3,
+      "pass": true
+    },
+    {
+      "file": "agent",
+      "mode": "Light",
+      "fg": "statusRed",
+      "bg": "canvas",
+      "category": "colored-icon",
+      "ratio": 4.854,
+      "minimum": 3,
+      "pass": true
+    },
+    {
+      "file": "agent",
+      "mode": "Light",
+      "fg": "statusRed",
+      "bg": "surface",
+      "category": "colored-icon",
+      "ratio": 5.067,
+      "minimum": 3,
+      "pass": true
+    },
+    {
+      "file": "agent",
+      "mode": "Light",
+      "fg": "statusRed",
+      "bg": "subtle",
+      "category": "colored-icon",
+      "ratio": 4.647,
+      "minimum": 3,
+      "pass": true
+    },
+    {
+      "file": "agent",
+      "mode": "Dark",
+      "fg": "ink",
+      "bg": "surface",
+      "category": "text-or-control",
+      "ratio": 15.632,
+      "minimum": 4.5,
+      "pass": true
+    },
+    {
+      "file": "agent",
+      "mode": "Dark",
+      "fg": "secondary",
+      "bg": "surface",
+      "category": "text-or-control",
+      "ratio": 9.874,
+      "minimum": 4.5,
+      "pass": true
+    },
+    {
+      "file": "agent",
+      "mode": "Dark",
+      "fg": "muted",
+      "bg": "surface",
+      "category": "text-or-control",
+      "ratio": 7.336,
+      "minimum": 4.5,
+      "pass": true
+    },
+    {
+      "file": "agent",
+      "mode": "Dark",
+      "fg": "muted",
+      "bg": "subtle",
+      "category": "text-or-control",
+      "ratio": 6.346,
+      "minimum": 4.5,
+      "pass": true
+    },
+    {
+      "file": "agent",
+      "mode": "Dark",
+      "fg": "muted",
+      "bg": "hover",
+      "category": "text-or-control",
+      "ratio": 5.439,
+      "minimum": 4.5,
+      "pass": true
+    },
+    {
+      "file": "agent",
+      "mode": "Dark",
+      "fg": "accent",
+      "bg": "surface",
+      "category": "text-or-control",
+      "ratio": 15.632,
+      "minimum": 4.5,
+      "pass": true
+    },
+    {
+      "file": "agent",
+      "mode": "Dark",
+      "fg": "accentInk",
+      "bg": "accentSoft",
+      "category": "text-or-control",
+      "ratio": 11.581,
+      "minimum": 4.5,
+      "pass": true
+    },
+    {
+      "file": "agent",
+      "mode": "Dark",
+      "fg": "success",
+      "bg": "successSoft",
+      "category": "text-or-control",
+      "ratio": 10.341,
+      "minimum": 4.5,
+      "pass": true
+    },
+    {
+      "file": "agent",
+      "mode": "Dark",
+      "fg": "danger",
+      "bg": "dangerSoft",
+      "category": "text-or-control",
+      "ratio": 11.24,
+      "minimum": 4.5,
+      "pass": true
+    },
+    {
+      "file": "agent",
+      "mode": "Dark",
+      "fg": "onAccent",
+      "bg": "accent",
+      "category": "text-or-control",
+      "ratio": 16.444,
+      "minimum": 4.5,
+      "pass": true
+    },
+    {
+      "file": "agent",
+      "mode": "Dark",
+      "fg": "control",
+      "bg": "surface",
+      "category": "text-or-control",
+      "ratio": 4.744,
+      "minimum": 3,
+      "pass": true
+    },
+    {
+      "file": "agent",
+      "mode": "Dark",
+      "fg": "control",
+      "bg": "subtle",
+      "category": "text-or-control",
+      "ratio": 4.104,
+      "minimum": 3,
+      "pass": true
+    },
+    {
+      "file": "agent",
+      "mode": "Dark",
+      "fg": "brandBlue",
+      "bg": "canvas",
+      "category": "colored-icon",
+      "ratio": 7.339,
+      "minimum": 3,
+      "pass": true
+    },
+    {
+      "file": "agent",
+      "mode": "Dark",
+      "fg": "brandBlue",
+      "bg": "surface",
+      "category": "colored-icon",
+      "ratio": 6.623,
+      "minimum": 3,
+      "pass": true
+    },
+    {
+      "file": "agent",
+      "mode": "Dark",
+      "fg": "brandBlue",
+      "bg": "subtle",
+      "category": "colored-icon",
+      "ratio": 5.73,
+      "minimum": 3,
+      "pass": true
+    },
+    {
+      "file": "agent",
+      "mode": "Dark",
+      "fg": "brandTeal",
+      "bg": "canvas",
+      "category": "colored-icon",
+      "ratio": 12.765,
+      "minimum": 3,
+      "pass": true
+    },
+    {
+      "file": "agent",
+      "mode": "Dark",
+      "fg": "brandTeal",
+      "bg": "surface",
+      "category": "colored-icon",
+      "ratio": 11.52,
+      "minimum": 3,
+      "pass": true
+    },
+    {
+      "file": "agent",
+      "mode": "Dark",
+      "fg": "brandTeal",
+      "bg": "subtle",
+      "category": "colored-icon",
+      "ratio": 9.966,
+      "minimum": 3,
+      "pass": true
+    },
+    {
+      "file": "agent",
+      "mode": "Dark",
+      "fg": "statusGreen",
+      "bg": "canvas",
+      "category": "colored-icon",
+      "ratio": 10.698,
+      "minimum": 3,
+      "pass": true
+    },
+    {
+      "file": "agent",
+      "mode": "Dark",
+      "fg": "statusGreen",
+      "bg": "surface",
+      "category": "colored-icon",
+      "ratio": 9.655,
+      "minimum": 3,
+      "pass": true
+    },
+    {
+      "file": "agent",
+      "mode": "Dark",
+      "fg": "statusGreen",
+      "bg": "subtle",
+      "category": "colored-icon",
+      "ratio": 8.353,
+      "minimum": 3,
+      "pass": true
+    },
+    {
+      "file": "agent",
+      "mode": "Dark",
+      "fg": "statusRed",
+      "bg": "canvas",
+      "category": "colored-icon",
+      "ratio": 8.321,
+      "minimum": 3,
+      "pass": true
+    },
+    {
+      "file": "agent",
+      "mode": "Dark",
+      "fg": "statusRed",
+      "bg": "surface",
+      "category": "colored-icon",
+      "ratio": 7.51,
+      "minimum": 3,
+      "pass": true
+    },
+    {
+      "file": "agent",
+      "mode": "Dark",
+      "fg": "statusRed",
+      "bg": "subtle",
+      "category": "colored-icon",
+      "ratio": 6.497,
+      "minimum": 3,
+      "pass": true
+    }
+  ],
+  "passed": 96,
+  "total": 96
+}

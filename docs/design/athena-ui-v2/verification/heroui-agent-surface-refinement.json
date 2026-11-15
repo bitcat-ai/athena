@@ -1,0 +1,2076 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-11-02",
+  "fileKey": "jIaBK8NMvfZsjuMktNwpfO",
+  "status": "passed-scoped-surface-refinement",
+  "scope": {
+    "pages": 8,
+    "majorFramesPreserved": 52,
+    "canonicalStatesPreserved": 175,
+    "canonicalStateFamiliesPreserved": 16,
+    "fullSemanticReaudit": false,
+    "applicationSourceChanged": false,
+    "localSpecChanged": false,
+    "newFigmaPagesCreated": 0,
+    "canvasNodesCreated": 0,
+    "canvasNodesDeleted": 0,
+    "currentPalettePreserved": true
+  },
+  "recipePath": "heroui-surface-recipe.json",
+  "referencePath": "heroui-native-reference.json",
+  "foundation": {
+    "createdVariableIds": [
+      "VariableID:44:11721",
+      "VariableID:44:11722",
+      "VariableID:44:11723",
+      "VariableID:44:11724",
+      "VariableID:44:11725",
+      "VariableID:44:11726",
+      "VariableID:44:11727",
+      "VariableID:44:11728",
+      "VariableID:44:11729",
+      "VariableID:44:11730",
+      "VariableID:44:11731",
+      "VariableID:44:11732",
+      "VariableID:44:11733"
+    ],
+    "mutatedVariableIds": [
+      "VariableID:44:11721",
+      "VariableID:44:11723",
+      "VariableID:44:11724",
+      "VariableID:44:11725",
+      "VariableID:44:11727",
+      "VariableID:44:11728",
+      "VariableID:44:11729",
+      "VariableID:44:11730",
+      "VariableID:44:11732",
+      "VariableID:44:11733"
+    ],
+    "createdStyleIds": [
+      "S:9bd8f31744cec2f22a7a1d214accd75bbdc52893,",
+      "S:ff95729c2f54d810e87b015db5b0c6f5feb50cca,",
+      "S:3a0c35d0087fd8c946e323ec248f9447157a128d,",
+      "S:97fc0d4eff42a93f6bb7e4b49abc62ccbcec12f2,",
+      "S:cfeeb981370b028be51157d7da8d4e146326e5d4,"
+    ],
+    "mutatedStyleIds": [
+      "S:9bd8f31744cec2f22a7a1d214accd75bbdc52893,",
+      "S:ff95729c2f54d810e87b015db5b0c6f5feb50cca,",
+      "S:3a0c35d0087fd8c946e323ec248f9447157a128d,",
+      "S:97fc0d4eff42a93f6bb7e4b49abc62ccbcec12f2,",
+      "S:cfeeb981370b028be51157d7da8d4e146326e5d4,"
+    ],
+    "radiusIds": {
+      "control": "VariableID:44:11721",
+      "button": "VariableID:44:11723",
+      "panel": "VariableID:44:11724",
+      "composer": "VariableID:44:11725",
+      "overlay": "VariableID:44:11727",
+      "navigation": "VariableID:44:11728",
+      "option": "VariableID:44:11729",
+      "window": "VariableID:44:11730",
+      "chip": "VariableID:44:11732",
+      "iconButton": "VariableID:44:11733"
+    },
+    "primitiveRadiusIds": {
+      "12": "VariableID:1:87",
+      "16": "VariableID:1:88",
+      "22": "VariableID:44:11726",
+      "24": "VariableID:44:11722",
+      "999": "VariableID:44:11731"
+    },
+    "effectStyleIds": {
+      "field": "S:9bd8f31744cec2f22a7a1d214accd75bbdc52893,",
+      "surface": "S:ff95729c2f54d810e87b015db5b0c6f5feb50cca,",
+      "overlay": "S:3a0c35d0087fd8c946e323ec248f9447157a128d,",
+      "selected": "S:97fc0d4eff42a93f6bb7e4b49abc62ccbcec12f2,",
+      "darkOverlay": "S:cfeeb981370b028be51157d7da8d4e146326e5d4,"
+    },
+    "geometryCollection": "VariableCollectionId:1:62",
+    "semanticCollection": "VariableCollectionId:1:10",
+    "darkMode": "1:2",
+    "semanticIds": {
+      "surface": "VariableID:1:16",
+      "subtle": "VariableID:1:19",
+      "hover": "VariableID:1:22",
+      "line": "VariableID:1:34",
+      "accent": "VariableID:1:40",
+      "danger": "VariableID:1:58",
+      "accentSoft": "VariableID:1:43"
+    }
+  },
+  "foundationReadback": {
+    "roles": [
+      {
+        "role": "control",
+        "id": "VariableID:44:11721",
+        "name": "radius/role/control",
+        "scopes": [
+          "CORNER_RADIUS"
+        ],
+        "codeSyntax": {
+          "WEB": "var(--athena-radius-control)"
+        },
+        "value": 12
+      },
+      {
+        "role": "button",
+        "id": "VariableID:44:11723",
+        "name": "radius/role/button",
+        "scopes": [
+          "CORNER_RADIUS"
+        ],
+        "codeSyntax": {
+          "WEB": "var(--athena-radius-button)"
+        },
+        "value": 24
+      },
+      {
+        "role": "panel",
+        "id": "VariableID:44:11724",
+        "name": "radius/role/panel",
+        "scopes": [
+          "CORNER_RADIUS"
+        ],
+        "codeSyntax": {
+          "WEB": "var(--athena-radius-panel)"
+        },
+        "value": 24
+      },
+      {
+        "role": "composer",
+        "id": "VariableID:44:11725",
+        "name": "radius/role/composer",
+        "scopes": [
+          "CORNER_RADIUS"
+        ],
+        "codeSyntax": {
+          "WEB": "var(--athena-radius-composer)"
+        },
+        "value": 24
+      },
+      {
+        "role": "overlay",
+        "id": "VariableID:44:11727",
+        "name": "radius/role/overlay",
+        "scopes": [
+          "CORNER_RADIUS"
+        ],
+        "codeSyntax": {
+          "WEB": "var(--athena-radius-overlay)"
+        },
+        "value": 22
+      },
+      {
+        "role": "navigation",
+        "id": "VariableID:44:11728",
+        "name": "radius/role/navigation",
+        "scopes": [
+          "CORNER_RADIUS"
+        ],
+        "codeSyntax": {
+          "WEB": "var(--athena-radius-navigation)"
+        },
+        "value": 16
+      },
+      {
+        "role": "option",
+        "id": "VariableID:44:11729",
+        "name": "radius/role/option",
+        "scopes": [
+          "CORNER_RADIUS"
+        ],
+        "codeSyntax": {
+          "WEB": "var(--athena-radius-option)"
+        },
+        "value": 12
+      },
+      {
+        "role": "window",
+        "id": "VariableID:44:11730",
+        "name": "radius/role/window",
+        "scopes": [
+          "CORNER_RADIUS"
+        ],
+        "codeSyntax": {
+          "WEB": "var(--athena-radius-window)"
+        },
+        "value": 24
+      },
+      {
+        "role": "chip",
+        "id": "VariableID:44:11732",
+        "name": "radius/role/chip",
+        "scopes": [
+          "CORNER_RADIUS"
+        ],
+        "codeSyntax": {
+          "WEB": "var(--athena-radius-chip)"
+        },
+        "value": 999
+      },
+      {
+        "role": "iconButton",
+        "id": "VariableID:44:11733",
+        "name": "radius/role/iconButton",
+        "scopes": [
+          "CORNER_RADIUS"
+        ],
+        "codeSyntax": {
+          "WEB": "var(--athena-radius-icon-button)"
+        },
+        "value": 16
+      }
+    ],
+    "effects": [
+      {
+        "role": "field",
+        "id": "S:9bd8f31744cec2f22a7a1d214accd75bbdc52893,",
+        "name": "Athena / Surface / field",
+        "effects": [
+          {
+            "type": "DROP_SHADOW",
+            "visible": true,
+            "radius": 4,
+            "boundVariables": {},
+            "color": {
+              "r": 0,
+              "g": 0,
+              "b": 0,
+              "a": 0.03999999910593033
+            },
+            "offset": {
+              "x": 0,
+              "y": 2
+            },
+            "spread": 0,
+            "blendMode": "NORMAL",
+            "showShadowBehindNode": true
+          },
+          {
+            "type": "DROP_SHADOW",
+            "visible": true,
+            "radius": 2,
+            "boundVariables": {},
+            "color": {
+              "r": 0,
+              "g": 0,
+              "b": 0,
+              "a": 0.05999999865889549
+            },
+            "offset": {
+              "x": 0,
+              "y": 1
+            },
+            "spread": 0,
+            "blendMode": "NORMAL",
+            "showShadowBehindNode": true
+          },
+          {
+            "type": "DROP_SHADOW",
+            "visible": true,
+            "radius": 1,
+            "boundVariables": {},
+            "color": {
+              "r": 0,
+              "g": 0,
+              "b": 0,
+              "a": 0.05999999865889549
+            },
+            "offset": {
+              "x": 0,
+              "y": 0
+            },
+            "spread": 0,
+            "blendMode": "NORMAL",
+            "showShadowBehindNode": true
+          }
+        ]
+      },
+      {
+        "role": "surface",
+        "id": "S:ff95729c2f54d810e87b015db5b0c6f5feb50cca,",
+        "name": "Athena / Surface / surface",
+        "effects": [
+          {
+            "type": "DROP_SHADOW",
+            "visible": true,
+            "radius": 4,
+            "boundVariables": {},
+            "color": {
+              "r": 0,
+              "g": 0,
+              "b": 0,
+              "a": 0.03999999910593033
+            },
+            "offset": {
+              "x": 0,
+              "y": 2
+            },
+            "spread": 0,
+            "blendMode": "NORMAL",
+            "showShadowBehindNode": true
+          },
+          {
+            "type": "DROP_SHADOW",
+            "visible": true,
+            "radius": 2,
+            "boundVariables": {},
+            "color": {
+              "r": 0,
+              "g": 0,
+              "b": 0,
+              "a": 0.05999999865889549
+            },
+            "offset": {
+              "x": 0,
+              "y": 1
+            },
+            "spread": 0,
+            "blendMode": "NORMAL",
+            "showShadowBehindNode": true
+          },
+          {
+            "type": "DROP_SHADOW",
+            "visible": true,
+            "radius": 1,
+            "boundVariables": {},
+            "color": {
+              "r": 0,
+              "g": 0,
+              "b": 0,
+              "a": 0.05999999865889549
+            },
+            "offset": {
+              "x": 0,
+              "y": 0
+            },
+            "spread": 0,
+            "blendMode": "NORMAL",
+            "showShadowBehindNode": true
+          }
+        ]
+      },
+      {
+        "role": "overlay",
+        "id": "S:3a0c35d0087fd8c946e323ec248f9447157a128d,",
+        "name": "Athena / Surface / overlay",
+        "effects": [
+          {
+            "type": "DROP_SHADOW",
+            "visible": true,
+            "radius": 8,
+            "boundVariables": {},
+            "color": {
+              "r": 0,
+              "g": 0,
+              "b": 0,
+              "a": 0.05999999865889549
+            },
+            "offset": {
+              "x": 0,
+              "y": 2
+            },
+            "spread": 0,
+            "blendMode": "NORMAL",
+            "showShadowBehindNode": true
+          },
+          {
+            "type": "DROP_SHADOW",
+            "visible": true,
+            "radius": 12,
+            "boundVariables": {},
+            "color": {
+              "r": 0,
+              "g": 0,
+              "b": 0,
+              "a": 0.029999999329447746
+            },
+            "offset": {
+              "x": 0,
+              "y": -6
+            },
+            "spread": 0,
+            "blendMode": "NORMAL",
+            "showShadowBehindNode": true
+          },
+          {
+            "type": "DROP_SHADOW",
+            "visible": true,
+            "radius": 28,
+            "boundVariables": {},
+            "color": {
+              "r": 0,
+              "g": 0,
+              "b": 0,
+              "a": 0.07999999821186066
+            },
+            "offset": {
+              "x": 0,
+              "y": 14
+            },
+            "spread": 0,
+            "blendMode": "NORMAL",
+            "showShadowBehindNode": true
+          }
+        ]
+      },
+      {
+        "role": "selected",
+        "id": "S:97fc0d4eff42a93f6bb7e4b49abc62ccbcec12f2,",
+        "name": "Athena / Surface / selected",
+        "effects": [
+          {
+            "type": "DROP_SHADOW",
+            "visible": true,
+            "radius": 3,
+            "boundVariables": {},
+            "color": {
+              "r": 0,
+              "g": 0,
+              "b": 0,
+              "a": 0.05000000074505806
+            },
+            "offset": {
+              "x": 0,
+              "y": 1
+            },
+            "spread": 0,
+            "blendMode": "NORMAL",
+            "showShadowBehindNode": true
+          }
+        ]
+      },
+      {
+        "role": "darkOverlay",
+        "id": "S:cfeeb981370b028be51157d7da8d4e146326e5d4,",
+        "name": "Athena / Surface / darkOverlay",
+        "effects": [
+          {
+            "type": "INNER_SHADOW",
+            "visible": true,
+            "radius": 1,
+            "boundVariables": {},
+            "color": {
+              "r": 1,
+              "g": 1,
+              "b": 1,
+              "a": 0.2199999988079071
+            },
+            "offset": {
+              "x": 0,
+              "y": 0
+            },
+            "spread": 0,
+            "blendMode": "NORMAL"
+          }
+        ]
+      }
+    ]
+  },
+  "mutationSummary": {
+    "directlyMutatedUniqueNodeCount": 734,
+    "mutatedNodeIds": [
+      "2:492",
+      "2:498",
+      "2:504",
+      "2:510",
+      "2:516",
+      "2:522",
+      "17:38",
+      "2:528",
+      "2:533",
+      "2:543",
+      "2:548",
+      "2:553",
+      "2:561",
+      "2:566",
+      "2:573",
+      "2:579",
+      "2:585",
+      "2:591",
+      "2:597",
+      "2:603",
+      "2:605",
+      "2:607",
+      "2:609",
+      "2:612",
+      "2:617",
+      "18:2",
+      "18:82",
+      "18:521",
+      "18:590",
+      "7:128",
+      "7:139",
+      "7:231",
+      "7:331",
+      "7:190",
+      "7:284",
+      "7:386",
+      "7:433",
+      "7:444",
+      "7:564",
+      "7:668",
+      "7:507",
+      "7:627",
+      "7:735",
+      "7:778",
+      "7:789",
+      "7:848",
+      "9:1010",
+      "9:1021",
+      "9:1145",
+      "9:1349",
+      "9:1088",
+      "9:1210",
+      "9:1438",
+      "9:1533",
+      "9:1544",
+      "9:1762",
+      "9:2044",
+      "9:1607",
+      "9:1957",
+      "9:17991",
+      "9:18002",
+      "9:18084",
+      "9:18178",
+      "9:18037",
+      "9:18129",
+      "7:161",
+      "7:207",
+      "7:254",
+      "7:304",
+      "7:355",
+      "7:344",
+      "7:349",
+      "7:408",
+      "7:472",
+      "7:532",
+      "7:592",
+      "7:644",
+      "7:698",
+      "7:680",
+      "7:755",
+      "7:815",
+      "7:879",
+      "7:868",
+      "7:873",
+      "9:1051",
+      "9:1024",
+      "9:1028",
+      "9:1033",
+      "9:1040",
+      "9:1113",
+      "9:1091",
+      "9:1095",
+      "9:1100",
+      "9:1107",
+      "9:1174",
+      "9:1148",
+      "9:1156",
+      "9:1161",
+      "9:1168",
+      "9:1276",
+      "9:1213",
+      "9:1214",
+      "9:1229",
+      "9:1244",
+      "9:1250",
+      "9:1255",
+      "9:1262",
+      "9:1390",
+      "9:1352",
+      "9:1353",
+      "9:1367",
+      "9:1372",
+      "9:1379",
+      "9:1484",
+      "9:1441",
+      "9:1442",
+      "9:1458",
+      "9:1463",
+      "9:1470",
+      "9:1572",
+      "9:1547",
+      "9:1551",
+      "9:1556",
+      "9:1681",
+      "9:1627",
+      "9:1648",
+      "9:1652",
+      "9:1657",
+      "9:1664",
+      "9:1856",
+      "9:1782",
+      "9:1802",
+      "9:1823",
+      "9:1827",
+      "9:1832",
+      "9:1839",
+      "9:1997",
+      "9:1967",
+      "9:1971",
+      "9:1976",
+      "9:1983",
+      "9:2067",
+      "9:2047",
+      "9:2051",
+      "9:2056",
+      "9:18016",
+      "9:18005",
+      "9:18011",
+      "9:18057",
+      "9:18040",
+      "9:18047",
+      "9:18103",
+      "9:18087",
+      "9:18093",
+      "9:18150",
+      "9:18132",
+      "9:18140",
+      "9:18202",
+      "9:18181",
+      "9:18189",
+      "7:2347",
+      "7:2358",
+      "7:2490",
+      "7:2604",
+      "7:2425",
+      "7:2547",
+      "7:2719",
+      "9:3819",
+      "9:3830",
+      "9:4068",
+      "9:4242",
+      "9:3945",
+      "9:4147",
+      "9:4323",
+      "9:4428",
+      "9:4439",
+      "9:4609",
+      "9:4522",
+      "9:4694",
+      "9:4807",
+      "9:4818",
+      "9:5060",
+      "9:5254",
+      "9:4917",
+      "9:5149",
+      "9:5349",
+      "9:5464",
+      "9:5475",
+      "9:5611",
+      "9:5757",
+      "9:5546",
+      "9:5684",
+      "9:5840",
+      "9:5973",
+      "9:5984",
+      "7:2389",
+      "7:2455",
+      "7:2515",
+      "7:2572",
+      "7:2658",
+      "7:2629",
+      "7:2637",
+      "7:2643",
+      "7:2759",
+      "9:3884",
+      "9:3855",
+      "9:3863",
+      "9:3869",
+      "9:4003",
+      "9:3970",
+      "9:3977",
+      "9:3984",
+      "9:4104",
+      "9:4093",
+      "9:4191",
+      "9:4172",
+      "9:4176",
+      "9:4180",
+      "9:4279",
+      "9:4267",
+      "9:4374",
+      "9:4345",
+      "9:4353",
+      "9:4359",
+      "9:4477",
+      "9:4466",
+      "9:4562",
+      "9:4547",
+      "9:4551",
+      "9:4648",
+      "9:4632",
+      "9:4636",
+      "9:4749",
+      "9:4719",
+      "9:4726",
+      "9:4733",
+      "9:4864",
+      "9:4841",
+      "9:4985",
+      "9:4941",
+      "9:4952",
+      "9:4957",
+      "9:4968",
+      "9:5101",
+      "9:5198",
+      "9:5172",
+      "9:5180",
+      "9:5298",
+      "9:5405",
+      "9:5507",
+      "9:5575",
+      "9:5644",
+      "9:5717",
+      "9:5795",
+      "9:5905",
+      "9:5861",
+      "9:5872",
+      "9:5877",
+      "9:5888",
+      "9:6014",
+      "9:6310",
+      "9:6321",
+      "9:6549",
+      "9:6793",
+      "9:6440",
+      "9:6676",
+      "9:6904",
+      "9:7014",
+      "9:7025",
+      "9:7146",
+      "9:7293",
+      "9:7304",
+      "9:7418",
+      "9:7580",
+      "9:7359",
+      "9:7499",
+      "9:7661",
+      "9:7752",
+      "9:7763",
+      "9:8001",
+      "9:8151",
+      "9:7888",
+      "9:8078",
+      "9:8242",
+      "9:8329",
+      "9:8340",
+      "9:8556",
+      "9:8425",
+      "9:8621",
+      "9:11453",
+      "9:11464",
+      "9:11728",
+      "9:12016",
+      "9:11615",
+      "9:11905",
+      "9:12151",
+      "9:12258",
+      "9:12269",
+      "9:12442",
+      "9:12453",
+      "9:12643",
+      "9:12771",
+      "9:12532",
+      "9:12704",
+      "9:12864",
+      "9:12947",
+      "9:12958",
+      "9:13138",
+      "9:13312",
+      "9:13059",
+      "9:13223",
+      "9:6377",
+      "9:6491",
+      "9:6609",
+      "9:6731",
+      "9:6845",
+      "9:6959",
+      "9:7082",
+      "9:7218",
+      "9:7328",
+      "9:7385",
+      "9:7455",
+      "9:7536",
+      "9:7617",
+      "9:7705",
+      "9:7678",
+      "9:7822",
+      "9:7941",
+      "9:8036",
+      "9:8111",
+      "9:8193",
+      "9:8284",
+      "9:8379",
+      "9:8487",
+      "9:8585",
+      "9:8663",
+      "9:8638",
+      "9:11536",
+      "9:11485",
+      "9:11491",
+      "9:11494",
+      "9:11512",
+      "9:11668",
+      "9:11636",
+      "9:11642",
+      "9:11645",
+      "9:11813",
+      "9:11748",
+      "9:11766",
+      "9:11784",
+      "9:11957",
+      "9:11928",
+      "9:12080",
+      "9:12036",
+      "9:12054",
+      "9:12203",
+      "9:12174",
+      "9:12354",
+      "9:12290",
+      "9:12308",
+      "9:12326",
+      "9:12489",
+      "9:12584",
+      "9:12670",
+      "9:12734",
+      "9:12814",
+      "9:12791",
+      "9:12803",
+      "9:12904",
+      "9:13005",
+      "9:12979",
+      "9:12991",
+      "9:13095",
+      "9:13177",
+      "9:13264",
+      "9:13351",
+      "9:9018",
+      "9:9029",
+      "9:9193",
+      "9:9429",
+      "9:9102",
+      "9:9330",
+      "9:9518",
+      "9:9591",
+      "9:9602",
+      "9:9770",
+      "9:9958",
+      "9:9697",
+      "9:9859",
+      "9:10051",
+      "9:10130",
+      "9:10141",
+      "9:10317",
+      "9:10559",
+      "9:10236",
+      "9:10442",
+      "9:10650",
+      "9:10729",
+      "9:10740",
+      "9:10819",
+      "9:10830",
+      "9:11088",
+      "9:11358",
+      "9:10915",
+      "9:11257",
+      "9:9062",
+      "9:9050",
+      "9:9144",
+      "9:9123",
+      "9:9258",
+      "9:9214",
+      "9:9376",
+      "9:9351",
+      "9:9470",
+      "9:9453",
+      "9:9553",
+      "9:9541",
+      "9:9646",
+      "9:9730",
+      "9:9811",
+      "9:9905",
+      "9:10001",
+      "9:10089",
+      "9:10185",
+      "9:10273",
+      "9:10376",
+      "9:10342",
+      "9:10344",
+      "9:10352",
+      "9:10359",
+      "9:10497",
+      "9:10465",
+      "9:10477",
+      "9:10601",
+      "9:10582",
+      "9:10590",
+      "9:10688",
+      "9:10778",
+      "9:10869",
+      "9:10850",
+      "9:10853",
+      "9:11001",
+      "9:10935",
+      "9:10938",
+      "9:10943",
+      "9:10947",
+      "9:11172",
+      "9:11108",
+      "9:11111",
+      "9:11116",
+      "9:11120",
+      "9:11304",
+      "9:11278",
+      "9:11281",
+      "9:11404",
+      "9:11378",
+      "9:11381",
+      "9:14115",
+      "9:14126",
+      "9:14310",
+      "9:14490",
+      "9:14221",
+      "9:14405",
+      "9:14643",
+      "9:14714",
+      "9:14725",
+      "9:14901",
+      "9:15099",
+      "9:14832",
+      "9:15002",
+      "9:15178",
+      "9:15281",
+      "9:15292",
+      "9:15558",
+      "9:15778",
+      "9:15449",
+      "9:15671",
+      "9:15901",
+      "9:16016",
+      "9:16027",
+      "9:16245",
+      "9:16152",
+      "9:16336",
+      "9:16393",
+      "9:16404",
+      "9:16550",
+      "9:16710",
+      "9:16473",
+      "9:16627",
+      "9:16791",
+      "9:16848",
+      "9:16859",
+      "9:16999",
+      "9:17161",
+      "9:16940",
+      "9:17074",
+      "9:17246",
+      "9:17323",
+      "9:17334",
+      "9:17502",
+      "9:17674",
+      "9:17417",
+      "9:17595",
+      "9:17743",
+      "9:17826",
+      "9:17837",
+      "9:17918",
+      "9:14170",
+      "9:14145",
+      "9:14157",
+      "9:14262",
+      "9:14240",
+      "9:14249",
+      "9:14354",
+      "9:14444",
+      "9:14563",
+      "9:14510",
+      "9:14520",
+      "9:14525",
+      "9:14535",
+      "9:14540",
+      "9:14550",
+      "9:14677",
+      "9:14775",
+      "9:14744",
+      "9:14756",
+      "9:14863",
+      "9:14948",
+      "9:14922",
+      "9:14934",
+      "9:15047",
+      "9:15023",
+      "9:15135",
+      "9:15118",
+      "9:15228",
+      "9:15200",
+      "9:15212",
+      "9:15367",
+      "9:15314",
+      "9:15325",
+      "9:15330",
+      "9:15341",
+      "9:15346",
+      "9:15500",
+      "9:15611",
+      "9:15721",
+      "9:15836",
+      "9:15957",
+      "9:16086",
+      "9:16195",
+      "9:16287",
+      "9:16363",
+      "9:16435",
+      "9:16508",
+      "9:16585",
+      "9:16665",
+      "9:16747",
+      "9:16818",
+      "9:16896",
+      "9:16966",
+      "9:17033",
+      "9:17114",
+      "9:17200",
+      "9:17283",
+      "9:17372",
+      "9:17456",
+      "9:17545",
+      "9:17631",
+      "9:17705",
+      "9:17783",
+      "9:17874",
+      "9:17953",
+      "17:10970",
+      "17:10980",
+      "17:11063",
+      "17:11176",
+      "17:11273",
+      "17:11296",
+      "17:11336",
+      "17:11390",
+      "17:11400",
+      "17:11440",
+      "17:11494",
+      "17:11601",
+      "17:11625",
+      "17:11641",
+      "17:11648",
+      "17:11678",
+      "17:11702",
+      "17:11724",
+      "17:11731",
+      "9:13393",
+      "9:13404",
+      "9:13584",
+      "9:13748",
+      "9:13497",
+      "9:13675",
+      "9:13851",
+      "9:13940",
+      "9:13951",
+      "9:14032",
+      "13:477",
+      "13:484",
+      "13:497",
+      "13:505",
+      "13:524",
+      "13:526",
+      "13:528",
+      "13:531",
+      "13:541",
+      "13:549",
+      "13:566",
+      "13:575",
+      "13:669",
+      "13:673",
+      "13:687",
+      "13:696",
+      "13:778",
+      "13:785",
+      "13:798",
+      "13:806",
+      "13:825",
+      "13:827",
+      "13:829",
+      "13:832",
+      "13:842",
+      "13:850",
+      "13:867",
+      "13:876",
+      "13:966",
+      "13:970",
+      "13:984",
+      "13:993",
+      "14:813",
+      "14:820",
+      "14:833",
+      "14:841",
+      "14:860",
+      "14:862",
+      "14:864",
+      "14:867",
+      "14:877",
+      "14:885",
+      "14:902",
+      "14:911",
+      "14:1026",
+      "14:1030",
+      "14:1044",
+      "14:1053",
+      "14:1092",
+      "14:1099",
+      "14:1112",
+      "14:1120",
+      "14:1139",
+      "14:1141",
+      "14:1143",
+      "14:1146",
+      "14:1156",
+      "14:1164",
+      "14:1178",
+      "14:1187",
+      "14:1260",
+      "14:1264",
+      "14:1278",
+      "14:1287",
+      "14:1423",
+      "14:1430",
+      "14:1443",
+      "14:1451",
+      "14:1470",
+      "14:1472",
+      "14:1474",
+      "14:1477",
+      "14:1487",
+      "14:1495",
+      "14:1510",
+      "14:1519",
+      "14:1613",
+      "14:1617",
+      "14:1631",
+      "14:1640",
+      "14:1767",
+      "14:1774",
+      "14:1787",
+      "14:1795",
+      "14:1814",
+      "14:1816",
+      "14:1818",
+      "14:1821",
+      "14:1831",
+      "14:1839",
+      "14:1857",
+      "14:1866",
+      "14:1956",
+      "14:1960",
+      "14:1974",
+      "14:1983",
+      "14:2045",
+      "14:2052",
+      "14:2065",
+      "14:2073",
+      "14:2092",
+      "14:2094",
+      "14:2096",
+      "14:2099",
+      "14:2109",
+      "14:2117",
+      "14:2131",
+      "14:2140",
+      "14:2218",
+      "14:2222",
+      "14:2236",
+      "14:2246",
+      "14:2359",
+      "14:2476",
+      "14:2557",
+      "9:13447",
+      "9:13424",
+      "9:13537",
+      "9:13514",
+      "9:13626",
+      "9:13602",
+      "9:13708",
+      "9:13693",
+      "9:13796",
+      "9:13767",
+      "9:13894",
+      "9:13870",
+      "9:13988",
+      "9:13968",
+      "9:14072",
+      "9:14049",
+      "17:11335",
+      "17:11439"
+    ],
+    "perPage": [
+      {
+        "pageId": "1:8",
+        "pageName": "07 · 基础组件",
+        "count": 25,
+        "roleCounts": {
+          "button": 8,
+          "focus-ring": 1,
+          "chip": 10,
+          "field-primary": 4,
+          "navigation": 2
+        },
+        "preservation": {
+          "before": {
+            "nodeCount": 603,
+            "textHash": "320214ad",
+            "prototypeHash": "741638a5"
+          },
+          "after": {
+            "nodeCount": 603,
+            "textHash": "320214ad",
+            "prototypeHash": "741638a5"
+          },
+          "passed": true
+        },
+        "preservedFeedbackIds": [
+          "17:38",
+          "2:605",
+          "2:607"
+        ],
+        "preservedToolIds": []
+      },
+      {
+        "pageId": "0:1",
+        "pageName": "00 · Agent 交互总览",
+        "count": 4,
+        "roleCounts": {
+          "board-window": 4
+        },
+        "preservation": {
+          "before": {
+            "nodeCount": 648,
+            "textHash": "31b057ef",
+            "prototypeHash": "741638a5"
+          },
+          "after": {
+            "nodeCount": 648,
+            "textHash": "31b057ef",
+            "prototypeHash": "741638a5"
+          },
+          "passed": true
+        },
+        "preservedFeedbackIds": [],
+        "preservedToolIds": []
+      },
+      {
+        "pageId": "1:2",
+        "pageName": "01 · 对话与输入",
+        "count": 131,
+        "roleCounts": {
+          "board-window": 6,
+          "tag": 42,
+          "flat-state-shell": 30,
+          "icon-button": 29,
+          "code-shell": 1,
+          "composer": 11,
+          "inset-surface": 7,
+          "overlay": 5
+        },
+        "preservation": {
+          "before": {
+            "nodeCount": 1997,
+            "textHash": "33825c9",
+            "prototypeHash": "741638a5"
+          },
+          "after": {
+            "nodeCount": 1997,
+            "textHash": "33825c9",
+            "prototypeHash": "741638a5"
+          },
+          "passed": true
+        },
+        "preservedFeedbackIds": [
+          "9:1148"
+        ],
+        "preservedToolIds": []
+      },
+      {
+        "pageId": "1:3",
+        "pageName": "02 · 提问与审批",
+        "count": 100,
+        "roleCounts": {
+          "board-window": 6,
+          "tag": 30,
+          "panel": 29,
+          "option-selected": 9,
+          "option": 8,
+          "field-secondary": 9,
+          "code-shell": 1,
+          "inset-surface": 4,
+          "icon-button": 4
+        },
+        "preservation": {
+          "before": {
+            "nodeCount": 2548,
+            "textHash": "2167549b",
+            "prototypeHash": "741638a5"
+          },
+          "after": {
+            "nodeCount": 2548,
+            "textHash": "2167549b",
+            "prototypeHash": "741638a5"
+          },
+          "passed": true
+        },
+        "preservedFeedbackIds": [
+          "9:4267"
+        ],
+        "preservedToolIds": []
+      },
+      {
+        "pageId": "1:4",
+        "pageName": "03 · 计划与执行",
+        "count": 116,
+        "roleCounts": {
+          "board-window": 9,
+          "tag": 46,
+          "panel": 26,
+          "chat-tool": 16,
+          "code-shell": 2,
+          "inset-surface": 15,
+          "icon-button": 2
+        },
+        "preservation": {
+          "before": {
+            "nodeCount": 4143,
+            "textHash": "6817c06",
+            "prototypeHash": "741638a5"
+          },
+          "after": {
+            "nodeCount": 4143,
+            "textHash": "6817c06",
+            "prototypeHash": "741638a5"
+          },
+          "passed": true
+        },
+        "preservedFeedbackIds": [],
+        "preservedToolIds": [
+          "9:7328",
+          "9:7385",
+          "9:7455",
+          "9:7536",
+          "9:7617",
+          "9:7705",
+          "9:7822",
+          "9:7941",
+          "9:8036",
+          "9:8111",
+          "9:8193",
+          "9:8284",
+          "9:8379",
+          "9:8487",
+          "9:8585",
+          "9:8663"
+        ]
+      },
+      {
+        "pageId": "1:5",
+        "pageName": "04 · Skill 与 MCP",
+        "count": 81,
+        "roleCounts": {
+          "board-window": 5,
+          "tag": 35,
+          "panel": 24,
+          "field-secondary": 3,
+          "option-selected": 1,
+          "option": 2,
+          "inset-surface": 3,
+          "icon-button": 8
+        },
+        "preservation": {
+          "before": {
+            "nodeCount": 2312,
+            "textHash": "a7b3e47f",
+            "prototypeHash": "741638a5"
+          },
+          "after": {
+            "nodeCount": 2312,
+            "textHash": "a7b3e47f",
+            "prototypeHash": "741638a5"
+          },
+          "passed": true
+        },
+        "preservedFeedbackIds": [],
+        "preservedToolIds": []
+      },
+      {
+        "pageId": "1:6",
+        "pageName": "05 · 产物与恢复",
+        "count": 134,
+        "roleCounts": {
+          "board-window": 10,
+          "tag": 42,
+          "panel": 50,
+          "inset-surface": 13,
+          "icon-button": 10,
+          "code-shell": 1,
+          "overlay": 2,
+          "field-secondary": 6
+        },
+        "preservation": {
+          "before": {
+            "nodeCount": 4457,
+            "textHash": "d90a547c",
+            "prototypeHash": "741638a5"
+          },
+          "after": {
+            "nodeCount": 4457,
+            "textHash": "d90a547c",
+            "prototypeHash": "741638a5"
+          },
+          "passed": true
+        },
+        "preservedFeedbackIds": [
+          "17:11702"
+        ],
+        "preservedToolIds": []
+      },
+      {
+        "pageId": "1:7",
+        "pageName": "06 · 组合场景与适配",
+        "count": 141,
+        "roleCounts": {
+          "board-window": 12,
+          "tag": 8,
+          "icon-button": 35,
+          "navigation": 42,
+          "navigation-selected": 7,
+          "decorative-sidebar-divider": 7,
+          "user-message": 7,
+          "composer": 7,
+          "panel": 8,
+          "inset-surface": 8
+        },
+        "preservation": {
+          "before": {
+            "nodeCount": 2756,
+            "textHash": "8ac7f68e",
+            "prototypeHash": "bbbb1361"
+          },
+          "after": {
+            "nodeCount": 2756,
+            "textHash": "8ac7f68e",
+            "prototypeHash": "bbbb1361"
+          },
+          "passed": true
+        },
+        "preservedFeedbackIds": [],
+        "preservedToolIds": []
+      }
+    ],
+    "targetedFix": {
+      "mutatedNodeIds": [
+        "17:11335",
+        "17:11336",
+        "17:11439",
+        "17:11440"
+      ],
+      "readback": [
+        {
+          "id": "17:11335",
+          "name": "Player ready overlay",
+          "radius": 22,
+          "fillCount": 1,
+          "strokeCount": 0,
+          "effectCount": 3,
+          "effectStyleId": "S:3a0c35d0087fd8c946e323ec248f9447157a128d,"
+        },
+        {
+          "id": "17:11336",
+          "name": "Player center control",
+          "radius": 0,
+          "fillCount": 0,
+          "strokeCount": 0,
+          "effectCount": 0,
+          "effectStyleId": ""
+        },
+        {
+          "id": "17:11439",
+          "name": "Player buffering overlay",
+          "radius": 22,
+          "fillCount": 1,
+          "strokeCount": 0,
+          "effectCount": 3,
+          "effectStyleId": "S:3a0c35d0087fd8c946e323ec248f9447157a128d,"
+        },
+        {
+          "id": "17:11440",
+          "name": "Player center control",
+          "radius": 0,
+          "fillCount": 0,
+          "strokeCount": 0,
+          "effectCount": 0,
+          "effectStyleId": ""
+        }
+      ]
+    }
+  },
+  "readback": [
+    {
+      "pageId": "1:8",
+      "nodes": [
+        {
+          "id": "2:492",
+          "name": "Style=Primary",
+          "type": "COMPONENT",
+          "radius": 24,
+          "strokeWeight": 1,
+          "strokeCount": 0,
+          "fillVariables": [
+            "VariableID:1:40"
+          ],
+          "effectCount": 0,
+          "effectStyleId": "",
+          "clipsContent": false,
+          "opacity": 1
+        },
+        {
+          "id": "2:498",
+          "name": "Style=Secondary",
+          "type": "COMPONENT",
+          "radius": 24,
+          "strokeWeight": 0,
+          "strokeCount": 0,
+          "fillVariables": [
+            "VariableID:1:19"
+          ],
+          "effectCount": 0,
+          "effectStyleId": "",
+          "clipsContent": false,
+          "opacity": 1
+        },
+        {
+          "id": "2:603",
+          "name": "State=Default",
+          "type": "COMPONENT",
+          "radius": 12,
+          "strokeWeight": 0,
+          "strokeCount": 0,
+          "fillVariables": [
+            "VariableID:1:16"
+          ],
+          "effectCount": 3,
+          "effectStyleId": "S:9bd8f31744cec2f22a7a1d214accd75bbdc52893,",
+          "clipsContent": false,
+          "opacity": 1
+        },
+        {
+          "id": "2:605",
+          "name": "State=Focus",
+          "type": "COMPONENT",
+          "radius": 12,
+          "strokeWeight": 2,
+          "strokeCount": 1,
+          "fillVariables": [
+            "VariableID:1:16"
+          ],
+          "effectCount": 3,
+          "effectStyleId": "S:9bd8f31744cec2f22a7a1d214accd75bbdc52893,",
+          "clipsContent": false,
+          "opacity": 1
+        },
+        {
+          "id": "2:607",
+          "name": "State=Error",
+          "type": "COMPONENT",
+          "radius": 12,
+          "strokeWeight": 2,
+          "strokeCount": 1,
+          "fillVariables": [
+            "VariableID:1:16"
+          ],
+          "effectCount": 3,
+          "effectStyleId": "S:9bd8f31744cec2f22a7a1d214accd75bbdc52893,",
+          "clipsContent": false,
+          "opacity": 1
+        },
+        {
+          "id": "2:609",
+          "name": "State=Disabled",
+          "type": "COMPONENT",
+          "radius": 12,
+          "strokeWeight": 0,
+          "strokeCount": 0,
+          "fillVariables": [
+            "VariableID:1:19"
+          ],
+          "effectCount": 0,
+          "effectStyleId": "",
+          "clipsContent": false,
+          "opacity": 1
+        },
+        {
+          "id": "2:617",
+          "name": "State=Selected",
+          "type": "COMPONENT",
+          "radius": 16,
+          "strokeWeight": 0,
+          "strokeCount": 0,
+          "fillVariables": [
+            "VariableID:1:16"
+          ],
+          "effectCount": 1,
+          "effectStyleId": "S:97fc0d4eff42a93f6bb7e4b49abc62ccbcec12f2,",
+          "clipsContent": false,
+          "opacity": 1
+        },
+        {
+          "id": "17:38",
+          "name": "Focus ring (visual overflow)",
+          "type": "RECTANGLE",
+          "radius": 24,
+          "strokeWeight": 2,
+          "strokeCount": 1,
+          "fillVariables": [],
+          "effectCount": 0,
+          "effectStyleId": "",
+          "clipsContent": null,
+          "opacity": 1
+        }
+      ]
+    },
+    {
+      "pageId": "1:3",
+      "nodes": [
+        {
+          "id": "9:3884",
+          "name": "State=qa_single",
+          "type": "COMPONENT",
+          "radius": 24,
+          "strokeWeight": 0,
+          "strokeCount": 0,
+          "fillVariables": [
+            "VariableID:1:16"
+          ],
+          "effectCount": 3,
+          "effectStyleId": "S:ff95729c2f54d810e87b015db5b0c6f5feb50cca,",
+          "clipsContent": false,
+          "opacity": 1
+        },
+        {
+          "id": "9:3885",
+          "name": "Athena / Agent / qa",
+          "type": "INSTANCE",
+          "radius": 24,
+          "strokeWeight": 0,
+          "strokeCount": 0,
+          "fillVariables": [
+            "VariableID:1:16"
+          ],
+          "effectCount": 3,
+          "effectStyleId": "S:ff95729c2f54d810e87b015db5b0c6f5feb50cca,",
+          "clipsContent": false,
+          "opacity": 1
+        },
+        {
+          "id": "9:4093",
+          "name": "Athena / Field",
+          "type": "INSTANCE",
+          "radius": 12,
+          "strokeWeight": 0,
+          "strokeCount": 0,
+          "fillVariables": [
+            "VariableID:1:19"
+          ],
+          "effectCount": 0,
+          "effectStyleId": "",
+          "clipsContent": false,
+          "opacity": 1
+        },
+        {
+          "id": "9:4267",
+          "name": "Athena / Field",
+          "type": "INSTANCE",
+          "radius": 12,
+          "strokeWeight": 2,
+          "strokeCount": 1,
+          "fillVariables": [
+            "VariableID:1:19"
+          ],
+          "effectCount": 0,
+          "effectStyleId": "",
+          "clipsContent": false,
+          "opacity": 1
+        },
+        {
+          "id": "I9:4105;9:4093",
+          "name": "Athena / Field",
+          "type": "INSTANCE",
+          "radius": 12,
+          "strokeWeight": 0,
+          "strokeCount": 0,
+          "fillVariables": [
+            "VariableID:1:19"
+          ],
+          "effectCount": 0,
+          "effectStyleId": "",
+          "clipsContent": false,
+          "opacity": 1
+        },
+        {
+          "id": "I9:4280;9:4267",
+          "name": "Athena / Field",
+          "type": "INSTANCE",
+          "radius": 12,
+          "strokeWeight": 2,
+          "strokeCount": 1,
+          "fillVariables": [
+            "VariableID:1:19"
+          ],
+          "effectCount": 0,
+          "effectStyleId": "",
+          "clipsContent": false,
+          "opacity": 1
+        }
+      ]
+    },
+    {
+      "pageId": "1:4",
+      "nodes": [
+        {
+          "id": "9:7705",
+          "name": "State=tool_stdout",
+          "type": "COMPONENT",
+          "radius": 12,
+          "strokeWeight": 1,
+          "strokeCount": 1,
+          "fillVariables": [
+            "VariableID:1:16"
+          ],
+          "effectCount": 0,
+          "effectStyleId": "",
+          "clipsContent": false,
+          "opacity": 1
+        }
+      ]
+    },
+    {
+      "pageId": "1:5",
+      "nodes": [
+        {
+          "id": "9:11001",
+          "name": "State=app_ready",
+          "type": "COMPONENT",
+          "radius": 24,
+          "strokeWeight": 0,
+          "strokeCount": 0,
+          "fillVariables": [
+            "VariableID:1:16"
+          ],
+          "effectCount": 3,
+          "effectStyleId": "S:ff95729c2f54d810e87b015db5b0c6f5feb50cca,",
+          "clipsContent": false,
+          "opacity": 1
+        },
+        {
+          "id": "9:10943",
+          "name": "Embedded usage view",
+          "type": "FRAME",
+          "radius": 12,
+          "strokeWeight": 0,
+          "strokeCount": 0,
+          "fillVariables": [
+            "VariableID:1:13"
+          ],
+          "effectCount": 0,
+          "effectStyleId": "",
+          "clipsContent": false,
+          "opacity": 1
+        }
+      ]
+    },
+    {
+      "pageId": "1:7",
+      "nodes": [
+        {
+          "id": "14:1092",
+          "name": "Flow / 04 工具执行",
+          "type": "FRAME",
+          "radius": 24,
+          "strokeWeight": 1,
+          "strokeCount": 0,
+          "fillVariables": [
+            "VariableID:1:16"
+          ],
+          "effectCount": 0,
+          "effectStyleId": "",
+          "clipsContent": true,
+          "opacity": 1
+        },
+        {
+          "id": "14:1198",
+          "name": "Case instance / tool_stdout",
+          "type": "INSTANCE",
+          "radius": 12,
+          "strokeWeight": 1,
+          "strokeCount": 1,
+          "fillVariables": [
+            "VariableID:1:16"
+          ],
+          "effectCount": 0,
+          "effectStyleId": "",
+          "clipsContent": false,
+          "opacity": 1
+        },
+        {
+          "id": "14:1293",
+          "name": "Case instance / approve_allowed",
+          "type": "INSTANCE",
+          "radius": 24,
+          "strokeWeight": 0,
+          "strokeCount": 0,
+          "fillVariables": [
+            "VariableID:1:16"
+          ],
+          "effectCount": 3,
+          "effectStyleId": "S:ff95729c2f54d810e87b015db5b0c6f5feb50cca,",
+          "clipsContent": false,
+          "opacity": 1
+        },
+        {
+          "id": "14:1139",
+          "name": "Navigation / 首页按钮调整",
+          "type": "FRAME",
+          "radius": 16,
+          "strokeWeight": 0,
+          "strokeCount": 0,
+          "fillVariables": [
+            "VariableID:1:16"
+          ],
+          "effectCount": 1,
+          "effectStyleId": "S:97fc0d4eff42a93f6bb7e4b49abc62ccbcec12f2,",
+          "clipsContent": false,
+          "opacity": 1
+        },
+        {
+          "id": "14:1260",
+          "name": "Composer",
+          "type": "FRAME",
+          "radius": 24,
+          "strokeWeight": 0,
+          "strokeCount": 0,
+          "fillVariables": [
+            "VariableID:1:16"
+          ],
+          "effectCount": 3,
+          "effectStyleId": "S:ff95729c2f54d810e87b015db5b0c6f5feb50cca,",
+          "clipsContent": false,
+          "opacity": 1
+        }
+      ]
+    },
+    {
+      "pageId": "1:6",
+      "nodes": [
+        {
+          "id": "17:10980",
+          "name": "Product panel / R01",
+          "type": "FRAME",
+          "radius": 24,
+          "strokeWeight": 0,
+          "strokeCount": 0,
+          "fillVariables": [
+            "VariableID:1:16"
+          ],
+          "effectCount": 3,
+          "effectStyleId": "S:ff95729c2f54d810e87b015db5b0c6f5feb50cca,",
+          "clipsContent": false,
+          "opacity": 1
+        },
+        {
+          "id": "17:11063",
+          "name": "Product panel / R02",
+          "type": "FRAME",
+          "radius": 24,
+          "strokeWeight": 0,
+          "strokeCount": 0,
+          "fillVariables": [
+            "VariableID:1:16"
+          ],
+          "effectCount": 3,
+          "effectStyleId": "S:ff95729c2f54d810e87b015db5b0c6f5feb50cca,",
+          "clipsContent": false,
+          "opacity": 1
+        },
+        {
+          "id": "17:11176",
+          "name": "Product panel / R03",
+          "type": "FRAME",
+          "radius": 24,
+          "strokeWeight": 0,
+          "strokeCount": 0,
+          "fillVariables": [
+            "VariableID:1:16"
+          ],
+          "effectCount": 3,
+          "effectStyleId": "S:ff95729c2f54d810e87b015db5b0c6f5feb50cca,",
+          "clipsContent": false,
+          "opacity": 1
+        },
+        {
+          "id": "17:11296",
+          "name": "Product panel / R04",
+          "type": "FRAME",
+          "radius": 24,
+          "strokeWeight": 0,
+          "strokeCount": 0,
+          "fillVariables": [
+            "VariableID:1:16"
+          ],
+          "effectCount": 3,
+          "effectStyleId": "S:ff95729c2f54d810e87b015db5b0c6f5feb50cca,",
+          "clipsContent": false,
+          "opacity": 1
+        },
+        {
+          "id": "17:11625",
+          "name": "Input / 数量",
+          "type": "FRAME",
+          "radius": 12,
+          "strokeWeight": 0,
+          "strokeCount": 0,
+          "fillVariables": [
+            "VariableID:1:19"
+          ],
+          "effectCount": 0,
+          "effectStyleId": "",
+          "clipsContent": false,
+          "opacity": 1
+        },
+        {
+          "id": "17:11702",
+          "name": "Input / 数量",
+          "type": "FRAME",
+          "radius": 12,
+          "strokeWeight": 2,
+          "strokeCount": 1,
+          "fillVariables": [
+            "VariableID:1:19"
+          ],
+          "effectCount": 0,
+          "effectStyleId": "",
+          "clipsContent": false,
+          "opacity": 1
+        },
+        {
+          "id": "17:11335",
+          "name": "Player ready overlay",
+          "type": "FRAME",
+          "radius": 22,
+          "strokeWeight": 0,
+          "strokeCount": 0,
+          "fillVariables": [
+            "VariableID:1:16"
+          ],
+          "effectCount": 3,
+          "effectStyleId": "S:3a0c35d0087fd8c946e323ec248f9447157a128d,",
+          "clipsContent": false,
+          "opacity": 1
+        },
+        {
+          "id": "17:11336",
+          "name": "Player center control",
+          "type": "FRAME",
+          "radius": 0,
+          "strokeWeight": 0,
+          "strokeCount": 0,
+          "fillVariables": [],
+          "effectCount": 0,
+          "effectStyleId": "",
+          "clipsContent": false,
+          "opacity": 1
+        }
+      ]
+    }
+  ],
+  "visualReview": {
+    "status": "passed",
+    "captureMethod": "Native node.screenshot({scale:1})",
+    "frames": [
+      {
+        "nodeId": "9:3819",
+        "result": "24px white panels with subtle surface shadow; embedded 12px fields use gray fill without stroke or nested shadow; error field keeps 2px feedback; selected and disabled choices remain distinct."
+      },
+      {
+        "nodeId": "9:7293",
+        "result": "Native ChatTool boundary retained: 12px radius, thin 1px border, no elevation. Pill buttons stay readable and command output is unchanged."
+      },
+      {
+        "nodeId": "9:10819",
+        "result": "24px elevated outer panels with neutral inset usage surface. Chart data, values and labels unchanged; no nested panel shadows."
+      },
+      {
+        "nodeId": "14:1092",
+        "result": "White selected navigation with light shadow, 24px composer with surface shadow, 24px permission card, 12px outlined tool. No visible clipping or double shadow."
+      },
+      {
+        "nodeId": "17:10970",
+        "result": "24px media cards and round buttons. Player overlay corrected to 22px and a single outer overlay shadow; inner row transparent. Media/chart content unchanged."
+      }
+    ],
+    "issuesFoundAndFixed": [
+      {
+        "nodeIds": [
+          "17:11335",
+          "17:11336",
+          "17:11439",
+          "17:11440"
+        ],
+        "issue": "Initial player center-control styling put shadow on an inner row inside an existing player overlay.",
+        "fix": "Moved 22px radius and native overlay style to the outer ready/buffering overlay. Inner center row uses transparent fill, radius 0 and no effects.",
+        "verifiedBy": "Fresh screenshot of 17:10970 and final property readback for both ready and buffering containers."
+      }
+    ],
+    "openIssues": []
+  },
+  "preview": {
+    "path": "../previews/heroui-surface/agent-interaction.png",
+    "width": 1600,
+    "height": 1000,
+    "bytes": 100714,
+    "sha256": "7543b9c89cce5aa8124a760073ad0d1e66c4a19e1bf09b689497f7eee8e0f2aa",
+    "nodeId": "14:1092",
+    "provenance": "Native Figma inline PNG decoded directly; no image alteration."
+  },
+  "nativeVsCustom": {
+    "native": [
+      "Input 12px; default field border 0; primary field shadow; embedded secondary field without shadow.",
+      "Button 24px; Card 24px with native light surface shadow.",
+      "ChatTool 12px with thin border and no default elevation."
+    ],
+    "athenaCustomization": [
+      "Composer 24px plus surface shadow.",
+      "Selected navigation uses white fill plus selected shadow.",
+      "22px overlay treatment applied consistently to the scoped notification/player overlays."
+    ]
+  },
+  "limitations": [
+    "Visual review covers the five requested representative boards; no new 175-state semantic audit.",
+    "No application runtime, prototype click execution or dark-mode visual audit was performed.",
+    "The darkOverlay style is provisioned from the shared recipe; current white-first canvases use the light surface styles."
+  ],
+  "preservationEvidence": {
+    "surfaceMutationSnapshot": {
+      "allEightPageNodeCountsUnchanged": true,
+      "allEightPageTextAndTextPaintHashesUnchanged": true,
+      "allEightPagePrototypeHashesUnchanged": true,
+      "comments": "No text characters, data payloads, fixture values or prototype connections were edited. Existing literal CSS examples and media/chart inner content were excluded from surface mutation. No new semantic behavior is claimed."
+    },
+    "snapshotBoundary": "The page text and paint hashes were captured during the Agent surface mutation. They do not claim that every document text stayed unchanged after the parent updated the overview to Revision04.",
+    "laterOverviewDocumentationChanges": [
+      "18:10",
+      "18:15"
+    ],
+    "stateUiAndFixtureTextPreserved": true,
+    "entireDocumentTextUnchangedClaimed": false
+  }
+}

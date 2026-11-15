@@ -1,0 +1,272 @@
+{
+  "schemaVersion": "1.0",
+  "documentType": "surface-refinement-verification",
+  "revision": "heroui-surface-2026-11-02",
+  "figmaDocumentationRevision": "04",
+  "date": "2026-11-02",
+  "status": "passed-for-surface-refinement-scope",
+  "requestedDirection": "保持白色黑白与彩色图标/标识；接近HeroUI Pro原生的表面质感，减少装饰线，增加圆润程度。",
+  "recipeEvidence": "heroui-surface-recipe.json",
+  "nativeReferenceEvidence": "heroui-native-reference.json",
+  "foundationEvidence": {
+    "main": "heroui-main-foundation.json",
+    "agent": "heroui-agent-foundation.json"
+  },
+  "appliedRecipe": {
+    "radius": {
+      "control": 12,
+      "button": 24,
+      "panel": 24,
+      "composer": 24,
+      "overlay": 22,
+      "navigation": 16,
+      "option": 12,
+      "window": 24,
+      "chip": 999,
+      "iconButton": 16
+    },
+    "normalFieldBorderWidth": 0,
+    "focusRingWidth": 2,
+    "effectStyleRoles": [
+      "field",
+      "surface",
+      "overlay",
+      "selected",
+      "darkOverlay"
+    ],
+    "primaryFields": "Light mode surface fill plus native field shadow; no default stroke.",
+    "nestedFields": "Secondary neutral fill without a second shadow.",
+    "darkFieldsAndComposer": "Secondary neutral fill without light-mode drop shadows.",
+    "hover": "N02 and I03 use subtle fill; default remains white surface plus field shadow.",
+    "tabs": "20 rounded segmented tracks wrap existing tab nodes; original tab IDs and prototype targets retained.",
+    "dividers": "Sidebar and inspector group decorative rules removed; meaningful data, focus and error boundaries retained."
+  },
+  "nativeVsCustom": {
+    "nativeAligned": [
+      "Input radius12/default border0",
+      "Button radius24",
+      "Card radius24 with native light surface shadow",
+      "Select overlay radius22",
+      "ChatTool radius12, thin border and no default elevation"
+    ],
+    "athenaCustom": [
+      "Composer radius24 plus surface shadow; native stacked PromptInput is radius16 with no default elevation",
+      "White/elevated selected navigation",
+      "Compact Inspector34px control height",
+      "Overlay22 applied to scoped notification/player surfaces",
+      "Dark overlay inner highlight alpha0.22 versus native0.30"
+    ]
+  },
+  "visualReview": {
+    "status": "passed-for-15-representative-boards",
+    "mainBoards": [
+      "31:229",
+      "25:229",
+      "31:409",
+      "43:1326",
+      "43:1973",
+      "31:1290",
+      "26:4425",
+      "35:297",
+      "26:687",
+      "26:5233"
+    ],
+    "agentBoards": [
+      "9:3819",
+      "9:7293",
+      "9:10819",
+      "14:1092",
+      "17:10970"
+    ],
+    "reviewedBoardCount": 15,
+    "mainEvidence": "heroui-main-surface-refinement.json",
+    "agentEvidence": "heroui-agent-surface-refinement.json",
+    "full101BoardScreenshotAuditClaimed": false
+  },
+  "structuralReview": {
+    "status": "passed-for-stated-scope",
+    "mainPages": 6,
+    "mainBoards": 49,
+    "mainPrototypeTargets": 107,
+    "missingTargets": 0,
+    "unexpectedOverflow": 0,
+    "intentionalOverflow": {
+      "id": "I26:5512;61:3301",
+      "name": "Scrollable text viewport",
+      "width": 448,
+      "height": 72,
+      "clipsContent": true,
+      "overflowDirection": "VERTICAL"
+    },
+    "agentPages": 8,
+    "agentBoardsPreserved": 52,
+    "agentCanonicalStatesPreserved": 175,
+    "newSegmentedTabTracks": 20,
+    "mainEvidence": "heroui-main-geometry.json",
+    "agentEvidence": "heroui-agent-surface-refinement.json"
+  },
+  "resolvedFindings": [
+    {
+      "issue": "New bound paints retained a white fallback in the dark rendering",
+      "fix": "Resolved each bound paint for its consumer and materialized actual RGB; dark fields/composer use the secondary neutral surface"
+    },
+    {
+      "issue": "Color plane and inner fields inherited an unnecessary second shadow",
+      "fix": "The functional color plane is unraised; inner fields use secondary fill without shadow; outer popup alone uses overlay elevation"
+    },
+    {
+      "issue": "Filled default controls risked losing the previous hover distinction",
+      "fix": "Radius-hover and CSS-hover explicitly use subtle fill while default is surface + field shadow; actual default/hover/focus sheets visually checked"
+    },
+    {
+      "issue": "White color swatches became hard to distinguish on white fields",
+      "fix": "Added an inner neutral edge to white swatches without altering their sampled values"
+    },
+    {
+      "nodeIds": [
+        "17:11335",
+        "17:11336",
+        "17:11439",
+        "17:11440"
+      ],
+      "issue": "Initial player center-control styling put shadow on an inner row inside an existing player overlay.",
+      "fix": "Moved 22px radius and native overlay style to the outer ready/buffering overlay. Inner center row uses transparent fill, radius 0 and no effects.",
+      "verifiedBy": "Fresh screenshot of 17:10970 and final property readback for both ready and buffering containers."
+    }
+  ],
+  "documentationChanges": {
+    "mainOverview": [
+      "44:5294",
+      "44:5299",
+      "44:5357",
+      "44:5729",
+      "44:5733"
+    ],
+    "mainControlNotes": [
+      "26:737",
+      "26:780",
+      "26:4162",
+      "26:4465",
+      "26:4624",
+      "26:5261",
+      "26:5676",
+      "26:5299"
+    ],
+    "agentOverview": [
+      "18:10",
+      "18:15"
+    ],
+    "revision": "04"
+  },
+  "agentPaintCrossCheck": [
+    {
+      "id": "I9:4105;9:4093",
+      "name": "Athena / Field",
+      "r": 12,
+      "effects": [],
+      "paintCheck": [
+        {
+          "actual": {
+            "r": 0.9607843160629272,
+            "g": 0.9607843160629272,
+            "b": 0.9607843160629272
+          },
+          "resolved": {
+            "r": 0.9607843160629272,
+            "g": 0.9607843160629272,
+            "b": 0.9607843160629272,
+            "a": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "I9:3885;9:3855",
+      "name": "Option / 当前项目目录",
+      "r": 12,
+      "effects": [],
+      "paintCheck": [
+        {
+          "actual": {
+            "r": 0.9411764740943909,
+            "g": 0.9411764740943909,
+            "b": 0.9411764740943909
+          },
+          "resolved": {
+            "r": 0.9411764740943909,
+            "g": 0.9411764740943909,
+            "b": 0.9411764740943909,
+            "a": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "I9:4192;9:4188",
+      "name": "Button / 提交信息",
+      "r": 24,
+      "effects": [],
+      "paintCheck": [
+        {
+          "actual": {
+            "r": 0.09019608050584793,
+            "g": 0.09019608050584793,
+            "b": 0.09019608050584793
+          },
+          "resolved": {
+            "r": 0.09019608050584793,
+            "g": 0.09019608050584793,
+            "b": 0.09019608050584793,
+            "a": 1
+          }
+        }
+      ]
+    }
+  ],
+  "priorRefinementBaseline": {
+    "revision": "monochrome-2026-11-02",
+    "evidence": "monochrome-retheme.json",
+    "preserved": true,
+    "usedAsNewScreenshotEvidence": false
+  },
+  "previews": [
+    {
+      "path": "../previews/heroui-surface/new-chat.png",
+      "file": "main",
+      "nodeId": "31:229",
+      "width": 1600,
+      "height": 1000,
+      "bytes": 59973,
+      "sha256": "1f009d991ada03eced0ac93bbf6ed106ff77cba0b5a04deccca1f8049e9ea75c"
+    },
+    {
+      "path": "../previews/heroui-surface/element-inspector-light.png",
+      "file": "main",
+      "nodeId": "25:229",
+      "width": 1600,
+      "height": 1000,
+      "bytes": 109533,
+      "sha256": "a3e590ab63391b139bf347f1475bb4021aadaa5e2b02f3e48ac4cbe11cb2a32d"
+    },
+    {
+      "path": "../previews/heroui-surface/agent-interaction.png",
+      "file": "agent",
+      "nodeId": "14:1092",
+      "width": 1600,
+      "height": 1000,
+      "bytes": 100714,
+      "sha256": "7543b9c89cce5aa8124a760073ad0d1e66c4a19e1bf09b689497f7eee8e0f2aa"
+    }
+  ],
+  "scopeLimits": [
+    "本轮视觉复查15张代表画板：主稿10张、Agent稿5张；未重新截图验收全部101张主要画板。",
+    "主稿49张当前画板与107个原型目标已做结构回读；Agent报告记录52画板与175状态保留，不等于重新执行全状态语义审计。",
+    "前轮黑白配色的84个颜色值和96组对比度保留为基线，不写成本轮重新测量。",
+    "主稿包含深色代表界面复查；Agent本轮没有新增深色视觉审计。",
+    "未修改应用源码或部署；未执行真实键盘、读屏、IME、授权、媒体播放或业务动作。"
+  ],
+  "handoffConsistency": {
+    "status": "passed-for-current-handoff-files",
+    "evidence": "heroui-handoff-check.json"
+  }
+}

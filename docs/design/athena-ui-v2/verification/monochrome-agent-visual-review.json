@@ -1,0 +1,109 @@
+{
+  "schemaVersion": 1,
+  "reviewDate": "2026-11-02",
+  "fileKey": "jIaBK8NMvfZsjuMktNwpfO",
+  "status": "passed-scoped-visual-review",
+  "readOnlyFigma": true,
+  "scope": {
+    "frameIds": [
+      "7:128",
+      "9:3819",
+      "9:10819",
+      "14:1092",
+      "17:10970"
+    ],
+    "method": "Five native node.screenshot({scale:1}) captures visually inspected; three named base icons read for exact stroke colors.",
+    "fullSemanticAuditPerformed": false,
+    "canonicalStatesReaudited": false
+  },
+  "checks": [
+    {
+      "nodeId": "7:128",
+      "name": "回复与阅读 / 01",
+      "status": "passed",
+      "observations": [
+        "White cards on a neutral light gray board; black body copy and gray secondary copy.",
+        "Primary stop buttons are black with white labels.",
+        "Athena mark and compact activity icon retain restrained blue/teal color; no color spill into body copy."
+      ]
+    },
+    {
+      "nodeId": "9:3819",
+      "name": "提问与结构化回答 / 01",
+      "status": "passed",
+      "observations": [
+        "White form surfaces and neutral gray selected/disabled states.",
+        "Selected controls and emphasis borders are black; primary confirmation buttons are black.",
+        "Compact Bot icons remain blue; field values, dates, helper copy and error explanation are neutral and readable."
+      ]
+    },
+    {
+      "nodeId": "9:10819",
+      "name": "MCP 交互面板 / 01",
+      "status": "passed",
+      "observations": [
+        "White panels, light gray embedded surfaces and neutral skeletons.",
+        "Usage value 184620, dates, chart bars and result rows remain neutral black/gray.",
+        "Blue icon accents remain restricted to compact Bot/activity glyphs; primary filter control is black."
+      ]
+    },
+    {
+      "nodeId": "14:1092",
+      "name": "Flow / 04 工具执行",
+      "status": "passed",
+      "observations": [
+        "White conversation column with subtle neutral side panels and selected navigation.",
+        "Athena logo, Bot and file icons retain color; labels, paths, command output and task data remain neutral.",
+        "Black stop control; green permission check stays a compact status signal.",
+        "No visible color-driven clipping, unreadable text or misplaced focus emphasis."
+      ]
+    },
+    {
+      "nodeId": "17:10970",
+      "name": "富产物与结构化提问 / 01",
+      "status": "passed",
+      "observations": [
+        "White media surfaces with neutral waveform, chart, timeline and player controls.",
+        "Playback buttons and active progress are black; metadata and numeric values remain neutral.",
+        "Generated-state green checks are confined to icons; no body or chart data is accidentally colored."
+      ]
+    }
+  ],
+  "iconColorReadback": [
+    {
+      "nodeId": "2:276",
+      "name": "Athena / Icon / Bot",
+      "color": "#2563eb",
+      "status": "passed"
+    },
+    {
+      "nodeId": "2:188",
+      "name": "Athena / Icon / WandSparkles",
+      "role": "Skill",
+      "color": "#0d9488",
+      "status": "passed"
+    },
+    {
+      "nodeId": "2:181",
+      "name": "Athena / Icon / PlugZap",
+      "role": "MCP",
+      "color": "#2563eb",
+      "status": "passed"
+    }
+  ],
+  "issues": [],
+  "preview": {
+    "nodeId": "14:1092",
+    "path": "../previews/monochrome/agent-interaction.png",
+    "width": 1600,
+    "height": 1000,
+    "format": "PNG",
+    "bytes": 89737,
+    "sha256": "f36506b882c2b4e10e250d072b2b5f9198424b3324a2fc541ded87fc7a711528",
+    "provenance": "Native inline PNG returned by Figma node.screenshot; decoded directly without image alteration."
+  },
+  "limitations": [
+    "Review covers the five requested representative frames and three named icon components, not all 175 semantic states.",
+    "Interactive focus behavior and runtime execution were not exercised."
+  ]
+}

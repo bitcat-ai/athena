@@ -1,0 +1,84 @@
+{
+  "createdVariableIds": [
+    "VariableID:85:143",
+    "VariableID:85:144",
+    "VariableID:85:145",
+    "VariableID:85:146",
+    "VariableID:85:147",
+    "VariableID:85:148",
+    "VariableID:85:149",
+    "VariableID:85:150",
+    "VariableID:85:151",
+    "VariableID:85:152"
+  ],
+  "mutatedVariableIds": [
+    "VariableID:85:143",
+    "VariableID:85:144",
+    "VariableID:85:145",
+    "VariableID:85:146",
+    "VariableID:85:147",
+    "VariableID:85:148",
+    "VariableID:85:149",
+    "VariableID:85:150",
+    "VariableID:85:151",
+    "VariableID:85:152"
+  ],
+  "createdStyleIds": [
+    "S:c9b0189c1f21ad9e4e837d656f3fccea17b93550,",
+    "S:37c160c7cac077aaaa29a61dba377e9a6dd8f4ad,",
+    "S:216ded04eeec3e43f66d6b406b0720b906d495f6,",
+    "S:fa9c86e68a13bdb00c4f0cf59b7d36f2986c7dee,",
+    "S:f5dec10ce186ab86a4092365369930ec9f07db08,"
+  ],
+  "mutatedStyleIds": [
+    "S:c9b0189c1f21ad9e4e837d656f3fccea17b93550,",
+    "S:37c160c7cac077aaaa29a61dba377e9a6dd8f4ad,",
+    "S:216ded04eeec3e43f66d6b406b0720b906d495f6,",
+    "S:fa9c86e68a13bdb00c4f0cf59b7d36f2986c7dee,",
+    "S:f5dec10ce186ab86a4092365369930ec9f07db08,"
+  ],
+  "radiusIds": {
+    "control": "VariableID:85:143",
+    "button": "VariableID:85:144",
+    "panel": "VariableID:85:145",
+    "composer": "VariableID:85:146",
+    "overlay": "VariableID:85:147",
+    "navigation": "VariableID:85:148",
+    "option": "VariableID:85:149",
+    "window": "VariableID:85:150",
+    "chip": "VariableID:85:151",
+    "iconButton": "VariableID:85:152"
+  },
+  "effectStyleIds": {
+    "field": "S:c9b0189c1f21ad9e4e837d656f3fccea17b93550,",
+    "surface": "S:37c160c7cac077aaaa29a61dba377e9a6dd8f4ad,",
+    "overlay": "S:216ded04eeec3e43f66d6b406b0720b906d495f6,",
+    "selected": "S:fa9c86e68a13bdb00c4f0cf59b7d36f2986c7dee,",
+    "darkOverlay": "S:f5dec10ce186ab86a4092365369930ec9f07db08,"
+  },
+  "semanticIds": {
+    "canvas": "VariableID:2:263",
+    "surface": "VariableID:2:266",
+    "subtle": "VariableID:2:269",
+    "hover": "VariableID:2:272",
+    "ink": "VariableID:2:275",
+    "secondary": "VariableID:2:278",
+    "muted": "VariableID:2:281",
+    "line": "VariableID:2:284",
+    "control": "VariableID:2:287",
+    "accent": "VariableID:2:290",
+    "accentSoft": "VariableID:2:293",
+    "accentInk": "VariableID:2:296",
+    "onAccent": "VariableID:2:299",
+    "success": "VariableID:2:302",
+    "successSoft": "VariableID:2:305",
+    "danger": "VariableID:2:308",
+    "dangerSoft": "VariableID:2:311",
+    "brandBlue": "VariableID:73:143",
+    "brandTeal": "VariableID:73:146",
+    "statusGreen": "VariableID:73:149",
+    "statusRed": "VariableID:73:152"
+  },
+  "semanticCollection": "VariableCollectionId:2:260",
+  "darkMode": "2:2"
+}

@@ -1,0 +1,1006 @@
+{
+  "schemaVersion": "1.0",
+  "date": "2026-11-02",
+  "product": "Athena",
+  "status": "design-prototype-and-motion-reviewed",
+  "fileKey": "vEL0JeDlefvuvLjUQQh5SB",
+  "pageId": "19:244",
+  "sectionId": "126:3379",
+  "scope": "First-use onboarding; application source untouched",
+  "layout": {
+    "desktop": [
+      1600,
+      1000
+    ],
+    "narrow": [
+      900,
+      760
+    ],
+    "opening": "Logo and single-line greeting in one horizontal row",
+    "logoPx": 56,
+    "titlePx": 36,
+    "titleLineHeightPx": 48
+  },
+  "states": [
+    {
+      "key": "greet",
+      "name": "00 初次见面",
+      "title": "你好，我是 Athena。",
+      "body": "从第一个想法，到把事情做好。\n很高兴，能和你一起开始。",
+      "step": 0,
+      "actions": [
+        [
+          "你好，Athena",
+          "connect"
+        ],
+        [
+          "你能帮我做什么？",
+          "about",
+          "ghost"
+        ]
+      ],
+      "nodeId": "128:5452"
+    },
+    {
+      "key": "about",
+      "name": "01 认识 Athena",
+      "title": "你来决定，我们一起完成。",
+      "body": "写一段代码，调整一个页面，或把网页上的操作交给我。\n先一起把工作的地方准备好。",
+      "reply": "你能帮我做什么？",
+      "step": 0,
+      "actions": [
+        [
+          "好，一起开始",
+          "connect"
+        ]
+      ],
+      "nodeId": "128:5490"
+    },
+    {
+      "key": "connect",
+      "name": "02 开始连接",
+      "title": "先让我们连接起来。",
+      "body": "我通过你电脑上的 Codex 执行任务。\n先看看它是否已经准备好了。",
+      "reply": "你好，Athena",
+      "step": 1,
+      "cards": [
+        [
+          "Terminal",
+          "本机 Codex",
+          "检查安装和登录状态",
+          "待检查"
+        ]
+      ],
+      "actions": [
+        [
+          "检查本机 Codex",
+          "detecting"
+        ]
+      ],
+      "nodeId": "128:5524"
+    },
+    {
+      "key": "detecting",
+      "name": "03 检查本机",
+      "title": "我来看看。",
+      "body": "正在检查本机 Codex，以及它的登录状态。",
+      "reply": "检查本机 Codex",
+      "step": 1,
+      "cards": [
+        [
+          "LoaderCircle",
+          "检查中",
+          "查找可执行程序 · 读取登录状态",
+          ""
+        ]
+      ],
+      "pending": true,
+      "auto": "missing",
+      "actions": [
+        [
+          "取消检查",
+          "connect",
+          "ghost"
+        ]
+      ],
+      "nodeId": "128:5571"
+    },
+    {
+      "key": "missing",
+      "name": "04 未安装 Codex",
+      "title": "还没有找到 Codex。",
+      "body": "先把它准备好，我们就能开始合作。\n我会在安装前告诉你要下载和更改什么。",
+      "step": 1,
+      "cards": [
+        [
+          "Download",
+          "Codex CLI",
+          "来自 OpenAI 官方发布",
+          "未安装"
+        ]
+      ],
+      "actions": [
+        [
+          "准备安装",
+          "installPlan"
+        ],
+        [
+          "我已安装，重新检查",
+          "detecting",
+          "ghost"
+        ]
+      ],
+      "nodeId": "128:5617"
+    },
+    {
+      "key": "installPlan",
+      "name": "05 安装范围与确认",
+      "title": "这一步，交给我来准备。",
+      "body": "将下载适合这台 Mac 的 Codex，并安装到当前用户的环境。\n完成后，我会检查它能否正常启动。",
+      "reply": "准备安装",
+      "step": 1,
+      "cards": [
+        [
+          "Download",
+          "安装 Codex CLI",
+          "来源：OpenAI 官方 · 影响：本机 CLI 环境",
+          "等待确认"
+        ],
+        [
+          "Info",
+          "保留现有配置",
+          "如发现已有版本，先核对，不直接覆盖",
+          ""
+        ]
+      ],
+      "note": "安装位置和环境变更会在执行前展示；需要额外权限时，另行确认。",
+      "actions": [
+        [
+          "下载并安装",
+          "installing"
+        ],
+        [
+          "暂不安装",
+          "missing",
+          "ghost"
+        ]
+      ],
+      "nodeId": "128:5669"
+    },
+    {
+      "key": "installing",
+      "name": "06 下载校验与安装",
+      "title": "正在把 Codex 准备好。",
+      "body": "你可以留在这里，或稍后回来继续。",
+      "reply": "下载并安装",
+      "step": 1,
+      "cards": [
+        [
+          "Check",
+          "环境检查",
+          "系统与芯片架构已确认",
+          "完成"
+        ],
+        [
+          "LoaderCircle",
+          "下载官方安装包",
+          "完成后校验，再安装并检查启动",
+          "进行中"
+        ]
+      ],
+      "pending": true,
+      "auto": "installed",
+      "actions": [
+        [
+          "取消安装",
+          "cancelInstall",
+          "ghost"
+        ]
+      ],
+      "nodeId": "128:5737"
+    },
+    {
+      "key": "installed",
+      "name": "07 安装完成",
+      "title": "Codex 已经准备好了。",
+      "body": "安装和启动检查都已完成。\n接下来，连接你用来执行任务的账号。",
+      "step": 1,
+      "cards": [
+        [
+          "Terminal",
+          "Codex CLI",
+          "已安装 · 启动检查通过",
+          "完成"
+        ]
+      ],
+      "actions": [
+        [
+          "连接账号",
+          "login"
+        ]
+      ],
+      "nodeId": "128:5794"
+    },
+    {
+      "key": "login",
+      "name": "08 登录说明",
+      "title": "还差一次登录。",
+      "body": "我会打开 Codex 的官方登录页面。\n请在那里完成账号登录与授权。",
+      "step": 1,
+      "cards": [
+        [
+          "Lock",
+          "连接 Codex 账号",
+          "登录信息由 Codex 管理",
+          "待登录"
+        ]
+      ],
+      "note": "执行任务会使用所选账号的配额或计费。密码和密钥无需填写到 Athena。",
+      "actions": [
+        [
+          "登录 Codex",
+          "loginWait"
+        ],
+        [
+          "重新检查已有登录",
+          "loginCheck",
+          "ghost"
+        ]
+      ],
+      "nodeId": "128:5839"
+    },
+    {
+      "key": "loginWait",
+      "name": "09 等待外部授权",
+      "title": "我在这里等你。",
+      "body": "在打开的登录页面完成授权，回来后我们继续。\n如果页面没有打开，可以再打开一次。",
+      "reply": "登录 Codex",
+      "step": 1,
+      "cards": [
+        [
+          "ExternalLink",
+          "官方登录页面",
+          "等待账号授权完成",
+          "等待中"
+        ]
+      ],
+      "actions": [
+        [
+          "我已完成，检查连接",
+          "loginCheck"
+        ],
+        [
+          "重新打开登录页",
+          "loginWait",
+          "ghost"
+        ],
+        [
+          "取消登录",
+          "cancelLogin",
+          "ghost"
+        ]
+      ],
+      "nodeId": "128:5891"
+    },
+    {
+      "key": "loginCheck",
+      "name": "10 核对登录结果",
+      "title": "正在确认连接。",
+      "body": "我会核对登录结果，并确认本机 Codex 可以连接。",
+      "reply": "我已完成，检查连接",
+      "step": 1,
+      "cards": [
+        [
+          "LoaderCircle",
+          "核对账号与连接",
+          "不发送模型任务",
+          "进行中"
+        ]
+      ],
+      "pending": true,
+      "auto": "connected",
+      "actions": [
+        [
+          "取消检查",
+          "login",
+          "ghost"
+        ]
+      ],
+      "nodeId": "128:5951"
+    },
+    {
+      "key": "connected",
+      "name": "11 已安装已登录 快捷路径",
+      "title": "连接好了。",
+      "body": "可以使用本机 Codex 的现有登录。\n我们再选一个工作的地方。",
+      "step": 1,
+      "cards": [
+        [
+          "Terminal",
+          "Codex",
+          "已登录 · 连接已就绪",
+          "完成"
+        ]
+      ],
+      "note": "执行任务时使用对应账号的模型配额；这次检查不会发起模型任务。",
+      "actions": [
+        [
+          "使用这个连接",
+          "folder"
+        ],
+        [
+          "查看连接详情",
+          "connectionDetails",
+          "ghost"
+        ]
+      ],
+      "nodeId": "128:5997"
+    },
+    {
+      "key": "folder",
+      "name": "12 选择工作目录",
+      "title": "我们在哪里开始？",
+      "body": "选择你想处理的项目文件夹。\n它会成为任务默认使用的工作目录，以后可以随时更换。",
+      "reply": "使用这个连接",
+      "step": 2,
+      "actions": [
+        [
+          "选择文件夹",
+          "folderWait"
+        ]
+      ],
+      "note": "选择目录后，我会先确认它是否可访问。",
+      "nodeId": "128:6049"
+    },
+    {
+      "key": "folderWait",
+      "name": "13 等待系统目录选择",
+      "title": "选好后，我就在这里继续。",
+      "body": "请在系统文件夹选择窗口中，选中你的项目目录。",
+      "reply": "选择文件夹",
+      "step": 2,
+      "cards": [
+        [
+          "Folder",
+          "系统文件夹选择器",
+          "等待你选择工作目录",
+          "等待中"
+        ]
+      ],
+      "pending": true,
+      "auto": "folderConfirm",
+      "actions": [
+        [
+          "重新打开选择器",
+          "folderWait"
+        ],
+        [
+          "取消选择",
+          "folder",
+          "ghost"
+        ]
+      ],
+      "nodeId": "128:6084"
+    },
+    {
+      "key": "folderConfirm",
+      "name": "14 确认项目目录",
+      "title": "就从这里开始。",
+      "body": "我会在这个目录中处理你交给我的项目任务。",
+      "reply": "选择 athena",
+      "step": 2,
+      "cards": [
+        [
+          "Folder",
+          "athena",
+          "Projects / athena",
+          "已选择"
+        ]
+      ],
+      "actions": [
+        [
+          "使用这个目录",
+          "permission"
+        ],
+        [
+          "换一个文件夹",
+          "folderWait",
+          "ghost"
+        ]
+      ],
+      "nodeId": "128:6136"
+    },
+    {
+      "key": "permission",
+      "name": "15 文件访问范围",
+      "title": "我需要访问这个目录。",
+      "body": "用来读取项目内容，并按你的任务修改文件。\n需要额外审批的操作，我会说明具体动作，再等你决定。",
+      "reply": "使用这个目录",
+      "step": 2,
+      "cards": [
+        [
+          "Folder",
+          "athena",
+          "本次工作的项目目录",
+          ""
+        ],
+        [
+          "ShieldCheck",
+          "按具体操作确认",
+          "选择工作目录不会批准所有命令或额外权限",
+          ""
+        ]
+      ],
+      "note": "如果 macOS 显示访问提示，请核对目录和应用名称后决定。",
+      "actions": [
+        [
+          "允许访问此文件夹",
+          "permissionWait"
+        ],
+        [
+          "先不允许",
+          "permissionDenied",
+          "ghost"
+        ]
+      ],
+      "nodeId": "128:6188"
+    },
+    {
+      "key": "permissionWait",
+      "name": "16 等待系统权限",
+      "title": "请在系统提示中确认。",
+      "body": "完成后，我会检查目录是否可用。\n你也可以拒绝，再选择其他工作目录。",
+      "reply": "允许访问此文件夹",
+      "step": 2,
+      "cards": [
+        [
+          "Lock",
+          "工作目录访问",
+          "等待 macOS 返回结果",
+          "等待中"
+        ]
+      ],
+      "pending": true,
+      "auto": "browser",
+      "actions": [
+        [
+          "我已处理，重新检查",
+          "browser"
+        ],
+        [
+          "取消这次访问",
+          "permissionDenied",
+          "ghost"
+        ]
+      ],
+      "nodeId": "128:6253"
+    },
+    {
+      "key": "permissionDenied",
+      "name": "17 权限拒绝与恢复",
+      "title": "这次先不访问它。",
+      "body": "当前目录还不可用。你可以重新选择，\n也可以先进入工作台，稍后再准备。",
+      "step": 2,
+      "cards": [
+        [
+          "Lock",
+          "athena",
+          "未获得目录访问权限",
+          "未就绪"
+        ]
+      ],
+      "actions": [
+        [
+          "换一个文件夹",
+          "folderWait"
+        ],
+        [
+          "重新申请访问",
+          "permission",
+          "ghost"
+        ],
+        [
+          "先看看工作台",
+          "deferred",
+          "ghost"
+        ]
+      ],
+      "nodeId": "128:6306"
+    },
+    {
+      "key": "browser",
+      "name": "18 可选浏览器准备",
+      "title": "也把网页工作准备好？",
+      "body": "在 Athena 里打开网页、调整元素，或录下一段操作。\n这一步也可以留到第一次使用网页功能时。",
+      "step": 2,
+      "cards": [
+        [
+          "Globe",
+          "BrowserOS neo",
+          "使用独立浏览器数据，不导入你的日常浏览器配置",
+          "可选"
+        ]
+      ],
+      "note": "缺少运行组件时会下载。准备之前展示来源与实际下载大小。",
+      "actions": [
+        [
+          "准备浏览器",
+          "browserPreparing"
+        ],
+        [
+          "以后再说",
+          "readyWithoutBrowser",
+          "ghost"
+        ]
+      ],
+      "nodeId": "128:6363"
+    },
+    {
+      "key": "browserPreparing",
+      "name": "19 浏览器准备中",
+      "title": "正在准备网页工作。",
+      "body": "先检查本机浏览器；缺少的运行组件会补齐。",
+      "reply": "准备浏览器",
+      "step": 2,
+      "cards": [
+        [
+          "LoaderCircle",
+          "BrowserOS neo",
+          "检查环境 · 准备组件 · 验证启动",
+          "进行中"
+        ]
+      ],
+      "pending": true,
+      "auto": "ready",
+      "actions": [
+        [
+          "稍后准备",
+          "readyWithoutBrowser",
+          "ghost"
+        ]
+      ],
+      "nodeId": "128:6416"
+    },
+    {
+      "key": "ready",
+      "name": "20 全部准备完成",
+      "title": "准备好了，轮到你的想法。",
+      "body": "连接、工作目录和网页工具都已就绪。\n你随时可以在设置中调整它们。",
+      "step": 3,
+      "cards": [
+        [
+          "Terminal",
+          "Codex",
+          "已连接",
+          "完成"
+        ],
+        [
+          "Folder",
+          "athena",
+          "工作目录可访问",
+          "完成"
+        ],
+        [
+          "Globe",
+          "网页工具",
+          "BrowserOS neo 已就绪",
+          "完成"
+        ]
+      ],
+      "actions": [
+        [
+          "开始吧",
+          "entering"
+        ]
+      ],
+      "nodeId": "128:6462"
+    },
+    {
+      "key": "entering",
+      "name": "21 工作台展开",
+      "title": "今天想完成什么？",
+      "body": "打开网页、调整界面，或把任务交给 Athena。",
+      "step": 3,
+      "workspace": true,
+      "auto": "workspace",
+      "nodeId": "128:6531"
+    },
+    {
+      "key": "workspace",
+      "name": "22 首次进入工作台",
+      "workspace": true,
+      "step": 3,
+      "nodeId": "128:6710"
+    },
+    {
+      "key": "deferred",
+      "name": "23 稍后设置的工作台",
+      "title": "准备好时，我们再继续。",
+      "body": "连接和工作目录准备好后，就可以开始执行任务。",
+      "step": 3,
+      "actions": [
+        [
+          "继续首次准备",
+          "resume"
+        ]
+      ],
+      "nodeId": "128:6889",
+      "layout": "workspace-with-setup-entry"
+    },
+    {
+      "key": "installError",
+      "name": "24 安装失败",
+      "title": "安装停在了这一步。",
+      "body": "下载没有完成，Codex 还未安装成功。\n检查网络后可以重试，不会重复安装已完成的部分。",
+      "step": 1,
+      "cards": [
+        [
+          "TriangleAlert",
+          "无法完成下载",
+          "当前状态：未安装",
+          "待处理"
+        ]
+      ],
+      "actions": [
+        [
+          "重新下载",
+          "installing"
+        ],
+        [
+          "查看安装详情",
+          "installPlan",
+          "ghost"
+        ],
+        [
+          "稍后处理",
+          "deferred",
+          "ghost"
+        ]
+      ],
+      "nodeId": "128:6941"
+    },
+    {
+      "key": "loginError",
+      "name": "25 登录未完成或过期",
+      "title": "这次登录还没有完成。",
+      "body": "可能是登录页面已关闭，或本次授权已经过期。\n重新发起即可，已安装的 Codex 会保留。",
+      "step": 1,
+      "cards": [
+        [
+          "Lock",
+          "Codex 账号",
+          "尚未确认有效登录",
+          "待登录"
+        ]
+      ],
+      "actions": [
+        [
+          "重新登录",
+          "loginWait"
+        ],
+        [
+          "重新检查",
+          "loginCheck",
+          "ghost"
+        ],
+        [
+          "稍后处理",
+          "deferred",
+          "ghost"
+        ]
+      ],
+      "nodeId": "128:6999"
+    },
+    {
+      "key": "detectionError",
+      "name": "26 CLI 无响应",
+      "title": "找到 Codex，但它没有响应。",
+      "body": "这次启动检查没有通过。\n你可以重试，或选择另一个已安装的 Codex。",
+      "step": 1,
+      "cards": [
+        [
+          "TriangleAlert",
+          "Codex CLI",
+          "启动检查超时",
+          "不可用"
+        ]
+      ],
+      "actions": [
+        [
+          "重新检查",
+          "detecting"
+        ],
+        [
+          "查看连接详情",
+          "connectionDetails",
+          "ghost"
+        ],
+        [
+          "稍后处理",
+          "deferred",
+          "ghost"
+        ]
+      ],
+      "nodeId": "128:7056"
+    },
+    {
+      "key": "folderError",
+      "name": "27 目录失效或无法访问",
+      "title": "这个工作目录暂时不可用。",
+      "body": "文件夹可能已被移动，或当前没有访问权限。\n连接已经保留，重新选一个目录就好。",
+      "step": 2,
+      "cards": [
+        [
+          "Folder",
+          "athena",
+          "需要重新选择或确认权限",
+          "不可用"
+        ]
+      ],
+      "actions": [
+        [
+          "重新选择目录",
+          "folderWait"
+        ],
+        [
+          "重试访问",
+          "permission",
+          "ghost"
+        ]
+      ],
+      "nodeId": "128:7114"
+    },
+    {
+      "key": "cancelInstall",
+      "name": "28 取消安装",
+      "title": "安装已停止。",
+      "body": "还未完成的安装不会标为成功。\n你可以稍后继续，我会先检查当前状态。",
+      "reply": "取消安装",
+      "step": 1,
+      "actions": [
+        [
+          "重新检查并继续",
+          "detecting"
+        ],
+        [
+          "稍后设置",
+          "deferred",
+          "ghost"
+        ]
+      ],
+      "nodeId": "128:7164"
+    },
+    {
+      "key": "cancelLogin",
+      "name": "29 取消登录",
+      "title": "这次先不登录。",
+      "body": "Codex 已经安装好。\n准备好时，再继续连接账号。",
+      "reply": "取消登录",
+      "step": 1,
+      "actions": [
+        [
+          "继续登录",
+          "login"
+        ],
+        [
+          "稍后设置",
+          "deferred",
+          "ghost"
+        ]
+      ],
+      "nodeId": "128:7204"
+    },
+    {
+      "key": "resume",
+      "name": "30 中断后继续",
+      "title": "欢迎回来，我们接着来。",
+      "body": "Codex 已安装，上次停在连接账号这一步。\n我会重新核对现状，再继续准备。",
+      "step": 1,
+      "cards": [
+        [
+          "Check",
+          "已保留的进度",
+          "Codex 安装完成 · 账号待连接",
+          ""
+        ]
+      ],
+      "actions": [
+        [
+          "继续检查连接",
+          "loginCheck"
+        ],
+        [
+          "先看看工作台",
+          "deferred",
+          "ghost"
+        ]
+      ],
+      "nodeId": "128:7244"
+    },
+    {
+      "key": "readyWithoutBrowser",
+      "name": "31 核心准备完成",
+      "title": "准备好了，轮到你的想法。",
+      "body": "连接和工作目录已经就绪。\n网页工具可以在第一次用到时再准备。",
+      "step": 3,
+      "cards": [
+        [
+          "Terminal",
+          "Codex",
+          "已连接",
+          "完成"
+        ],
+        [
+          "Folder",
+          "athena",
+          "工作目录可访问",
+          "完成"
+        ],
+        [
+          "Globe",
+          "网页工具",
+          "首次使用时再准备",
+          "稍后"
+        ]
+      ],
+      "actions": [
+        [
+          "开始吧",
+          "enteringProject"
+        ]
+      ],
+      "nodeId": "128:7294"
+    },
+    {
+      "key": "browserError",
+      "name": "32 浏览器准备失败",
+      "title": "网页工具还差一步。",
+      "body": "浏览器没有启动成功。你可以重试，\n也可以先开始项目任务，稍后再处理网页工具。",
+      "step": 2,
+      "cards": [
+        [
+          "TriangleAlert",
+          "BrowserOS neo",
+          "准备未完成；项目工作不受影响",
+          "待处理"
+        ]
+      ],
+      "actions": [
+        [
+          "重试准备",
+          "browserPreparing"
+        ],
+        [
+          "先开始使用",
+          "readyWithoutBrowser",
+          "ghost"
+        ]
+      ],
+      "nodeId": "128:7363"
+    },
+    {
+      "key": "connectionDetails",
+      "name": "33 连接来源与配置保留",
+      "title": "这是我们使用的连接。",
+      "body": "Athena 复用本机 Codex，并保留它已有的配置。\n切换登录会影响使用同一 Codex 登录的其他本机客户端。",
+      "step": 1,
+      "cards": [
+        [
+          "Terminal",
+          "本机 Codex CLI",
+          "当前选中的可执行程序",
+          ""
+        ],
+        [
+          "Lock",
+          "由 Codex 管理的登录",
+          "使用对应账号配额或计费",
+          ""
+        ]
+      ],
+      "actions": [
+        [
+          "重新检查连接",
+          "detecting"
+        ],
+        [
+          "返回检查",
+          "connect",
+          "ghost"
+        ]
+      ],
+      "nodeId": "128:7415"
+    },
+    {
+      "key": "enteringProject",
+      "name": "34 项目工作台展开 · 网页稍后",
+      "nodeId": "139:4461",
+      "workspace": true,
+      "auto": "workspace",
+      "sourceReadyState": "readyWithoutBrowser"
+    }
+  ],
+  "prototypeBridges": {
+    "greet": "128:5452",
+    "replyMotion": "131:4103",
+    "connect": "128:5524",
+    "ready": "128:6462",
+    "enter": "128:6531",
+    "readyProject": "128:7294",
+    "enterProject": "139:4461",
+    "workbench": "128:6710"
+  },
+  "hostDrivenEvents": [
+    "CLI detection result",
+    "download progress and checksum",
+    "installer exit and startup probe",
+    "login callback followed by account and connection readback",
+    "native directory-picker result",
+    "OS permission response followed by access recheck",
+    "browser readiness"
+  ],
+  "prototypeLimit": "Timed transitions simulate example events; actual operation success must never be inferred from elapsed time.",
+  "motionFrames": [
+    {
+      "id": "131:4058",
+      "name": "动效 / M01 初次见面 · 740 ms",
+      "duration": 2,
+      "animatedNodes": 4
+    },
+    {
+      "id": "131:4103",
+      "name": "动效 / M02 点击成为回答 · 620 ms",
+      "duration": 2,
+      "animatedNodes": 9
+    },
+    {
+      "id": "131:4214",
+      "name": "动效 / M03 安装真实阶段 · 3.6 s 演示",
+      "duration": 3.6,
+      "animatedNodes": 5
+    },
+    {
+      "id": "131:4343",
+      "name": "动效 / M04 登录返回与核对 · 2.8 s 演示",
+      "duration": 2.8,
+      "animatedNodes": 2
+    },
+    {
+      "id": "131:4474",
+      "name": "动效 / M05 权限拒绝后的接话 · 2.4 s 演示",
+      "duration": 2.4,
+      "animatedNodes": 1
+    },
+    {
+      "id": "131:4613",
+      "name": "动效 / M06 从对话进入工作台 · 680 ms",
+      "duration": 2,
+      "animatedNodes": 10
+    }
+  ],
+  "motionSpecifications": [
+    {
+      "id": "135:4654",
+      "name": "规格 / 01 流程、对话与分支",
+      "width": 1600,
+      "height": 1146
+    },
+    {
+      "id": "135:4727",
+      "name": "规格 / 02 动效时间与缓动",
+      "width": 1600,
+      "height": 1146
+    },
+    {
+      "id": "135:4800",
+      "name": "规格 / 03 行为、权限与实现交接",
+      "width": 1600,
+      "height": 914
+    }
+  ],
+  "sources": [
+    "https://learn.chatgpt.com/docs/codex/cli#getting-started",
+    "https://learn.chatgpt.com/docs/developer-commands#codex-login",
+    "https://learn.chatgpt.com/docs/app-server#auth-endpoints"
+  ]
+}

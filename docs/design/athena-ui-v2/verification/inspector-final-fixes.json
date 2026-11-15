@@ -1,0 +1,1045 @@
+{
+  "date": "2026-11-01",
+  "fileKey": "vEL0JeDlefvuvLjUQQh5SB",
+  "scope": "Inspector findings VI-01..VI-16 only; write operations confined to existing inspectorKit components/instances and two inspector state panels. Connections board inspected read-only. No application source changes.",
+  "status": "all-16-closed",
+  "fixedCount": 16,
+  "remainingFindings": [],
+  "pendingVisualBoards": [],
+  "structuralChecks": {
+    "VI-01": true,
+    "VI-02": true,
+    "VI-03": true,
+    "VI-04": true,
+    "VI-05": true,
+    "VI-06": true,
+    "VI-07": true,
+    "VI-08": true,
+    "VI-09": true,
+    "VI-10": true,
+    "VI-11": true,
+    "VI-12": true,
+    "VI-13": true,
+    "VI-14": true,
+    "VI-15": true,
+    "VI-16": true
+  },
+  "allInstanceLinksPreserved": true,
+  "preservedInstances": [
+    {
+      "id": "26:987",
+      "type": "INSTANCE",
+      "expected": "26:986",
+      "actual": "26:986",
+      "retained": true
+    },
+    {
+      "id": "26:1180",
+      "type": "INSTANCE",
+      "expected": "26:1179",
+      "actual": "26:1179",
+      "retained": true
+    },
+    {
+      "id": "26:2647",
+      "type": "INSTANCE",
+      "expected": "26:2646",
+      "actual": "26:2646",
+      "retained": true
+    },
+    {
+      "id": "26:2863",
+      "type": "INSTANCE",
+      "expected": "26:2862",
+      "actual": "26:2862",
+      "retained": true
+    },
+    {
+      "id": "26:3381",
+      "type": "INSTANCE",
+      "expected": "26:3380",
+      "actual": "26:3380",
+      "retained": true
+    },
+    {
+      "id": "26:3728",
+      "type": "INSTANCE",
+      "expected": "26:3727",
+      "actual": "26:3727",
+      "retained": true
+    },
+    {
+      "id": "26:3556",
+      "type": "INSTANCE",
+      "expected": "26:3555",
+      "actual": "26:3555",
+      "retained": true
+    },
+    {
+      "id": "26:3643",
+      "type": "INSTANCE",
+      "expected": "26:3642",
+      "actual": "26:3642",
+      "retained": true
+    },
+    {
+      "id": "26:3983",
+      "type": "INSTANCE",
+      "expected": "26:3982",
+      "actual": "26:3982",
+      "retained": true
+    },
+    {
+      "id": "26:4785",
+      "type": "INSTANCE",
+      "expected": "26:4784",
+      "actual": "26:4784",
+      "retained": true
+    },
+    {
+      "id": "26:5512",
+      "type": "INSTANCE",
+      "expected": "26:5511",
+      "actual": "26:5511",
+      "retained": true
+    },
+    {
+      "id": "26:5455",
+      "type": "INSTANCE",
+      "expected": "26:5454",
+      "actual": "26:5454",
+      "retained": true
+    },
+    {
+      "id": "26:5428",
+      "type": "INSTANCE",
+      "expected": "26:5427",
+      "actual": "26:5427",
+      "retained": true
+    },
+    {
+      "id": "26:5972",
+      "type": "INSTANCE",
+      "expected": "26:5971",
+      "actual": "26:5971",
+      "retained": true
+    },
+    {
+      "id": "26:6023",
+      "type": "INSTANCE",
+      "expected": "26:6022",
+      "actual": "26:6022",
+      "retained": true
+    },
+    {
+      "id": "26:6043",
+      "type": "INSTANCE",
+      "expected": "26:6042",
+      "actual": "26:6042",
+      "retained": true
+    },
+    {
+      "id": "26:6066",
+      "type": "INSTANCE",
+      "expected": "26:6065",
+      "actual": "26:6065",
+      "retained": true
+    },
+    {
+      "id": "26:5624",
+      "type": "INSTANCE",
+      "expected": "26:5623",
+      "actual": "26:5623",
+      "retained": true
+    },
+    {
+      "id": "26:5735",
+      "type": "INSTANCE",
+      "expected": "26:5734",
+      "actual": "26:5734",
+      "retained": true
+    },
+    {
+      "id": "26:5254",
+      "type": "INSTANCE",
+      "expected": "26:5253",
+      "actual": "26:5253",
+      "retained": true
+    }
+  ],
+  "findings": [
+    {
+      "id": "VI-01",
+      "originalSeverity": "P2",
+      "title": "字重读数错误显示px",
+      "status": "closed-after-live-write-readback-and-visual-review",
+      "actualChange": {
+        "componentId": "26:986",
+        "unitVisible": false
+      },
+      "readbackEvidence": {
+        "componentId": "26:986",
+        "visibleUnits": 0
+      },
+      "screenshotEvidence": [
+        {
+          "nodeId": "26:687",
+          "path": "review/final-fixes/main-26_687.png",
+          "sha256": "4f1416f1cc2557d6f56e36a79019b6f2b0aa0127cfd4ce986c897c17706ee99c"
+        }
+      ],
+      "cases": [
+        {
+          "caseId": "N07",
+          "instanceId": "26:987",
+          "componentId": "26:986"
+        }
+      ]
+    },
+    {
+      "id": "VI-02",
+      "originalSeverity": "P2",
+      "title": "非法草稿同时改变了滑轨位置",
+      "status": "closed-after-live-write-readback-and-visual-review",
+      "actualChange": {
+        "componentId": "26:1179",
+        "retainedConfirmedValue": 14,
+        "draftValue": 240
+      },
+      "readbackEvidence": {
+        "componentId": "26:1179",
+        "draft": "240",
+        "rangeMatchesConfirmed14": true
+      },
+      "screenshotEvidence": [
+        {
+          "nodeId": "26:1102",
+          "path": "review/final-fixes/main-26_1102.png",
+          "sha256": "b909097345578bfd4855a38e79e05f1684cb076a919f8f411c8b4f266ec4efc0"
+        }
+      ],
+      "cases": [
+        {
+          "caseId": "N11",
+          "instanceId": "26:1180",
+          "componentId": "26:1179"
+        }
+      ]
+    },
+    {
+      "id": "VI-03",
+      "originalSeverity": "P2",
+      "title": "聚焦rgba时重复显示alpha",
+      "status": "closed-after-live-write-readback-and-visual-review",
+      "actualChange": {
+        "componentId": "26:2646",
+        "rawAlphaText": "rgba(20,107,138,0.64)",
+        "independentAlphaVisible": false
+      },
+      "readbackEvidence": {
+        "componentId": "26:2646",
+        "alphaVisible": false,
+        "readoutWidth": 359
+      },
+      "screenshotEvidence": [
+        {
+          "nodeId": "26:2204",
+          "path": "review/final-fixes/main-26_2204.png",
+          "sha256": "927b7fce5226860e871f9e87768de9968bff3f9a527443846fe8092e7b68c43a"
+        }
+      ],
+      "cases": [
+        {
+          "caseId": "C11",
+          "instanceId": "26:2647",
+          "componentId": "26:2646"
+        }
+      ]
+    },
+    {
+      "id": "VI-04",
+      "originalSeverity": "P2",
+      "title": "清空草稿被画成透明或已继承",
+      "status": "closed-after-live-write-readback-and-visual-review",
+      "actualChange": {
+        "componentId": "26:2862",
+        "draft": "",
+        "retainedSwatch": "#146B8A",
+        "submitted": false
+      },
+      "readbackEvidence": {
+        "componentId": "26:2862",
+        "visibleReadoutTexts": [],
+        "caretVisible": true,
+        "sampleColor": {
+          "r": 0.0784313753247261,
+          "g": 0.41960784792900085,
+          "b": 0.5411764979362488
+        },
+        "sampleOpacity": 1
+      },
+      "screenshotEvidence": [
+        {
+          "nodeId": "26:2204",
+          "path": "review/final-fixes/main-26_2204.png",
+          "sha256": "927b7fce5226860e871f9e87768de9968bff3f9a527443846fe8092e7b68c43a"
+        }
+      ],
+      "cases": [
+        {
+          "caseId": "C14",
+          "instanceId": "26:2863",
+          "componentId": "26:2862"
+        }
+      ]
+    },
+    {
+      "id": "VI-05",
+      "originalSeverity": "P2",
+      "title": "统一与非px混合模式错误使用四格",
+      "status": "closed-after-live-write-readback-and-visual-review",
+      "actualChange": {
+        "linkedComponentId": "26:3380",
+        "mixedComponentId": "26:3727",
+        "presentation": "one scalar control, no fabricated four-side px values"
+      },
+      "readbackEvidence": [
+        {
+          "componentId": "26:3380",
+          "hasFourSideRow": false,
+          "hasScalarRow": true,
+          "readout": [
+            "24",
+            "px"
+          ]
+        },
+        {
+          "componentId": "26:3727",
+          "hasFourSideRow": false,
+          "hasScalarRow": true,
+          "readout": [
+            "混合",
+            " "
+          ]
+        }
+      ],
+      "screenshotEvidence": [
+        {
+          "nodeId": "26:3330",
+          "path": "review/final-fixes/main-26_3330.png",
+          "sha256": "afe96a261660f049c89f453ba20cff98e826211884663baab2f22f346cc9b5c6"
+        }
+      ],
+      "cases": [
+        {
+          "caseId": "P01",
+          "instanceId": "26:3381",
+          "componentId": "26:3380"
+        },
+        {
+          "caseId": "P05",
+          "instanceId": "26:3728",
+          "componentId": "26:3727"
+        }
+      ]
+    },
+    {
+      "id": "VI-06",
+      "originalSeverity": "P2",
+      "title": "四个独立输入框同时聚焦",
+      "status": "closed-after-live-write-readback-and-visual-review",
+      "actualChange": {
+        "componentId": "26:3555",
+        "focusedSide": "右"
+      },
+      "readbackEvidence": {
+        "componentId": "26:3555",
+        "focusedCells": [
+          "Inset 右"
+        ]
+      },
+      "screenshotEvidence": [
+        {
+          "nodeId": "26:3330",
+          "path": "review/final-fixes/main-26_3330.png",
+          "sha256": "afe96a261660f049c89f453ba20cff98e826211884663baab2f22f346cc9b5c6"
+        }
+      ],
+      "cases": [
+        {
+          "caseId": "P03",
+          "instanceId": "26:3556",
+          "componentId": "26:3555"
+        }
+      ]
+    },
+    {
+      "id": "VI-07",
+      "originalSeverity": "P2",
+      "title": "分拆数据与联动图标不一致",
+      "status": "closed-after-live-write-readback-and-visual-review",
+      "actualChange": {
+        "componentIds": [
+          "26:3642",
+          "26:3982"
+        ],
+        "mode": "split",
+        "icon": "Unlink"
+      },
+      "readbackEvidence": [
+        {
+          "componentId": "26:3642",
+          "iconMain": "Athena / Icon / Unlink"
+        },
+        {
+          "componentId": "26:3982",
+          "iconMain": "Athena / Icon / Unlink"
+        }
+      ],
+      "screenshotEvidence": [
+        {
+          "nodeId": "26:3330",
+          "path": "review/final-fixes/main-26_3330.png",
+          "sha256": "afe96a261660f049c89f453ba20cff98e826211884663baab2f22f346cc9b5c6"
+        }
+      ],
+      "cases": [
+        {
+          "caseId": "P04",
+          "instanceId": "26:3643",
+          "componentId": "26:3642"
+        },
+        {
+          "caseId": "P08",
+          "instanceId": "26:3983",
+          "componentId": "26:3982"
+        }
+      ]
+    },
+    {
+      "id": "VI-08",
+      "originalSeverity": "P3",
+      "title": "键盘焦点与后续提交示例目标不一致",
+      "status": "closed-after-live-write-readback-and-visual-review",
+      "actualChange": {
+        "componentId": "26:4784",
+        "focusedOption": "双线",
+        "retainedSelectedOption": "虚线"
+      },
+      "readbackEvidence": {
+        "componentId": "26:4784",
+        "outlinedOptions": [
+          "Option 双线"
+        ]
+      },
+      "screenshotEvidence": [
+        {
+          "nodeId": "26:4425",
+          "path": "review/final-fixes/main-26_4425.png",
+          "sha256": "b4af7ffa5b2043085a46e57212c8b2ee198b6bacb0d0f6392fb1dcdc32657680"
+        }
+      ],
+      "cases": [
+        {
+          "caseId": "D06",
+          "instanceId": "26:4785",
+          "componentId": "26:4784"
+        },
+        {
+          "caseId": "D12",
+          "instanceId": "26:5218",
+          "componentId": "26:5217"
+        }
+      ]
+    },
+    {
+      "id": "VI-09",
+      "originalSeverity": "P2",
+      "title": "长文与字符计数叠字并发生不明确裁切",
+      "status": "closed-after-live-write-readback-and-visual-review",
+      "actualChange": {
+        "componentId": "26:5511",
+        "contentViewportId": "61:3301",
+        "viewportHeight": 72,
+        "textLength": 20000,
+        "counterId": "26:5509",
+        "duplicateHintVisible": false
+      },
+      "readbackEvidence": {
+        "componentId": "26:5511",
+        "viewportId": "61:3301",
+        "clip": true,
+        "overflow": "VERTICAL",
+        "viewportEnd": 82,
+        "counterY": 100,
+        "counterSeparate": true,
+        "bodyLength": 20000,
+        "visibleCounters": 1
+      },
+      "screenshotEvidence": [
+        {
+          "nodeId": "26:5378",
+          "path": "review/final-fixes/main-26_5378.png",
+          "sha256": "bb62b847986fc02ca9a47b7ca0eb9ed661529c6a43b6e291ef08a2d3b801ec79"
+        }
+      ],
+      "cases": [
+        {
+          "caseId": "T05",
+          "instanceId": "26:5512",
+          "componentId": "26:5511"
+        }
+      ]
+    },
+    {
+      "id": "VI-10",
+      "originalSeverity": "P2",
+      "title": "最大resize示例未真正改变高度",
+      "status": "closed-after-live-write-readback-and-visual-review",
+      "actualChange": {
+        "minimumComponent": "26:5427",
+        "minimumHeight": 110,
+        "maximumComponent": "26:5454",
+        "maximumHeight": 230
+      },
+      "readbackEvidence": {
+        "min": 110,
+        "max": 230
+      },
+      "screenshotEvidence": [
+        {
+          "nodeId": "26:5378",
+          "path": "review/final-fixes/main-26_5378.png",
+          "sha256": "bb62b847986fc02ca9a47b7ca0eb9ed661529c6a43b6e291ef08a2d3b801ec79"
+        }
+      ],
+      "cases": [
+        {
+          "caseId": "T02",
+          "instanceId": "26:5428",
+          "componentId": "26:5427"
+        },
+        {
+          "caseId": "T03",
+          "instanceId": "26:5455",
+          "componentId": "26:5454"
+        }
+      ]
+    },
+    {
+      "id": "VI-11",
+      "originalSeverity": "P2",
+      "title": "通用属性字段丢失单位",
+      "status": "closed-after-live-write-readback-and-visual-review",
+      "actualChange": {
+        "components": [
+          "26:5971",
+          "26:6022",
+          "26:6042",
+          "26:6065"
+        ],
+        "unit": "px",
+        "unitWidth": 16
+      },
+      "readbackEvidence": [
+        {
+          "componentId": "26:5971",
+          "unit": "px",
+          "unitWidth": 16
+        },
+        {
+          "componentId": "26:6022",
+          "unit": "px",
+          "unitWidth": 16
+        },
+        {
+          "componentId": "26:6042",
+          "unit": "px",
+          "unitWidth": 16
+        },
+        {
+          "componentId": "26:6065",
+          "unit": "px",
+          "unitWidth": 16
+        }
+      ],
+      "screenshotEvidence": [
+        {
+          "nodeId": "26:5952",
+          "path": "review/final-fixes/main-26_5952.png",
+          "sha256": "5c5b0e9598bfc6834da39fb85812f16136d04e1acfe37b11f16f1c004450961e"
+        }
+      ],
+      "cases": [
+        {
+          "caseId": "F01",
+          "instanceId": "26:5972",
+          "componentId": "26:5971"
+        },
+        {
+          "caseId": "F03",
+          "instanceId": "26:6023",
+          "componentId": "26:6022"
+        },
+        {
+          "caseId": "F04",
+          "instanceId": "26:6043",
+          "componentId": "26:6042"
+        },
+        {
+          "caseId": "F05",
+          "instanceId": "26:6066",
+          "componentId": "26:6065"
+        }
+      ]
+    },
+    {
+      "id": "VI-12",
+      "originalSeverity": "P2",
+      "title": "属性分组标题与控件内容错位",
+      "status": "closed-after-live-write-readback-and-visual-review",
+      "actualChange": {
+        "wideComponent": "26:5623",
+        "wideGroup": "外观",
+        "wideFields": [
+          "背景颜色",
+          "圆角"
+        ],
+        "narrowComponent": "26:5734",
+        "narrowGroup": "排版",
+        "narrowFields": [
+          "文字颜色",
+          "字号",
+          "字重",
+          "文字对齐"
+        ]
+      },
+      "readbackEvidence": [
+        {
+          "componentId": "26:5623",
+          "heading": "外观",
+          "fields": [
+            "背景颜色",
+            "圆角"
+          ]
+        },
+        {
+          "componentId": "26:5734",
+          "heading": "排版",
+          "fields": [
+            "文字颜色",
+            "字号",
+            "字重",
+            "文字对齐"
+          ]
+        }
+      ],
+      "screenshotEvidence": [
+        {
+          "nodeId": "26:5559",
+          "path": "review/final-fixes/main-26_5559.png",
+          "sha256": "3df369fd5b793c4b9db0f0fc8e2dafa73c80e97957de6c448bae11d2131b2dc0"
+        }
+      ],
+      "cases": [
+        {
+          "caseId": "S01",
+          "instanceId": "26:5624",
+          "componentId": "26:5623"
+        },
+        {
+          "caseId": "S02",
+          "instanceId": "26:5735",
+          "componentId": "26:5734"
+        }
+      ]
+    },
+    {
+      "id": "VI-13",
+      "originalSeverity": "P2",
+      "title": "窄容器适配示例仍是468px宽",
+      "status": "closed-after-live-write-readback-and-visual-review",
+      "actualChange": {
+        "componentId": "26:5734",
+        "width": 360,
+        "breakpoint": 392
+      },
+      "readbackEvidence": {
+        "width": 360,
+        "direction": "VERTICAL"
+      },
+      "screenshotEvidence": [
+        {
+          "nodeId": "26:5559",
+          "path": "review/final-fixes/main-26_5559.png",
+          "sha256": "3df369fd5b793c4b9db0f0fc8e2dafa73c80e97957de6c448bae11d2131b2dc0"
+        }
+      ],
+      "cases": [
+        {
+          "caseId": "S02",
+          "instanceId": "26:5735",
+          "componentId": "26:5734"
+        }
+      ]
+    },
+    {
+      "id": "VI-14",
+      "originalSeverity": "P2",
+      "title": "推断目标与面包屑末级标签矛盾",
+      "status": "closed-after-live-write-readback-and-visual-review",
+      "actualChange": {
+        "panelId": "29:3067",
+        "targetTag": "div",
+        "breadcrumbLeaf": "div"
+      },
+      "readbackEvidence": {
+        "panelId": "29:3067",
+        "breadcrumbLeaf": "div"
+      },
+      "screenshotEvidence": [
+        {
+          "nodeId": "29:2951",
+          "path": "review/final-fixes/main-29_2951.png",
+          "sha256": "e2678ab0445c40d6236990581792ba2b011922f2d46d4e08241cde150896a749"
+        }
+      ],
+      "cases": [
+        {
+          "caseId": "selected-inferred-semantics",
+          "nodeId": "29:3067",
+          "boardId": "29:2951",
+          "pattern": "inferred-semantic-target"
+        }
+      ]
+    },
+    {
+      "id": "VI-15",
+      "originalSeverity": "P3",
+      "title": "长名称样例未触发省略号",
+      "status": "closed-after-live-write-readback-and-visual-review",
+      "actualChange": {
+        "panelId": "29:3499",
+        "titleId": "29:3515",
+        "fullText": "添加任务并通知所有已加入当前工作区、参与本周版本评审与上线验收的协作者",
+        "width": 282,
+        "maxLines": 1,
+        "truncation": "ENDING",
+        "fullTooltipId": "29:3548"
+      },
+      "readbackEvidence": {
+        "panelId": "29:3499",
+        "width": 282,
+        "maxLines": null,
+        "truncation": "ENDING",
+        "fullText": "添加任务并通知所有已加入当前工作区、参与本周版本评审与上线验收的协作者",
+        "tooltipMatches": true
+      },
+      "screenshotEvidence": [
+        {
+          "nodeId": "29:3335",
+          "path": "review/final-fixes/main-29_3335.png",
+          "sha256": "c55d2fac32d764c56e7cfd44bb5e8216d03feb79999fc48a9dfd4313dae855fa"
+        }
+      ],
+      "cases": [
+        {
+          "caseId": "long-target-name-ellipsis",
+          "nodeId": "29:3499",
+          "boardId": "29:3335",
+          "pattern": "truncated-identity-with-full-tooltip"
+        }
+      ]
+    },
+    {
+      "id": "VI-16",
+      "originalSeverity": "P3",
+      "title": "搜索空态占位过于泛化",
+      "status": "closed-after-live-write-readback-and-visual-review",
+      "actualChange": {
+        "componentId": "26:5253",
+        "placeholder": "查找文字、标题或按钮",
+        "duplicatedHintVisible": false
+      },
+      "readbackEvidence": {
+        "placeholder": "查找文字、标题或按钮",
+        "visibleStandaloneHints": 0
+      },
+      "screenshotEvidence": [
+        {
+          "nodeId": "26:5233",
+          "path": "review/final-fixes/main-26_5233.png",
+          "sha256": "009080af39f330580fff66b15a1a8af06448c11e7f73933b3e51fd7568aa0be9"
+        }
+      ],
+      "cases": [
+        {
+          "caseId": "I01",
+          "instanceId": "26:5254",
+          "componentId": "26:5253"
+        }
+      ]
+    }
+  ],
+  "visualEvidence": [
+    {
+      "nodeId": "26:687",
+      "path": "review/final-fixes/main-26_687.png",
+      "size": [
+        1440,
+        802
+      ],
+      "sha256": "4f1416f1cc2557d6f56e36a79019b6f2b0aa0127cfd4ce986c897c17706ee99c",
+      "visuallyInspected": true,
+      "inspection": "Native Figma node screenshot at scale 1 (three initial exports fetched through get_screenshot); actually viewed inline or with view_image.",
+      "result": "pass",
+      "notes": "N07 now displays 600 without px; default/hover/focus/drag states remain intact and uncut."
+    },
+    {
+      "nodeId": "26:1102",
+      "path": "review/final-fixes/main-26_1102.png",
+      "size": [
+        1440,
+        856
+      ],
+      "sha256": "b909097345578bfd4855a38e79e05f1684cb076a919f8f411c8b4f266ec4efc0",
+      "visuallyInspected": true,
+      "inspection": "Native Figma node screenshot at scale 1 (three initial exports fetched through get_screenshot); actually viewed inline or with view_image.",
+      "result": "pass",
+      "notes": "N11 retains invalid draft 240 but its rail and specimen now match confirmed 14. Error guidance remains visible."
+    },
+    {
+      "nodeId": "26:2204",
+      "path": "review/final-fixes/main-26_2204.png",
+      "size": [
+        1440,
+        1190
+      ],
+      "sha256": "927b7fce5226860e871f9e87768de9968bff3f9a527443846fe8092e7b68c43a",
+      "visuallyInspected": true,
+      "inspection": "Native Figma node screenshot at scale 1 (three initial exports fetched through get_screenshot); actually viewed inline or with view_image.",
+      "result": "pass",
+      "notes": "C11 raw rgba field has no duplicate alpha readout. C14 is an empty focused draft with visible caret and retained opaque previous swatch, not transparent."
+    },
+    {
+      "nodeId": "26:3330",
+      "path": "review/final-fixes/main-26_3330.png",
+      "size": [
+        1440,
+        990
+      ],
+      "sha256": "afe96a261660f049c89f453ba20cff98e826211884663baab2f22f346cc9b5c6",
+      "visuallyInspected": true,
+      "inspection": "Native Figma node screenshot at scale 1 (three initial exports fetched through get_screenshot); actually viewed inline or with view_image.",
+      "result": "pass",
+      "notes": "P01 is a unified scalar slider; P05 is a neutral mixed scalar with original CSS hint and no px. Only P03 right edge is focused; P04/P08 show Unlink."
+    },
+    {
+      "nodeId": "26:4425",
+      "path": "review/final-fixes/main-26_4425.png",
+      "size": [
+        1440,
+        1454
+      ],
+      "sha256": "b4af7ffa5b2043085a46e57212c8b2ee198b6bacb0d0f6392fb1dcdc32657680",
+      "visuallyInspected": true,
+      "inspection": "Native Figma node screenshot at scale 1 (three initial exports fetched through get_screenshot); actually viewed inline or with view_image.",
+      "result": "pass",
+      "notes": "D06 outline is now on Double; selected Dashed remains checked until commit. D12 Double result is consistent. Popup scroll and above placement remain clear."
+    },
+    {
+      "nodeId": "26:5378",
+      "path": "review/final-fixes/main-26_5378.png",
+      "size": [
+        1440,
+        1144
+      ],
+      "sha256": "bb62b847986fc02ca9a47b7ca0eb9ed661529c6a43b6e291ef08a2d3b801ec79",
+      "visuallyInspected": true,
+      "inspection": "Native Figma node screenshot at scale 1 (three initial exports fetched through get_screenshot); actually viewed inline or with view_image.",
+      "result": "pass",
+      "notes": "T05 content is clipped within a visible scroll viewport and no longer collides with its sole count row. T02 is visibly 110 px and T03 230 px; both show resize grips."
+    },
+    {
+      "nodeId": "26:5952",
+      "path": "review/final-fixes/main-26_5952.png",
+      "size": [
+        1440,
+        658
+      ],
+      "sha256": "5c5b0e9598bfc6834da39fb85812f16136d04e1acfe37b11f16f1c004450961e",
+      "visuallyInspected": true,
+      "inspection": "Native Figma node screenshot at scale 1 (three initial exports fetched through get_screenshot); actually viewed inline or with view_image.",
+      "result": "pass",
+      "notes": "F01/F03/F04/F05 all have an aligned px column. Numeric values remain readable in disabled/error/pending states."
+    },
+    {
+      "nodeId": "26:5559",
+      "path": "review/final-fixes/main-26_5559.png",
+      "size": [
+        1440,
+        902
+      ],
+      "sha256": "3df369fd5b793c4b9db0f0fc8e2dafa73c80e97957de6c448bae11d2131b2dc0",
+      "visuallyInspected": true,
+      "inspection": "Native Figma node screenshot at scale 1 (three initial exports fetched through get_screenshot); actually viewed inline or with view_image.",
+      "result": "pass",
+      "notes": "S01 appearance group now contains background color and corner radius at 480 px width. S02 is a real 360 px single column with four typography controls; no overlap after board growth."
+    },
+    {
+      "nodeId": "29:2951",
+      "path": "review/final-fixes/main-29_2951.png",
+      "size": [
+        1640,
+        928
+      ],
+      "sha256": "e2678ab0445c40d6236990581792ba2b011922f2d46d4e08241cde150896a749",
+      "visuallyInspected": true,
+      "inspection": "Native Figma node screenshot at scale 1 (three initial exports fetched through get_screenshot); actually viewed inline or with view_image.",
+      "result": "pass",
+      "notes": "The inferred div target now also ends its breadcrumb in div. Other five selection states remain readable and uncropped."
+    },
+    {
+      "nodeId": "29:3335",
+      "path": "review/final-fixes/main-29_3335.png",
+      "size": [
+        1640,
+        928
+      ],
+      "sha256": "c55d2fac32d764c56e7cfd44bb5e8216d03feb79999fc48a9dfd4313dae855fa",
+      "visuallyInspected": true,
+      "inspection": "Native Figma node screenshot at scale 1 (three initial exports fetched through get_screenshot); actually viewed inline or with view_image.",
+      "result": "pass",
+      "notes": "Long target name visibly ends with an ellipsis while the full name remains in its tooltip area. No collision with dimensions or close icon."
+    },
+    {
+      "nodeId": "26:5233",
+      "path": "review/final-fixes/main-26_5233.png",
+      "size": [
+        1440,
+        812
+      ],
+      "sha256": "009080af39f330580fff66b15a1a8af06448c11e7f73933b3e51fd7568aa0be9",
+      "visuallyInspected": true,
+      "inspection": "Native Figma node screenshot at scale 1 (three initial exports fetched through get_screenshot); actually viewed inline or with view_image.",
+      "result": "pass",
+      "notes": "I01 now uses the task-specific search placeholder inside the field, without redundant visible hint; remaining input cases are intact."
+    },
+    {
+      "nodeId": "29:4502",
+      "path": "review/final-fixes/main-29_4502.png",
+      "size": [
+        1640,
+        928
+      ],
+      "sha256": "2fbba94fa4a4bb61d9ee109c0c36f624d7feaa4cf219caff8ac36b0b4b90a392",
+      "visuallyInspected": true,
+      "inspection": "Native Figma node screenshot at scale 1 (three initial exports fetched through get_screenshot); actually viewed inline or with view_image.",
+      "result": "pass",
+      "notes": "All six previously unseen preview states are visible: undo confirmed, stale element, tab mismatch, protected text draft, preview-only boundary and cumulative source handoff. Actions correspond to each state, no clipping."
+    },
+    {
+      "nodeId": "29:4952",
+      "path": "review/final-fixes/main-29_4952.png",
+      "size": [
+        1640,
+        540
+      ],
+      "sha256": "1bb76f5f19d404b59c44b9fd5b524a96f88feb249f9c47cecc9e57b3f2ac7d57",
+      "visuallyInspected": true,
+      "inspection": "Native Figma node screenshot at scale 1 (three initial exports fetched through get_screenshot); actually viewed inline or with view_image.",
+      "result": "pass",
+      "notes": "All five previously unseen typography properties are visible: text color, font size, font weight, letter spacing, text alignment. Font weight correctly has no unit; numeric columns and alignment segments are intact."
+    },
+    {
+      "nodeId": "54:2695",
+      "path": "review/final-fixes/main-54_2695.png",
+      "size": [
+        1440,
+        1760
+      ],
+      "sha256": "eb0c82408b8b1ccd81dcab34a7457b6769d19272eeae3f21270a437dfcb05a2a",
+      "visuallyInspected": true,
+      "inspection": "Native Figma node screenshot at scale 1 (three initial exports fetched through get_screenshot); actually viewed inline or with view_image.",
+      "result": "pass",
+      "notes": "All twelve Feishu states are visible; connected and paired differ, restore failure offers restore rather than replacing config, pairing is masked, manual Secret is empty, and QR is visibly non-encoded schematic. No clipping."
+    }
+  ],
+  "previousMissingBoards": [
+    "29:4502",
+    "29:4952",
+    "54:2695"
+  ],
+  "coverageAfterReview": {
+    "requestedMainBoards": 25,
+    "actuallyViewedMainBoards": 25,
+    "inspectorVariants": 85,
+    "selectionStates": 19,
+    "previewStates": 18,
+    "A2UIProperties": 27,
+    "modelAndBrowserStates": 16,
+    "feishuStates": 12,
+    "coreSpecimenBoards": 1,
+    "newOrRevisedScreenshotsThisPass": 14
+  },
+  "geometryChanges": [
+    {
+      "id": "26:5512",
+      "type": "INSTANCE",
+      "mainComponentId": "26:5511",
+      "width": 468,
+      "height": 148
+    },
+    {
+      "id": "26:5455",
+      "type": "INSTANCE",
+      "mainComponentId": "26:5454",
+      "width": 468,
+      "height": 252
+    },
+    {
+      "id": "26:5428",
+      "type": "INSTANCE",
+      "mainComponentId": "26:5427",
+      "width": 468,
+      "height": 132
+    },
+    {
+      "id": "26:5624",
+      "type": "INSTANCE",
+      "mainComponentId": "26:5623",
+      "width": 480,
+      "height": 92
+    },
+    {
+      "id": "26:5735",
+      "type": "INSTANCE",
+      "mainComponentId": "26:5734",
+      "width": 360,
+      "height": 308
+    },
+    {
+      "id": "26:5254",
+      "type": "INSTANCE",
+      "mainComponentId": "26:5253",
+      "width": 400,
+      "height": 56
+    }
+  ],
+  "exportNotes": [
+    "Two initial get_screenshot calls timed out terminally; node.screenshot({scale:1}) succeeded and supplied all missing evidence.",
+    "All temporary asset URLs and session identifiers are intentionally omitted.",
+    "Fixed-height ellipsis node reports maxLines=null after API normalization, but its 282px fixed width plus ENDING setting and actual screenshot prove the visible single-line ellipsis."
+  ],
+  "limits": [
+    "This verifies editable Figma design structure and visible state examples, not production implementation or runtime accessibility behavior.",
+    "The 11 unaffected boards retain prior actual PNG review; the 14 changed or previously missing boards have fresh screenshots listed here.",
+    "Parent-owned final global contrast checks and other application/Agent Atlas pages remain outside this scoped fix report."
+  ],
+  "mutationSummary": {
+    "createdNodes": 212,
+    "mutatedNodes": 72,
+    "removedNodes": 155,
+    "rawOperationListsBundled": false
+  }
+}

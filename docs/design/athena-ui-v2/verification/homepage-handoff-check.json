@@ -1,0 +1,33 @@
+{
+  "date": "2026-11-02",
+  "revision": "homepage-2026-11-02",
+  "status": "passed-for-homepage-handoff-files",
+  "checks": {
+    "allJsonParses": true,
+    "homepageDirectFrameCount": 21,
+    "uiFramesVisuallyReviewedFromFinalReports": 19,
+    "auxiliaryFramesStructureOnly": 2,
+    "prototypeTargetRecords": 152,
+    "navigate": 150,
+    "scrollTo": 2,
+    "brokenTargets": 0,
+    "inputStates": 11,
+    "modelStates": 12,
+    "browserStates": 4,
+    "agentStates": 3,
+    "previewAndPeerScreenshotHashesChecked": 7,
+    "localResourceReferencesResolve": true,
+    "historicalEvidenceAndPreviewAssetsUnchanged": 62,
+    "unchangedOtherRootSpecs": [
+      "agent-state-spec.json",
+      "research-sources.json",
+      "implementation-boundaries.json",
+      "inspector-state-spec.json",
+      "design-tokens.json"
+    ],
+    "historicalGlobalCountsUnchanged": true,
+    "independentAgentManifestUnchanged": true,
+    "noTemporaryPathsSessionIdsOrAssetUrlsInCurrentRecords": true
+  },
+  "scope": "Local JSON/resource consistency only; no additional Figma audit or runtime execution."
+}

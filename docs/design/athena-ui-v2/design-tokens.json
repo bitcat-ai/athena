@@ -1,0 +1,942 @@
+{
+  "schemaVersion": "2.0",
+  "documentType": "design-tokens",
+  "date": "2026-11-01",
+  "product": "Athena",
+  "audience": "design-and-engineering",
+  "status": "design-surface-refined-reviewed-proposal",
+  "verification": {
+    "status": "passed-for-surface-refinement-scope",
+    "revision": "heroui-surface-2026-11-02",
+    "scope": [
+      "HeroUI-inspired radius and surface recipe",
+      "15 representative visual boards",
+      "Scoped structure and prototype-target readback"
+    ],
+    "note": "Revision04表面精修已按实际recipe和回读合并；本轮15张代表画板，前轮黑白配色与历史全量审阅仅作基线。",
+    "evidence": "verification/heroui-surface-refinement.json",
+    "completedScopedChecks": [
+      {
+        "area": "representative-surface-visual-review",
+        "status": "passed",
+        "mainBoards": 10,
+        "agentBoards": 5,
+        "totalBoards": 15,
+        "evidence": "verification/heroui-surface-refinement.json"
+      },
+      {
+        "area": "main-structure-and-prototype-targets",
+        "status": "passed-structural",
+        "boards": 49,
+        "targets": 107,
+        "missingTargets": 0,
+        "unexpectedOverflow": 0,
+        "evidence": "verification/heroui-main-geometry.json"
+      },
+      {
+        "area": "agent-surface-and-preservation",
+        "status": "passed-for-stated-scope",
+        "majorFramesPreserved": 52,
+        "canonicalStatesPreserved": 175,
+        "fullSemanticReaudit": false,
+        "evidence": "verification/heroui-agent-surface-refinement.json"
+      }
+    ],
+    "priorRefinementBaseline": {
+      "revision": "monochrome-2026-11-02",
+      "applicability": "Previous monochrome refinement; not new surface-refinement evidence",
+      "verification": {
+        "status": "passed-for-retheme-scope",
+        "revision": "monochrome-2026-11-02",
+        "scope": [
+          "Current monochrome foundation variables",
+          "Representative retheme screenshots",
+          "Color logo and icon readback"
+        ],
+        "note": "2026-11-02黑白主题独立验收：84个实际颜色值匹配目标，96组指定配色达阈值，13张代表画板完成视觉复查；14页101张主要画板结构存在。旧配色验收保留为历史基线。",
+        "evidence": "verification/monochrome-retheme.json",
+        "priorThemeBaseline": {
+          "theme": "冰蓝 / 石墨灰",
+          "applicability": "Historical baseline before the monochrome retheme; not current-theme visual evidence",
+          "verification": {
+            "status": "passed-for-design-scope",
+            "scope": [
+              "Figma final visual review",
+              "Cross-screen and state consistency review",
+              "Prototype interaction review"
+            ],
+            "note": "最终设计审阅证据已合并；适用范围与未测运行边界见scopeLimits。",
+            "checks": [
+              {
+                "id": "selected-contrast-pairs",
+                "status": "passed",
+                "passed": 48,
+                "total": 48,
+                "basis": "Actual Figma resolved variable values",
+                "scope": "Selected semantic combinations, two files and both themes; not full runtime WCAG audit",
+                "evidence": "verification/final-contrast-audit.json"
+              }
+            ],
+            "scopeLimits": [
+              "本轮交付与验收针对可编辑Figma设计和明确的状态样例，不代表应用已实现或部署。",
+              "没有运行真实键盘、读屏、IME、授权、取消、媒体播放或网络业务动作。",
+              "原型导航记录与条件说明分开；未把所有状态图声称为可执行动态原型。",
+              "对比度覆盖48组指定语义组合，不等于完整运行时WCAG审计。"
+            ]
+          }
+        },
+        "scopeLimits": [
+          "本轮视觉复查覆盖13张代表画板：主稿8张、Agent稿5张；没有重新截图验收全部101张主要画板。",
+          "本轮结构回读确认14页和101张主要画板存在，不等于重新执行内容、语义、原型或运行验收。",
+          "换肤前的视觉、语义、几何和原型检查保留为历史基线，不自动成为本轮新证据。",
+          "未修改应用源码或部署；没有运行真实键盘、读屏、IME、授权、取消、媒体播放或网络业务动作。",
+          "96组指定语义配色的数值对比度检查不等于完整运行时WCAG审计。"
+        ],
+        "completedScopedChecks": [
+          {
+            "area": "theme-variable-readback",
+            "status": "passed",
+            "resolvedValues": 84,
+            "evidence": "verification/monochrome-retheme.json"
+          },
+          {
+            "area": "selected-color-contrast",
+            "status": "passed",
+            "passed": 96,
+            "total": 96,
+            "evidence": "verification/monochrome-contrast-audit.json"
+          },
+          {
+            "area": "representative-theme-visual-review",
+            "status": "passed",
+            "mainBoards": 8,
+            "agentBoards": 5,
+            "totalBoards": 13,
+            "evidence": "verification/monochrome-retheme.json"
+          },
+          {
+            "area": "current-node-existence",
+            "status": "passed-structural",
+            "pages": 14,
+            "majorBoards": 101,
+            "missing": 0,
+            "fullScreenshotAudit": false,
+            "evidence": "verification/monochrome-structure-readback.json"
+          }
+        ]
+      }
+    },
+    "scopeLimits": [
+      "本轮视觉复查15张代表画板：主稿10张、Agent稿5张；未重新截图验收全部101张主要画板。",
+      "主稿49张当前画板与107个原型目标已做结构回读；Agent报告记录52画板与175状态保留，不等于重新执行全状态语义审计。",
+      "前轮黑白配色的84个颜色值和96组对比度保留为基线，不写成本轮重新测量。",
+      "主稿包含深色代表界面复查；Agent本轮没有新增深色视觉审计。",
+      "未修改应用源码或部署；未执行真实键盘、读屏、IME、授权、媒体播放或业务动作。"
+    ]
+  },
+  "language": {
+    "name": "黑白 / 彩色标识",
+    "primary": "#171717",
+    "intent": "白色工作面与中性灰层次构成主界面；关键操作、选中和焦点使用黑白语义，彩色仅用于品牌与状态图标。",
+    "statusRule": "状态由图标、文字和结构共同表达；成功与错误文本保持中性，绿色与红色仅用于状态图标。",
+    "coloredIconTokens": [
+      "brandBlue",
+      "brandTeal",
+      "statusGreen",
+      "statusRed"
+    ],
+    "colorBoundary": "彩色标识不扩展为整片工作面、按钮背景、选中底或正文文字的品牌着色。",
+    "surfaceIntent": "以白色表面、中性次级填充与轻阴影组织层级；减少装饰边框，保留焦点、错误和有意义的数据边界。"
+  },
+  "modes": [
+    "light",
+    "dark"
+  ],
+  "color": {
+    "canvas": {
+      "type": "color",
+      "light": "#FAFAFA",
+      "dark": "#111111",
+      "cssVariable": "--background"
+    },
+    "surface": {
+      "type": "color",
+      "light": "#FFFFFF",
+      "dark": "#1C1C1C",
+      "cssVariable": "--surface"
+    },
+    "subtle": {
+      "type": "color",
+      "light": "#F5F5F5",
+      "dark": "#282828",
+      "cssVariable": "--surface-secondary"
+    },
+    "hover": {
+      "type": "color",
+      "light": "#EBEBEB",
+      "dark": "#333333",
+      "cssVariable": "--surface-tertiary"
+    },
+    "ink": {
+      "type": "color",
+      "light": "#171717",
+      "dark": "#F5F5F5",
+      "cssVariable": "--foreground"
+    },
+    "secondary": {
+      "type": "color",
+      "light": "#525252",
+      "dark": "#C5C5C5",
+      "cssVariable": "--secondary"
+    },
+    "muted": {
+      "type": "color",
+      "light": "#666666",
+      "dark": "#AAAAAA",
+      "cssVariable": "--muted"
+    },
+    "line": {
+      "type": "color",
+      "light": "#E5E5E5",
+      "dark": "#3F3F3F",
+      "cssVariable": "--border"
+    },
+    "control": {
+      "type": "color",
+      "light": "#888888",
+      "dark": "#878787",
+      "cssVariable": "--field-border"
+    },
+    "accent": {
+      "type": "color",
+      "light": "#171717",
+      "dark": "#F5F5F5",
+      "cssVariable": "--accent"
+    },
+    "accentSoft": {
+      "type": "color",
+      "light": "#F0F0F0",
+      "dark": "#303030",
+      "cssVariable": "--accent-soft"
+    },
+    "accentInk": {
+      "type": "color",
+      "light": "#262626",
+      "dark": "#F0F0F0",
+      "cssVariable": "--accent-soft-foreground"
+    },
+    "onAccent": {
+      "type": "color",
+      "light": "#FFFFFF",
+      "dark": "#171717",
+      "cssVariable": "--accent-foreground"
+    },
+    "success": {
+      "type": "color",
+      "light": "#404040",
+      "dark": "#D4D4D4",
+      "cssVariable": "--success"
+    },
+    "successSoft": {
+      "type": "color",
+      "light": "#F5F5F5",
+      "dark": "#252525",
+      "cssVariable": "--success-soft"
+    },
+    "danger": {
+      "type": "color",
+      "light": "#262626",
+      "dark": "#E5E5E5",
+      "cssVariable": "--danger"
+    },
+    "dangerSoft": {
+      "type": "color",
+      "light": "#F5F5F5",
+      "dark": "#2B2B2B",
+      "cssVariable": "--danger-soft"
+    },
+    "brandBlue": {
+      "type": "color",
+      "light": "#2563EB",
+      "dark": "#70A0FF",
+      "usage": "logo-or-icon-only",
+      "applicationStatus": "not-applied-to-source"
+    },
+    "brandTeal": {
+      "type": "color",
+      "light": "#0D9488",
+      "dark": "#5EEAD4",
+      "usage": "logo-or-icon-only",
+      "applicationStatus": "not-applied-to-source"
+    },
+    "statusGreen": {
+      "type": "color",
+      "light": "#16804A",
+      "dark": "#6ED7A1",
+      "usage": "logo-or-icon-only",
+      "applicationStatus": "not-applied-to-source"
+    },
+    "statusRed": {
+      "type": "color",
+      "light": "#C83B3B",
+      "dark": "#FF8A8A",
+      "usage": "logo-or-icon-only",
+      "applicationStatus": "not-applied-to-source"
+    }
+  },
+  "typography": {
+    "families": {
+      "latin": "Inter",
+      "cjk": "Noto Sans SC",
+      "mono": "JetBrains Mono",
+      "sans": [
+        "Inter",
+        "Noto Sans SC"
+      ]
+    },
+    "figmaTextStyles": {
+      "Display": {
+        "family": "Noto Sans SC",
+        "size": 36,
+        "lineHeight": 48,
+        "weight": "Bold",
+        "unit": "px"
+      },
+      "Heading": {
+        "family": "Noto Sans SC",
+        "size": 24,
+        "lineHeight": 36,
+        "weight": "Bold",
+        "unit": "px"
+      },
+      "Title": {
+        "family": "Noto Sans SC",
+        "size": 18,
+        "lineHeight": 28,
+        "weight": "Medium",
+        "unit": "px"
+      },
+      "Body": {
+        "family": "Noto Sans SC",
+        "size": 14,
+        "lineHeight": 24,
+        "weight": "Regular",
+        "unit": "px"
+      },
+      "Label": {
+        "family": "Noto Sans SC",
+        "size": 13,
+        "lineHeight": 20,
+        "weight": "Medium",
+        "unit": "px"
+      },
+      "Caption": {
+        "family": "Noto Sans SC",
+        "size": 12,
+        "lineHeight": 18,
+        "weight": "Regular",
+        "unit": "px"
+      },
+      "Micro": {
+        "family": "Noto Sans SC",
+        "size": 11,
+        "lineHeight": 16,
+        "weight": "Regular",
+        "unit": "px"
+      },
+      "Panel": {
+        "family": "Noto Sans SC",
+        "size": 14,
+        "lineHeight": 22,
+        "weight": "Medium",
+        "unit": "px"
+      },
+      "Reading": {
+        "family": "Noto Sans SC",
+        "size": 15,
+        "lineHeight": 26,
+        "weight": "Regular",
+        "unit": "px"
+      },
+      "Code": {
+        "family": "JetBrains Mono",
+        "size": 12,
+        "lineHeight": 20,
+        "weight": "Regular",
+        "unit": "px"
+      },
+      "ControlLabel": {
+        "family": "Noto Sans SC",
+        "size": 12,
+        "lineHeight": 16,
+        "weight": "Medium",
+        "unit": "px"
+      },
+      "ControlValue": {
+        "family": "JetBrains Mono",
+        "size": 12,
+        "lineHeight": 18,
+        "weight": "Regular",
+        "unit": "px",
+        "features": [
+          "tabular numbers",
+          "right-aligned numeric readout"
+        ]
+      },
+      "SectionLabel": {
+        "family": "Noto Sans SC",
+        "size": 13,
+        "lineHeight": 20,
+        "weight": "Medium",
+        "unit": "px"
+      }
+    },
+    "runtimeNote": "这是 Figma 设计用字规格；本次未安装字体、替换应用字体或修改运行时代码。"
+  },
+  "spacing": {
+    "unit": "px",
+    "scale": [
+      2,
+      3,
+      4,
+      5,
+      6,
+      8,
+      10,
+      12,
+      14,
+      16,
+      18,
+      20,
+      24,
+      28,
+      32,
+      40,
+      48,
+      64
+    ],
+    "primaryGrid": 4
+  },
+  "radius": {
+    "unit": "px",
+    "control": 12,
+    "panel": 24,
+    "composer": 24,
+    "scale": [
+      3,
+      4,
+      6,
+      7,
+      8,
+      10,
+      12,
+      16,
+      20,
+      22,
+      24,
+      999
+    ],
+    "button": 24,
+    "overlay": 22,
+    "navigation": 16,
+    "option": 12,
+    "window": 24,
+    "chip": 999,
+    "iconButton": 16
+  },
+  "size": {
+    "unit": "px",
+    "desktopFrame": [
+      1600,
+      1000
+    ],
+    "sidebarWidth": 216,
+    "conversationWidth": 520,
+    "browserWidth": 864,
+    "browserHeight": 944,
+    "browserTabsHeight": 44,
+    "addressBarHeight": 44,
+    "browserViewport": [
+      864,
+      824
+    ],
+    "browserFooterHeight": 32,
+    "selectedDemoButton": [
+      128,
+      40
+    ],
+    "canonicalAgentPanelWidth": 624,
+    "buttonHeight": 34,
+    "formFieldHeight": 38,
+    "inspectorControl": 34,
+    "inspectorLabelHeight": 16,
+    "inspectorLabelGap": 6,
+    "inspectorFieldRowHeight": 56,
+    "iconHitArea": 32,
+    "mobilePrimaryHitArea": 44
+  },
+  "stroke": {
+    "unit": "px",
+    "divider": 1,
+    "control": 0,
+    "focusRing": 2,
+    "focusOffset": 2,
+    "icon": 1.5,
+    "decorativeDivider": 0,
+    "stateBoundaryRule": "普通字段无描边；焦点保留2px，错误与选择反馈按状态规格保留。白色色样可有1px内边用于识别真实色样。"
+  },
+  "motion": {
+    "unit": "ms",
+    "hover": 120,
+    "panel": 180,
+    "reducedMotion": "取消滑移、扫光、脉冲与循环；进度仍由静态文案与数值呈现。",
+    "progress": "真实百分比只用于可测量进度；步骤计数与耗时不假装整体完成率。"
+  },
+  "inspectorMetrics": {
+    "unit": "px",
+    "valueGlyphSlot": 32,
+    "numberReadout": 72,
+    "longNumberReadout": 88,
+    "unitColumn": 16,
+    "sliderRail": 3,
+    "sliderThumb": [
+      12,
+      16
+    ],
+    "sliderHitHeight": 32,
+    "colorTriggerWidth": 40,
+    "colorSample": [
+      22,
+      20
+    ],
+    "colorPopoverWidth": 264,
+    "colorPopoverPadding": 16,
+    "colorAreaHeight": 144,
+    "hueAlphaRailHeight": 12,
+    "selectOptionHeight": 32,
+    "selectMenuPadding": 4,
+    "propertyGridGap": [
+      16,
+      16
+    ],
+    "fourInsetsGap": 4,
+    "singleColumnAtContainerWidth": 392,
+    "textareaMinHeight": 110,
+    "textareaMaxHeight": 230
+  },
+  "inspectorAliases": {
+    "--ei-ink": {
+      "kind": "semantic-color-alias",
+      "token": "color.ink",
+      "cssTarget": "var(--foreground)",
+      "light": "#171717",
+      "dark": "#F5F5F5",
+      "currentCodeValue": "#202333",
+      "applicationStatus": "not-applied-to-source"
+    },
+    "--ei-secondary": {
+      "kind": "semantic-color-alias",
+      "token": "color.secondary",
+      "cssTarget": "var(--secondary)",
+      "light": "#525252",
+      "dark": "#C5C5C5",
+      "currentCodeValue": "#545967",
+      "applicationStatus": "not-applied-to-source"
+    },
+    "--ei-muted": {
+      "kind": "semantic-color-alias",
+      "token": "color.muted",
+      "cssTarget": "var(--muted)",
+      "light": "#666666",
+      "dark": "#AAAAAA",
+      "currentCodeValue": "#646a79",
+      "applicationStatus": "not-applied-to-source"
+    },
+    "--ei-rule": {
+      "kind": "semantic-color-alias",
+      "token": "color.line",
+      "cssTarget": "var(--border)",
+      "light": "#E5E5E5",
+      "dark": "#3F3F3F",
+      "currentCodeValue": "#e1e3ea",
+      "applicationStatus": "not-applied-to-source"
+    },
+    "--ei-edge": {
+      "kind": "semantic-color-alias",
+      "token": "color.control",
+      "cssTarget": "var(--field-border)",
+      "light": "#888888",
+      "dark": "#878787",
+      "currentCodeValue": "#d8dbe4",
+      "applicationStatus": "not-applied-to-source"
+    },
+    "--ei-paper": {
+      "kind": "semantic-color-alias",
+      "token": "color.surface",
+      "cssTarget": "var(--surface)",
+      "light": "#FFFFFF",
+      "dark": "#1C1C1C",
+      "currentCodeValue": "#fff",
+      "applicationStatus": "not-applied-to-source"
+    },
+    "--ei-well": {
+      "kind": "semantic-color-alias",
+      "token": "color.subtle",
+      "cssTarget": "var(--surface-secondary)",
+      "light": "#F5F5F5",
+      "dark": "#282828",
+      "currentCodeValue": "#f7f8fb",
+      "applicationStatus": "not-applied-to-source"
+    },
+    "--ei-accent": {
+      "kind": "semantic-color-alias",
+      "token": "color.accent",
+      "cssTarget": "var(--accent)",
+      "light": "#171717",
+      "dark": "#F5F5F5",
+      "currentCodeValue": "#504ec2",
+      "applicationStatus": "not-applied-to-source"
+    },
+    "--ei-accent-dark": {
+      "kind": "semantic-color-alias",
+      "token": "color.accentInk",
+      "cssTarget": "var(--accent-soft-foreground)",
+      "light": "#262626",
+      "dark": "#F0F0F0",
+      "currentCodeValue": "#3e3d9c",
+      "applicationStatus": "not-applied-to-source"
+    },
+    "--ei-tint": {
+      "kind": "semantic-color-alias",
+      "token": "color.accentSoft",
+      "cssTarget": "var(--accent-soft)",
+      "light": "#F0F0F0",
+      "dark": "#303030",
+      "currentCodeValue": "#eeedfb",
+      "applicationStatus": "not-applied-to-source"
+    },
+    "--ei-focus": {
+      "kind": "semantic-color-alias",
+      "token": "color.accent",
+      "cssTarget": "var(--accent)",
+      "light": "#171717",
+      "dark": "#F5F5F5",
+      "currentCodeValue": "#6664d7",
+      "applicationStatus": "not-applied-to-source"
+    },
+    "--ei-error": {
+      "kind": "semantic-color-alias",
+      "token": "color.danger",
+      "cssTarget": "var(--danger)",
+      "light": "#262626",
+      "dark": "#E5E5E5",
+      "currentCodeValue": "#a33148",
+      "applicationStatus": "not-applied-to-source"
+    },
+    "--ei-radius": {
+      "kind": "dimension",
+      "token": "radius.control",
+      "value": 12,
+      "unit": "px",
+      "currentCodeValue": "7px",
+      "applicationStatus": "not-applied-to-source"
+    },
+    "--ei-height": {
+      "kind": "dimension",
+      "token": "size.inspectorControl",
+      "value": 34,
+      "unit": "px",
+      "currentCodeValue": "34px",
+      "applicationStatus": "not-applied-to-source"
+    },
+    "--ei-font": {
+      "kind": "font-family",
+      "token": "typography.families.sans",
+      "figmaFamilies": [
+        "Inter",
+        "Noto Sans SC"
+      ],
+      "suggestedCssValue": "\"Inter\", \"Noto Sans SC\", sans-serif",
+      "applicationStatus": "not-applied-to-source"
+    },
+    "--ei-mono": {
+      "kind": "font-family",
+      "token": "typography.families.mono",
+      "figmaFamily": "JetBrains Mono",
+      "suggestedCssValue": "\"JetBrains Mono\", monospace",
+      "applicationStatus": "not-applied-to-source"
+    },
+    "--ei-tick-spacing": {
+      "kind": "runtime-derived",
+      "formula": "100 / steps + \"%\"",
+      "source": "packages/element-inspector/src/NumberControl.tsx:68",
+      "note": "由离散档位数决定；不是固定设计 Token。"
+    }
+  },
+  "aliasEvidence": {
+    "file": "packages/element-inspector/src/style.css",
+    "lines": "2-18",
+    "note": "保留 --ei-* 名称，将其映射到新语义 Token；原 CSS 未修改。"
+  },
+  "themeDataBoundary": "颜色选择器中的网页真实颜色、alpha、尺寸读数是数据，不随宿主浅深色主题重映射。",
+  "updatedAt": "2026-11-02",
+  "activeThemeRevision": "monochrome-2026-11-02",
+  "activeDesignRevision": "heroui-surface-2026-11-02",
+  "shadow": {
+    "unit": "px",
+    "styles": {
+      "field": [
+        {
+          "type": "DROP_SHADOW",
+          "color": {
+            "r": 0,
+            "g": 0,
+            "b": 0,
+            "a": 0.04
+          },
+          "offset": {
+            "x": 0,
+            "y": 2
+          },
+          "radius": 4,
+          "spread": 0,
+          "visible": true,
+          "blendMode": "NORMAL"
+        },
+        {
+          "type": "DROP_SHADOW",
+          "color": {
+            "r": 0,
+            "g": 0,
+            "b": 0,
+            "a": 0.06
+          },
+          "offset": {
+            "x": 0,
+            "y": 1
+          },
+          "radius": 2,
+          "spread": 0,
+          "visible": true,
+          "blendMode": "NORMAL"
+        },
+        {
+          "type": "DROP_SHADOW",
+          "color": {
+            "r": 0,
+            "g": 0,
+            "b": 0,
+            "a": 0.06
+          },
+          "offset": {
+            "x": 0,
+            "y": 0
+          },
+          "radius": 1,
+          "spread": 0,
+          "visible": true,
+          "blendMode": "NORMAL"
+        }
+      ],
+      "surface": [
+        {
+          "type": "DROP_SHADOW",
+          "color": {
+            "r": 0,
+            "g": 0,
+            "b": 0,
+            "a": 0.04
+          },
+          "offset": {
+            "x": 0,
+            "y": 2
+          },
+          "radius": 4,
+          "spread": 0,
+          "visible": true,
+          "blendMode": "NORMAL"
+        },
+        {
+          "type": "DROP_SHADOW",
+          "color": {
+            "r": 0,
+            "g": 0,
+            "b": 0,
+            "a": 0.06
+          },
+          "offset": {
+            "x": 0,
+            "y": 1
+          },
+          "radius": 2,
+          "spread": 0,
+          "visible": true,
+          "blendMode": "NORMAL"
+        },
+        {
+          "type": "DROP_SHADOW",
+          "color": {
+            "r": 0,
+            "g": 0,
+            "b": 0,
+            "a": 0.06
+          },
+          "offset": {
+            "x": 0,
+            "y": 0
+          },
+          "radius": 1,
+          "spread": 0,
+          "visible": true,
+          "blendMode": "NORMAL"
+        }
+      ],
+      "overlay": [
+        {
+          "type": "DROP_SHADOW",
+          "color": {
+            "r": 0,
+            "g": 0,
+            "b": 0,
+            "a": 0.06
+          },
+          "offset": {
+            "x": 0,
+            "y": 2
+          },
+          "radius": 8,
+          "spread": 0,
+          "visible": true,
+          "blendMode": "NORMAL"
+        },
+        {
+          "type": "DROP_SHADOW",
+          "color": {
+            "r": 0,
+            "g": 0,
+            "b": 0,
+            "a": 0.03
+          },
+          "offset": {
+            "x": 0,
+            "y": -6
+          },
+          "radius": 12,
+          "spread": 0,
+          "visible": true,
+          "blendMode": "NORMAL"
+        },
+        {
+          "type": "DROP_SHADOW",
+          "color": {
+            "r": 0,
+            "g": 0,
+            "b": 0,
+            "a": 0.08
+          },
+          "offset": {
+            "x": 0,
+            "y": 14
+          },
+          "radius": 28,
+          "spread": 0,
+          "visible": true,
+          "blendMode": "NORMAL"
+        }
+      ],
+      "selected": [
+        {
+          "type": "DROP_SHADOW",
+          "color": {
+            "r": 0,
+            "g": 0,
+            "b": 0,
+            "a": 0.05
+          },
+          "offset": {
+            "x": 0,
+            "y": 1
+          },
+          "radius": 3,
+          "spread": 0,
+          "visible": true,
+          "blendMode": "NORMAL"
+        }
+      ],
+      "darkOverlay": [
+        {
+          "type": "INNER_SHADOW",
+          "color": {
+            "r": 1,
+            "g": 1,
+            "b": 1,
+            "a": 0.22
+          },
+          "offset": {
+            "x": 0,
+            "y": 0
+          },
+          "radius": 1,
+          "spread": 0,
+          "visible": true,
+          "blendMode": "NORMAL"
+        }
+      ]
+    },
+    "modeRules": {
+      "lightPrimaryField": "field",
+      "lightSurface": "surface",
+      "lightOverlay": "overlay",
+      "nestedOrSecondaryField": "none",
+      "darkFieldAndComposer": "none",
+      "darkOverlay": "darkOverlay"
+    },
+    "nativeBoundary": "浅色field/surface/overlay来自HeroUI原生资料；selected为Athena选择态效果，darkOverlay的0.22透明度为Athena定制。",
+    "applicationStatus": "not-applied-to-source"
+  },
+  "surfaceRecipes": {
+    "primaryField": {
+      "fill": "color.surface",
+      "radius": "radius.control",
+      "borderWidth": 0,
+      "shadow": "field"
+    },
+    "secondaryField": {
+      "fill": "color.subtle",
+      "radius": "radius.control",
+      "borderWidth": 0,
+      "shadow": "none"
+    },
+    "panel": {
+      "fill": "color.surface",
+      "radius": "radius.panel",
+      "lightShadow": "surface"
+    },
+    "composer": {
+      "radius": "radius.composer",
+      "lightFill": "color.surface",
+      "lightShadow": "surface",
+      "darkFill": "color.subtle",
+      "darkShadow": "none",
+      "origin": "Athena customization"
+    },
+    "selectOverlay": {
+      "radius": "radius.overlay",
+      "lightShadow": "overlay"
+    },
+    "segmentedTabs": {
+      "trackFill": "color.subtle",
+      "selectedFill": "color.surface",
+      "selectedLightShadow": "selected",
+      "originalTabIdsRetained": true
+    },
+    "chatTool": {
+      "radius": 12,
+      "borderWidth": 1,
+      "shadow": "none",
+      "origin": "HeroUI Pro native boundary"
+    }
+  },
+  "surfaceReference": "verification/heroui-native-reference.json",
+  "surfaceRecipeEvidence": "verification/heroui-surface-recipe.json"
+}

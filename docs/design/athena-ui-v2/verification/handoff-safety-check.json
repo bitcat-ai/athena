@@ -1,0 +1,186 @@
+{
+  "date": "2026-11-01",
+  "status": "passed-for-final-curated-handoff",
+  "textFilesChecked": 22,
+  "files": [
+    "figma-manifest.json",
+    "agent-state-spec.json",
+    "research-sources.json",
+    "implementation-boundaries.json",
+    "README.md",
+    "inspector-state-spec.json",
+    "design-tokens.json",
+    "verification/main-final-geometry.json",
+    "verification/inspector-fix-readback-final.json",
+    "verification/inspector-final-visual-audit.json",
+    "verification/agent-final-fixes.json",
+    "verification/agent-final-visual-audit.json",
+    "verification/design-acceptance-summary.json",
+    "verification/final-contrast-audit.json",
+    "verification/agent-postfix-semantic-evidence.json",
+    "verification/agent-visual-coverage.json",
+    "verification/main-empty-send-fix.json",
+    "verification/inspector-final-fixes.json",
+    "verification/main-final-visual-audit.json",
+    "verification/actual-semantic-audit.json",
+    "verification/main-visual-coverage.json",
+    "verification/agent-index-final-audit.json"
+  ],
+  "imageMetadataChecked": [
+    {
+      "file": "verification/review/main-25_229-final.png",
+      "metadataKeys": [
+        "dpi"
+      ]
+    },
+    {
+      "file": "verification/review/main-35_297-final.png",
+      "metadataKeys": [
+        "dpi"
+      ]
+    },
+    {
+      "file": "verification/review/final-fixes/main-26_4425.png",
+      "metadataKeys": [
+        "dpi",
+        "srgb",
+        "gamma",
+        "Software"
+      ]
+    },
+    {
+      "file": "verification/review/final-fixes/main-26_687.png",
+      "metadataKeys": [
+        "dpi"
+      ]
+    },
+    {
+      "file": "verification/review/final-fixes/main-29_4952.png",
+      "metadataKeys": [
+        "dpi",
+        "srgb",
+        "gamma",
+        "Software"
+      ]
+    },
+    {
+      "file": "verification/review/final-fixes/main-29_3335.png",
+      "metadataKeys": [
+        "dpi",
+        "srgb",
+        "gamma",
+        "Software"
+      ]
+    },
+    {
+      "file": "verification/review/final-fixes/main-26_5559.png",
+      "metadataKeys": [
+        "dpi",
+        "srgb",
+        "gamma",
+        "Software"
+      ]
+    },
+    {
+      "file": "verification/review/final-fixes/main-29_2951.png",
+      "metadataKeys": [
+        "dpi",
+        "srgb",
+        "gamma",
+        "Software"
+      ]
+    },
+    {
+      "file": "verification/review/final-fixes/main-26_5952.png",
+      "metadataKeys": [
+        "dpi",
+        "srgb",
+        "gamma",
+        "Software"
+      ]
+    },
+    {
+      "file": "verification/review/final-fixes/main-29_4502.png",
+      "metadataKeys": [
+        "dpi",
+        "srgb",
+        "gamma",
+        "Software"
+      ]
+    },
+    {
+      "file": "verification/review/final-fixes/main-26_1102.png",
+      "metadataKeys": [
+        "dpi",
+        "srgb",
+        "gamma",
+        "Software"
+      ]
+    },
+    {
+      "file": "verification/review/final-fixes/main-26_5233.png",
+      "metadataKeys": [
+        "dpi",
+        "srgb",
+        "gamma",
+        "Software"
+      ]
+    },
+    {
+      "file": "verification/review/final-fixes/main-26_5378.png",
+      "metadataKeys": [
+        "dpi",
+        "srgb",
+        "gamma",
+        "Software"
+      ]
+    },
+    {
+      "file": "verification/review/final-fixes/main-26_2204.png",
+      "metadataKeys": [
+        "dpi"
+      ]
+    },
+    {
+      "file": "verification/review/final-fixes/main-26_3330.png",
+      "metadataKeys": [
+        "dpi"
+      ]
+    },
+    {
+      "file": "verification/review/final-fixes/main-54_2695.png",
+      "metadataKeys": [
+        "dpi",
+        "srgb",
+        "gamma",
+        "Software"
+      ]
+    },
+    {
+      "file": "previews/agent-interaction.png",
+      "metadataKeys": [
+        "dpi"
+      ]
+    },
+    {
+      "file": "previews/element-inspector-light.png",
+      "metadataKeys": [
+        "dpi"
+      ]
+    },
+    {
+      "file": "previews/conversation-workspace.png",
+      "metadataKeys": [
+        "dpi"
+      ]
+    },
+    {
+      "file": "previews/element-inspector-dark.png",
+      "metadataKeys": [
+        "dpi"
+      ]
+    }
+  ],
+  "findings": [],
+  "scope": "Curated handoff text and image metadata were checked for session identifiers, UUIDs, absolute local paths, temporary Figma asset URLs, access-bearing query parameters and nonofficial reference hosts. This is not a general product security audit."
+}

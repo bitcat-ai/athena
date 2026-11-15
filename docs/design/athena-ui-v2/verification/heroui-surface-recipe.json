@@ -1,0 +1,245 @@
+{
+  "date": "2026-11-02",
+  "name": "HeroUI-inspired surface refinement",
+  "radius": {
+    "control": 12,
+    "button": 24,
+    "panel": 24,
+    "composer": 24,
+    "overlay": 22,
+    "navigation": 16,
+    "option": 12,
+    "window": 24,
+    "chip": 999,
+    "iconButton": 16
+  },
+  "effectStyles": {
+    "field": [
+      {
+        "type": "DROP_SHADOW",
+        "color": {
+          "r": 0,
+          "g": 0,
+          "b": 0,
+          "a": 0.04
+        },
+        "offset": {
+          "x": 0,
+          "y": 2
+        },
+        "radius": 4,
+        "spread": 0,
+        "visible": true,
+        "blendMode": "NORMAL"
+      },
+      {
+        "type": "DROP_SHADOW",
+        "color": {
+          "r": 0,
+          "g": 0,
+          "b": 0,
+          "a": 0.06
+        },
+        "offset": {
+          "x": 0,
+          "y": 1
+        },
+        "radius": 2,
+        "spread": 0,
+        "visible": true,
+        "blendMode": "NORMAL"
+      },
+      {
+        "type": "DROP_SHADOW",
+        "color": {
+          "r": 0,
+          "g": 0,
+          "b": 0,
+          "a": 0.06
+        },
+        "offset": {
+          "x": 0,
+          "y": 0
+        },
+        "radius": 1,
+        "spread": 0,
+        "visible": true,
+        "blendMode": "NORMAL"
+      }
+    ],
+    "surface": [
+      {
+        "type": "DROP_SHADOW",
+        "color": {
+          "r": 0,
+          "g": 0,
+          "b": 0,
+          "a": 0.04
+        },
+        "offset": {
+          "x": 0,
+          "y": 2
+        },
+        "radius": 4,
+        "spread": 0,
+        "visible": true,
+        "blendMode": "NORMAL"
+      },
+      {
+        "type": "DROP_SHADOW",
+        "color": {
+          "r": 0,
+          "g": 0,
+          "b": 0,
+          "a": 0.06
+        },
+        "offset": {
+          "x": 0,
+          "y": 1
+        },
+        "radius": 2,
+        "spread": 0,
+        "visible": true,
+        "blendMode": "NORMAL"
+      },
+      {
+        "type": "DROP_SHADOW",
+        "color": {
+          "r": 0,
+          "g": 0,
+          "b": 0,
+          "a": 0.06
+        },
+        "offset": {
+          "x": 0,
+          "y": 0
+        },
+        "radius": 1,
+        "spread": 0,
+        "visible": true,
+        "blendMode": "NORMAL"
+      }
+    ],
+    "overlay": [
+      {
+        "type": "DROP_SHADOW",
+        "color": {
+          "r": 0,
+          "g": 0,
+          "b": 0,
+          "a": 0.06
+        },
+        "offset": {
+          "x": 0,
+          "y": 2
+        },
+        "radius": 8,
+        "spread": 0,
+        "visible": true,
+        "blendMode": "NORMAL"
+      },
+      {
+        "type": "DROP_SHADOW",
+        "color": {
+          "r": 0,
+          "g": 0,
+          "b": 0,
+          "a": 0.03
+        },
+        "offset": {
+          "x": 0,
+          "y": -6
+        },
+        "radius": 12,
+        "spread": 0,
+        "visible": true,
+        "blendMode": "NORMAL"
+      },
+      {
+        "type": "DROP_SHADOW",
+        "color": {
+          "r": 0,
+          "g": 0,
+          "b": 0,
+          "a": 0.08
+        },
+        "offset": {
+          "x": 0,
+          "y": 14
+        },
+        "radius": 28,
+        "spread": 0,
+        "visible": true,
+        "blendMode": "NORMAL"
+      }
+    ],
+    "selected": [
+      {
+        "type": "DROP_SHADOW",
+        "color": {
+          "r": 0,
+          "g": 0,
+          "b": 0,
+          "a": 0.05
+        },
+        "offset": {
+          "x": 0,
+          "y": 1
+        },
+        "radius": 3,
+        "spread": 0,
+        "visible": true,
+        "blendMode": "NORMAL"
+      }
+    ],
+    "darkOverlay": [
+      {
+        "type": "INNER_SHADOW",
+        "color": {
+          "r": 1,
+          "g": 1,
+          "b": 1,
+          "a": 0.22
+        },
+        "offset": {
+          "x": 0,
+          "y": 0
+        },
+        "radius": 1,
+        "spread": 0,
+        "visible": true,
+        "blendMode": "NORMAL"
+      }
+    ]
+  },
+  "normalFieldBorderWidth": 0,
+  "focusRingWidth": 2,
+  "defaultColorRoles": "Preserve the current white-first monochrome palette and colored brand/icons",
+  "source": "heroui-native-reference.json",
+  "native": {
+    "controlRadius": 12,
+    "buttonRadius": 24,
+    "panelRadius": 24,
+    "selectOverlayRadius": 22,
+    "fieldBorderWidth": 0,
+    "fieldAndSurfaceShadows": "Current HeroUI default three-layer shadow"
+  },
+  "athenaCustomizations": {
+    "composerRadius": 24,
+    "composerEffect": "surface",
+    "navigationSelection": "White/elevated active item; neutral inactive items",
+    "compactToolControls": "Preserve Athena proportional specimens and precise readouts",
+    "darkFields": "Secondary surface without light-mode drop shadows",
+    "darkOverlayOpacity": {
+      "applied": 0.22,
+      "nativeReference": 0.3,
+      "note": "Athena uses a softer inner highlight than the current HeroUI default."
+    }
+  },
+  "boundaries": [
+    "Keep literal webpage/demo CSS and chart data unchanged",
+    "Keep default/hover/focus/error/disabled state distinctions",
+    "Retain all current frame/component IDs and prototype destinations",
+    "Remove decorative dividers in sidebar and inspector groups; retain meaningful data separators"
+  ]
+}

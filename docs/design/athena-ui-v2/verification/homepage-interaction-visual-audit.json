@@ -1,0 +1,192 @@
+{
+  "schema_version": 1,
+  "reviewed_at": "2026-11-02",
+  "file_key": "vEL0JeDlefvuvLjUQQh5SB",
+  "page_id": "19:244",
+  "section_id": "104:1874",
+  "scope": {
+    "mode": "read_only",
+    "board_ids": [
+      "108:2172",
+      "108:2359",
+      "109:2320",
+      "109:2640"
+    ],
+    "checks": [
+      "visible text truncation",
+      "unintended overflow",
+      "button consistency",
+      "state semantics"
+    ],
+    "screenshots_captured": 4,
+    "screenshot_method": "node.screenshot({scale:1})",
+    "other_pages_reviewed": false,
+    "figma_mutated": false,
+    "application_source_mutated": false
+  },
+  "result": {
+    "verdict": "pass_within_static_visual_scope",
+    "actionable_issue_count": 0,
+    "summary": "四张指定状态板未发现可确认的非预期裁切、溢出、按钮样式冲突或状态语义错误。"
+  },
+  "findings": [],
+  "boards": [
+    {
+      "step": 1,
+      "node_id": "108:2172",
+      "name": "用户入口与上下文菜单",
+      "health": "pass",
+      "screenshot": "homepage-review/01-avatar-context.png",
+      "screenshot_px": [
+        1600,
+        642
+      ],
+      "accepted": true,
+      "checks": {
+        "clipped_text_candidates": 0,
+        "visible_overflow": false,
+        "states": [
+          "Default",
+          "Hover",
+          "Focus",
+          "Open",
+          "U01",
+          "U02",
+          "U03"
+        ]
+      },
+      "observations": [
+        "默认、悬停、键盘焦点与展开状态区分清楚；焦点环未截断。",
+        "用户菜单与网页上下文菜单的圆角、图标对齐和行间距一致。",
+        "浏览器未连接时，元素选择与录制项目降低强调，并给出连接提示。",
+        "头像 D 是本地用户入口；未出现账户、登录、订阅或文件附件产品入口。"
+      ],
+      "screenshot_sha256": "494573c312dedee60d3a97de5c48e887b8ffec553ef903e174d5fb8744d07f38"
+    },
+    {
+      "step": 2,
+      "node_id": "108:2359",
+      "name": "对话搜索",
+      "health": "pass",
+      "screenshot": "homepage-review/02-search.png",
+      "screenshot_px": [
+        1600,
+        1074
+      ],
+      "accepted": true,
+      "checks": {
+        "clipped_text_candidates": 0,
+        "visible_overflow": false,
+        "states": [
+          "S-default",
+          "S-loading",
+          "S-results",
+          "S-empty"
+        ]
+      },
+      "observations": [
+        "搜索默认、查找中、匹配结果和空结果都有独立画面。",
+        "标题、关闭控件、输入框、结果摘要和底部快捷键说明均可见，无重叠。",
+        "空结果有明确说明和新对话入口。",
+        "设计新增与尚未实现的说明位于板级注释，不混入产品搜索内容。"
+      ],
+      "screenshot_sha256": "bc747772747a62b2d5d05f845c81cc7ab3829251aa6cd5c6a1732aa169f46a0f"
+    },
+    {
+      "step": 3,
+      "node_id": "109:2320",
+      "name": "输入与任务状态",
+      "health": "pass",
+      "screenshot": "homepage-review/03-input-task.png",
+      "screenshot_px": [
+        1600,
+        1554
+      ],
+      "accepted": true,
+      "checks": {
+        "clipped_text_candidates_excluding_intentional_scroll": 0,
+        "visible_unintended_overflow": false,
+        "state_count": 11,
+        "states": [
+          "C-empty",
+          "C-ready",
+          "C-context",
+          "C-ime",
+          "C-unavailable",
+          "C-failed",
+          "C-busy",
+          "C-loading",
+          "C-long",
+          "C-context-removed",
+          "C-stopped"
+        ],
+        "send_stop_button_size_px": [
+          32,
+          32
+        ],
+        "send_stop_button_radius_px": 16
+      },
+      "observations": [
+        "禁用发送、可发送、停止当前任务三种按钮状态外形一致，图标和强调程度能区分动作。",
+        "未就绪、读取配置、发送失败和正在执行任务各有对应说明，未把草稿表示为已排队。",
+        "移除元素上下文后仍保留相同草稿文字；没有继续显示上下文条。",
+        "停止任务后保留草稿，按钮恢复发送；板级说明明确不自动排队或提交。",
+        "长草稿在固定高度内部滚动，输入工具条与发送按钮保持可见。"
+      ],
+      "screenshot_sha256": "f989e9861fb2ade3636ec291e6f958297311aa5e496ee943eff1000ce5b03f7d"
+    },
+    {
+      "step": 4,
+      "node_id": "109:2640",
+      "name": "工作目录、侧栏与快捷入口",
+      "health": "pass",
+      "screenshot": "homepage-review/04-workspace-sidebar-shortcuts.png",
+      "screenshot_px": [
+        1600,
+        1124
+      ],
+      "accepted": true,
+      "checks": {
+        "clipped_text_candidates": 0,
+        "visible_overflow": false,
+        "states": [
+          "W01",
+          "W02",
+          "N01",
+          "B01",
+          "R01"
+        ]
+      },
+      "observations": [
+        "目录名称与路径完整可见；选择文件夹动作清楚。",
+        "任务进行中切换目录的前置条件与返回当前任务入口明确。",
+        "没有历史对话和浏览器未连接均有可见后续入口。",
+        "录制状态、时长、操作数和结束录制动作分布清楚，无按钮压缩或文案裁切。"
+      ],
+      "screenshot_sha256": "1fee410a0be239c43226ef9ff897b957b8a0d62ea2022e0b30c2f0eb771f74ca"
+    }
+  ],
+  "intentional_exceptions": [
+    {
+      "node_id": "109:2615",
+      "kind": "vertical_scroll_viewport",
+      "width_px": 712,
+      "height_px": 160,
+      "clipsContent": true,
+      "overflowDirection": "VERTICAL",
+      "classification": "intentional_not_issue",
+      "evidence": "Fresh Figma property read plus C-long screenshot."
+    },
+    {
+      "kind": "design_scope",
+      "classification": "intentional_not_issue",
+      "detail": "Avatar D, search and plus menu are design additions. No account/login/subscription/file-attachment capability inferred."
+    }
+  ],
+  "evidence_limits": [
+    "仅复核这四张 Figma 静态状态板及其节点属性，不代表实际应用功能通过。",
+    "未运行原型交互或真实键盘流程；IME、搜索、停止执行、重试和系统目录选择器的运行行为不在本次只读视觉范围。",
+    "未进行全量可访问性合规检测、屏幕阅读器测试或跨视口验收。",
+    "四张截图均在本次审查中新捕获，按原始 PNG 字节保存并重新打开检查；未使用旧截图作为审查依据。"
+  ]
+}
