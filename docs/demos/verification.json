@@ -1,0 +1,72 @@
+{
+  "checkedAt": "2026-11-15T00:16:10.515Z",
+  "appHead": "6b5441d400d115204866a6fdc170f1c3a07287ee",
+  "appWorkingTree": "existing uncommitted changes preserved; this is a source design baseline, not a published release",
+  "demoBase": "045db660db5203826be6563a46a0dee5292d75a2",
+  "preflight": {
+    "passed": true,
+    "dockerServer": "28.1.1",
+    "images": ["athena-sandbox-node:1", "athena-sandbox-java:1"],
+    "chromeInstalled": true,
+    "codexVersion": "codex-cli 0.167.0",
+    "modelLoginVerified": false,
+    "distHasRequiredToolNames": true,
+    "distSha256": "52db0910b787bf5e1bdb08db7e9d515a6e8f7880bdd7a917ab67d241824f92e2"
+  },
+  "checks": [
+    {
+      "command": "npx tsx --test tests/browser-guide.test.ts tests/learning.test.ts tests/feishu-knowledge.test.ts tests/repository-service.test.ts",
+      "passed": 24,
+      "failed": 0,
+      "skipped": 0,
+      "scope": "logic and isolated local services; no model or live Feishu"
+    },
+    {
+      "command": "npx tsx --test tests/demo-scenarios.test.ts",
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "scope": "cancellation before setup and fixture index/search/read through real knowledge implementation"
+    },
+    {
+      "command": "npm run typecheck",
+      "passed": true
+    }
+  ],
+  "materialEvidence": {
+    "customers": 15,
+    "pageSize": 6,
+    "pending": ["C1004", "C1009", "C1014"],
+    "publicMaterialsPerCustomer": 3,
+    "exportExistsInBaseline": false,
+    "frontendSha256": "048fc5249b543bf2736fb86069dfdaf3af493a5d2b9eb70458d96900c5835300",
+    "backendSha256": "a5f9348b301753ad4afc17998109d666ed59a116d792b4d25318eaa3a364b336"
+  },
+  "executionBoundary": {
+    "knowledgeMode": "offline fixture",
+    "fullLauncherStarted": false,
+    "realModelScenarioRehearsals": 0,
+    "liveFeishuVerified": false,
+    "videoRecorded": false,
+    "externalMessagesSent": false,
+    "codePushed": false,
+    "productionChanged": false
+  },
+  "scenarios": [
+    {
+      "id": 1,
+      "name": "AI带新人操作后台",
+      "rehearsal": "pending real model and human interaction"
+    },
+    {
+      "id": 2,
+      "name": "按知识规则完成客户材料核对",
+      "rehearsal": "pending real model and browser run"
+    },
+    {
+      "id": 3,
+      "name": "页面预览到双沙箱源码交付",
+      "rehearsal": "pending current-version end-to-end run"
+    }
+  ]
+}

@@ -24,6 +24,8 @@ export function ActivityRow({
   agent,
   expanded,
   onExpandedChange,
+  heading,
+  actions,
   children,
 }: {
   message: ChatMessage;
@@ -31,6 +33,8 @@ export function ActivityRow({
   agent: AgentId;
   expanded: boolean;
   onExpandedChange: (expanded: boolean) => void;
+  heading?: ReactNode;
+  actions?: ReactNode;
   children?: ReactNode;
 }) {
   const body = useId();
@@ -71,22 +75,26 @@ export function ActivityRow({
       data-phase={phase.kind}
       data-outcome={ended ? phase.outcome : undefined}
     >
-      {children ? (
-        <button
-          type="button"
-          className="act"
-          aria-expanded={expanded}
-          aria-controls={body}
-          onClick={() => onExpandedChange(!expanded)}
-        >
-          {content}
-          <svg className="act-chev" viewBox="0 0 16 16" aria-hidden="true">
-            <path d="M4.5 6.5L8 10l3.5-3.5" />
-          </svg>
-        </button>
-      ) : (
-        <div className="act">{content}</div>
-      )}
+      <div className="act-summary">
+        {heading}
+        {children ? (
+          <button
+            type="button"
+            className="act"
+            aria-expanded={expanded}
+            aria-controls={body}
+            onClick={() => onExpandedChange(!expanded)}
+          >
+            {content}
+            <svg className="act-chev" viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M4.5 6.5L8 10l3.5-3.5" />
+            </svg>
+          </button>
+        ) : (
+          <div className="act">{content}</div>
+        )}
+        {actions}
+      </div>
       {children && expanded && (
         <div id={body} className="act-body">
           {children}

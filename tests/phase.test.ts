@@ -21,7 +21,12 @@ import {
   toolTarget,
   toolTitle,
 } from '../src/shared/phase.ts';
-import { activityItems, formatElapsed, summaryMeta } from '../src/shared/activity.ts';
+import {
+  activityItems,
+  activityOverview,
+  formatElapsed,
+  summaryMeta,
+} from '../src/shared/activity.ts';
 import type { ChatMessage, PendingAgentRequest, ToolCall } from '../src/shared/types.ts';
 
 const tool = (patch: Partial<ToolCall> & Pick<ToolCall, 'name'>): ToolCall => ({
@@ -57,6 +62,14 @@ const idle = { connected: true, stopping: false, requests: [], tools: [] };
 test('a running turn has exactly one phase, in priority order', () => {
   assert.deepEqual(runningPhase({ ...idle, connected: false }), { kind: 'preparing' });
   assert.deepEqual(runningPhase(idle), { kind: 'thinking' });
+  assert.deepEqual(runningPhase({ ...idle, preparingTool: 'workbench_browser_restyle' }), {
+    kind: 'preparing',
+    tool: 'workbench_browser_restyle',
+  });
+  assert.equal(
+    phaseTitle({ kind: 'preparing', tool: 'workbench_browser_restyle' }),
+    '准备预览页面外观',
+  );
   const command = tool({ name: 'commandExecution', input: '/bin/zsh -lc "npm run build"' });
   assert.deepEqual(runningPhase({ ...idle, tools: [command] }), {
     kind: 'acting',
@@ -343,4 +356,57 @@ test('a turn offers its reply for copying, or the bare failure its outcome card 
   assert.equal(copyableText(bare, true), '模型服务中断');
   assert.equal(copyableText(bare, false), '');
   assert.equal(copyableText(message({ text: '任务已停止', status: 'error' }), true), '');
+});
+
+test('the visible overview retains the active plan, recent actions, evidence and every artifact', () => {
+  const message: ChatMessage = {
+    id: 'overview',
+    role: 'assistant',
+    text: '',
+    createdAt: 0,
+    status: 'streaming',
+    plan: Array.from({ length: 9 }, (_, index) => ({
+      step: `Step ${index}`,
+      status: index < 5 ? 'completed' : index === 5 ? 'inProgress' : 'pending',
+    })),
+    tools: Array.from({ length: 8 }, (_, index) =>
+      tool({ id: `tool-${index}`, name: 'web_read', status: index === 7 ? 'running' : 'done' }),
+    ),
+    execution: [
+      {
+        id: 'check',
+        taskId: 'overview',
+        at: 1,
+        kind: 'checkpoint',
+        status: 'succeeded',
+        outcome: 'verified',
+        evidence: 'Ready',
+      },
+      {
+        id: 'artifact',
+        taskId: 'overview',
+        at: 2,
+        kind: 'artifact',
+        status: 'succeeded',
+        artifact: { path: '/tmp/report.txt', bytes: 3, sha256: 'test' },
+      },
+    ],
+  };
+  const overview = activityOverview(message);
+  assert.deepEqual(
+    overview.filter((item) => item.kind === 'plan').map((item) => item.text),
+    ['Step 4', 'Step 5', 'Step 6', 'Step 7'],
+  );
+  assert.deepEqual(
+    overview.filter((item) => item.kind === 'tool').map((item) => item.id),
+    ['tool-5', 'tool-6', 'tool-7'],
+  );
+  assert(overview.some((item) => item.kind === 'check' && item.evidence === 'Ready'));
+  assert(overview.some((item) => item.kind === 'artifact' && item.name === 'report.txt'));
+  assert.equal(
+    activityOverview({ ...message, status: 'done' }).filter((item) => item.kind === 'tool').length,
+    1,
+  );
+  assert.equal(toolTitle('workbench_browser_restyle', 'claude'), '预览页面外观');
+  assert.equal(toolKind('workbench_browser_restyle', 'claude'), 'edit');
 });

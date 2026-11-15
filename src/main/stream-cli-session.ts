@@ -14,6 +14,7 @@ import { discoverClaudeModels, discoverCursorModels, discoverGeminiModels } from
 import { browserToolsFingerprint } from './agents';
 import { parseImages, type ImageAttachment } from '../shared/images';
 import { discoverClaudeSkills } from './claude-skills';
+import { previewInstructions } from './agent-session';
 import { unavailableProviderSkillDiscovery } from '../shared/provider-skills';
 import type { AgentEvent, BrowserTool, ElementRef, ToolCall } from '../shared/types';
 import { selectProviderSkills } from './skill-injection';
@@ -524,19 +525,18 @@ export class StreamCliSession implements AgentSession {
         '--verbose',
         '--include-partial-messages',
         '--tools',
-        'Read,Glob,Grep,Skill',
+        this.options.previewOnly ? '' : 'Read,Glob,Grep,Skill',
         '--allowedTools',
         [
-          'Read',
-          'Glob',
-          'Grep',
-          'Skill',
+          ...(this.options.previewOnly ? [] : ['Read', 'Glob', 'Grep', 'Skill']),
           ...(run.browserConfig
             ? this.options.tools.map((tool) => `mcp__athena__${tool.name}`)
             : []),
         ].join(','),
         '--disallowedTools',
-        'Write,Edit,Bash,Task,WebFetch,WebSearch',
+        this.options.previewOnly
+          ? 'Read,Glob,Grep,Skill,Write,Edit,Bash,Task,WebFetch,WebSearch'
+          : 'Write,Edit,Bash,Task,WebFetch,WebSearch',
         '--settings',
         JSON.stringify({ disableAllHooks: true, disableSkillShellExecution: true }),
         '--strict-mcp-config',
@@ -547,6 +547,14 @@ export class StreamCliSession implements AgentSession {
         '--permission-prompts',
         'none',
         '--no-chrome',
+        ...(this.options.previewOnly
+          ? [
+              '--system-prompt',
+              previewInstructions,
+              '--disable-slash-commands',
+              '--no-session-persistence',
+            ]
+          : []),
         ...resume,
         ...model,
         ...(selection?.effort ? ['--effort', selection.effort] : []),
@@ -915,6 +923,13 @@ export class StreamCliSession implements AgentSession {
       if (e?.type === 'message_start') {
         run.messageText = '';
         this.model(run, e.message?.model);
+      }
+      // The tool name is public before its arguments finish streaming; never expose partial input.
+      if (e?.type === 'content_block_start' && e.content_block?.type === 'tool_use') {
+        const wireName = e.content_block.name;
+        const tool = this.options.tools.find((item) => `mcp__athena__${item.name}` === wireName);
+        if (tool || ['Read', 'Glob', 'Grep', 'Skill'].includes(wireName))
+          this.emit({ type: 'tool-preparing', name: tool?.name ?? wireName });
       }
       if (
         e?.type === 'content_block_delta' &&

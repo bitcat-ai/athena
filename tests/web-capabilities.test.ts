@@ -12,6 +12,91 @@ const box = (f: WebFixture, selector: string) =>
     `(() => { const r = document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect(); return { left: Math.round(r.x), top: Math.round(r.y), x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) }; })()`,
   );
 
+test(
+  'basic page actions and typography edits execute without approval and remain reversible',
+  options,
+  async () => {
+    const f = await webFixture();
+    try {
+      const { page } = await f.begin('basic-edits');
+      const snapshot = await f.call('web_snapshot', { page });
+      await f.call('web_act', {
+        page,
+        kind: 'fill',
+        ref: refOf(snapshot.text, 'Name'),
+        value: 'Direct edit',
+      });
+      const current = await f.call('web_snapshot', { page });
+      await f.call('web_act', { page, kind: 'click', ref: refOf(current.text, 'Count') });
+      assert.equal(await f.state(`document.querySelector('#name').value`), 'Direct edit');
+      assert.match(await log(f), /count 1/);
+      const body = JSON.parse((await f.call('workbench_browser_query', { selector: 'body' })).text)
+        .elements[0];
+      const bodyBefore = await f.state(`document.body.style.cssText`);
+      const bodyEdit = JSON.parse(
+        (
+          await f.call('workbench_browser_edit', {
+            ref: body.ref,
+            styles: {
+              'background-color': '#f6f1e7',
+              color: '#1b1a17',
+              'font-family': 'Georgia, serif',
+            },
+          })
+        ).text,
+      );
+      assert.equal(
+        await f.state(`getComputedStyle(document.body).backgroundColor`),
+        'rgb(246, 241, 231)',
+      );
+      const queried = JSON.parse(
+        (await f.call('workbench_browser_query', { selector: 'h1' })).text,
+      );
+      const ref = queried.elements[0].ref;
+      const before = await f.state(`document.querySelector('h1').style.cssText`);
+      const edited = JSON.parse(
+        (
+          await f.call('workbench_browser_edit', {
+            ref,
+            text: 'Updated heading',
+            styles: {
+              'font-family': '"Songti SC", serif',
+              'font-size': '24px',
+              'font-weight': '600',
+              'line-height': '1.6',
+              'letter-spacing': '1px',
+              color: '#2563eb',
+              padding: '8px',
+            },
+          })
+        ).text,
+      );
+      assert.match(edited.element.computed['font-family'], /Songti SC/);
+      assert.equal(edited.element.computed.color, 'rgb(37, 99, 235)');
+      assert.equal(
+        await f.state(`getComputedStyle(document.querySelector('h1')).fontSize`),
+        '24px',
+      );
+      assert.equal(await f.state(`document.querySelector('h1').textContent`), 'Updated heading');
+      assert.equal(f.approvals.length, 0, 'Basic actions must not ask for approval');
+      await f.call('workbench_browser_undo', { editId: edited.editId });
+      assert.equal(await f.state(`document.querySelector('h1').textContent`), 'Lab');
+      assert.equal(await f.state(`document.querySelector('h1').style.cssText`), before);
+      await f.call('workbench_browser_undo', { editId: bodyEdit.editId });
+      assert.equal(await f.state(`document.body.style.cssText`), bodyBefore);
+      const unsafe = await f.runtime.callTool('workbench_browser_edit', {
+        ref,
+        styles: { 'font-family': 'url(https://example.test/font.woff2)' },
+      });
+      assert.equal(unsafe.isError, true);
+      assert.equal(await f.state(`document.querySelector('h1').style.cssText`), before);
+      assert.equal(f.approvals.length, 0);
+    } finally {
+      await f.cleanup();
+    }
+  },
+);
+
 test('observation tools read the page, its frames and its changes', options, async () => {
   const f = await webFixture();
   try {

@@ -8,6 +8,8 @@ import {
   Description,
   Input,
   Menu,
+  Modal,
+  Switch,
   Tabs,
   Tooltip,
 } from '@heroui/react';
@@ -42,6 +44,7 @@ import {
   Link02Icon,
   Loading02Icon,
   MessageSquareIcon,
+  MagicWand01Icon,
   PanelLeftCloseIcon,
   PanelLeftOpenIcon,
   PanelRightOpenIcon,
@@ -67,6 +70,13 @@ import { ChoiceSelect } from './ChoiceSelect';
 import { effortName } from './ReasoningSlider';
 import { SkillPicker } from './SkillPicker';
 import { LearningPanel } from './LearningPanel';
+import { McpSettings, SkillsSettings } from './LocalIntegrations';
+import {
+  composerCommands,
+  parseComposerCommand,
+  slashCommands,
+  type ComposerCommand,
+} from './composer-commands';
 import type { LearningState } from '../shared/learning';
 import { MessageQueue } from './MessageQueue';
 import { emptyQueue, type MessageQueueState, type QueuedMessage } from '../shared/queue';
@@ -111,7 +121,7 @@ import {
   buildSkillSubmission,
   isSkillToken,
   referencedSkills,
-  slashSkillOptions,
+  slashAllSkills,
   type ComposerToken,
 } from './composer-skills';
 import { isArchived } from '../shared/types';
@@ -149,7 +159,19 @@ const emptyBrowser: BrowserState = {
   inspecting: false,
 };
 const emptyFeishu: FeishuState = { status: 'disconnected', paired: false };
-type SettingsTab = 'agent' | 'browser' | 'feishu' | 'learning';
+type SettingsTab = 'agent' | 'browser' | 'feishu' | 'learning' | 'skills' | 'mcp';
+const commandIcons = {
+  new: PlusIcon,
+  model: CommandIcon,
+  agent: TerminalIcon,
+  skills: MagicWand01Icon,
+  mcp: Link02Icon,
+  settings: Settings02Icon,
+  usage: ChartNoAxesCombinedIcon,
+  browser: EarthIcon,
+  stop: StopIcon,
+  help: BookOpen01Icon,
+};
 /** A conversation's state as the sidebar repeats it. */
 interface Echo {
   glyph: GlyphKind;
@@ -266,10 +288,11 @@ function MentionText({ text, mentions }: { text: string; mentions?: ElementMenti
           <span
             key={index}
             className="element-chip"
-            title={`${mention.tag}${mention.role ? ` · ${mention.role}` : ''}`}
+            title={`${mention.tag}${mention.role ? ` · ${mention.role}` : ''} · ${mention.name}`}
           >
             <Icon icon={Cursor01Icon} size={11} aria-hidden />
-            {mention.name}
+            <span className="element-reference-label">{mention.name}</span>
+            <small>{part.slice(1, -1)}</small>
           </span>
         ) : (
           <Fragment key={index}>{part}</Fragment>
@@ -338,6 +361,8 @@ export default function App() {
   const [resizingBrowser, setResizingBrowser] = useState(false);
   const [settingsTab, setSettingsTab] = useState<SettingsTab | null>(null);
   const [agentMenu, setAgentMenu] = useState(false);
+  const [modelMenuRequest, setModelMenuRequest] = useState(0);
+  const [commandHelp, setCommandHelp] = useState(false);
   const [pendingRequests, setPendingRequests] = useState<PendingAgentRequest[]>([]);
   const [toast, setToast] = useState<AppToastMessage>();
   const [refreshing, setRefreshing] = useState(false);
@@ -394,12 +419,26 @@ export default function App() {
     onChange: storeField,
   });
   const skillMenuOpen = tokens.isOpen && tokens.trigger === '/';
-  const skillOptions = slashSkillOptions(providerSkills, providerSkillDiscovery, tokens.query);
+  const skillOptions = slashAllSkills(
+    skills ?? [],
+    providerSkills,
+    providerSkillDiscovery,
+    tokens.query,
+  );
+  const commandOptions = slashCommands(
+    tokens.query,
+    !images.length &&
+      field.segments.every((item) => item.type === 'text') &&
+      /^\/[^\s]*$/.test(draft),
+  );
   const chosenSkills = new Set([...selectedSkills, ...referencedSkills(field.segments)]);
-  const skillMenuVisible = skillMenuOpen && skillOptions.length > 0;
+  const skillMenuVisible = skillMenuOpen && (skillOptions.length > 0 || commandOptions.length > 0);
   const skillUnavailable = (name: string) =>
     chosenSkills.has(name) || chosenSkills.size >= MAX_SKILLS;
-  const insertSkill = (name: string) => tokens.insertToken(`/${name}`, { value: { skill: name } });
+  const insertSkill = (skill: (typeof skillOptions)[number]) =>
+    tokens.insertToken(`/${skill.tokenName}`, {
+      value: { skill: skill.name, source: skill.source === 'provider' ? 'provider' : 'local' },
+    });
   const focusComposer = () => tokens.inputRef.current?.focus();
   const setDraft = (text: string) => storeField(fieldFromText(text));
   const clearDraft = () =>
@@ -553,6 +592,7 @@ export default function App() {
   insertMentionRef.current = insertMention;
   const currentView = {
     id: conversationId,
+    agent: conversation ? conversationAgent(conversation) : settings.agent,
     workspace: settings.workspace,
     draftKey,
     hasDraft: !!draft || !!images.length,
@@ -1102,6 +1142,7 @@ export default function App() {
       stickToBottom.current = true;
       focusComposer();
     }
+    return Boolean(item);
   }, [action, upsert]);
   useEffect(() => {
     const listener = (event: KeyboardEvent) => {
@@ -1167,6 +1208,13 @@ export default function App() {
   ]);
   /** While a turn runs, a message is not refused: the host queues it and sends it in turn. */
   const send = async () => {
+    const command = field.segments.every((item) => item.type === 'text')
+      ? parseComposerCommand(draft)
+      : undefined;
+    if (command && !images.length) {
+      await executeCommand(command.command, command.argument);
+      return;
+    }
     if (
       (!draft.trim() && !images.length) ||
       images.some((image) => !image.data) ||
@@ -1387,6 +1435,117 @@ export default function App() {
     setSettingsTab(null);
     setShowUsage(true);
   };
+  const executeCommand = async (command: ComposerCommand, argument = '') => {
+    if (['model', 'agent', 'new'].includes(command.name) && busy) {
+      showToast('当前任务结束后再切换对话或执行配置', true);
+      return;
+    }
+    if (argument && !['model', 'agent', 'settings', 'browser'].includes(command.name)) {
+      showToast(`/${command.name} 不需要参数`, true);
+      return;
+    }
+    if (command.name === 'new') {
+      if (!(await newConversation())) return;
+    }
+    if (command.name === 'agent') {
+      if (argument) {
+        const target = agents.find(
+          (agent) => agent.id === argument && agent.available && agent.supported,
+        );
+        if (!target) {
+          showToast('没有找到可用 Agent，请从菜单选择', true);
+          return;
+        }
+        await selectAgent(target.id);
+      } else setAgentMenu(true);
+    }
+    if (command.name === 'model') {
+      if (argument) {
+        const models = await action<import('../shared/usage').ModelOption[]>('models:list', {
+          conversationId,
+          agent: currentAgentId,
+        });
+        const target = models?.find((model) => model.model === argument || model.name === argument);
+        if (!target) {
+          showToast('当前 CLI 不支持这个模型，请从模型列表选择', true);
+          return;
+        }
+        const next = await action<Settings>('settings:model', {
+          conversationId,
+          agent: currentAgentId,
+          model: target.model,
+        });
+        if (!next) return;
+        setSettings(next);
+      } else setModelMenuRequest((value) => value + 1);
+    }
+    if (command.name === 'skills' || command.name === 'mcp') openSettings(command.name);
+    if (command.name === 'settings') {
+      const tab = argument || 'agent';
+      if (!['agent', 'browser', 'feishu', 'learning', 'skills', 'mcp'].includes(tab)) {
+        showToast('没有这个设置分类，请使用 /help 查看', true);
+        return;
+      }
+      openSettings(tab as SettingsTab);
+    }
+    if (command.name === 'usage') openUsage();
+    if (command.name === 'browser') {
+      if (argument && !['show', 'hide'].includes(argument)) {
+        showToast('使用 /browser show 或 /browser hide', true);
+        return;
+      }
+      setBrowserVisible(argument !== 'hide');
+    }
+    if (command.name === 'stop') {
+      if (!busy) {
+        showToast('当前没有正在执行的任务');
+        return;
+      }
+      await action('conversation:stop');
+    }
+    if (command.name === 'help') setCommandHelp(true);
+    tokens.close();
+    clearDraft();
+  };
+  const useSkill = (name: string, source: 'local' | 'provider') => {
+    if (skillUnavailable(name)) return;
+    const item = slashAllSkills(skills ?? [], providerSkills, providerSkillDiscovery, '').find(
+      (skill) => skill.name === name && (skill.source === 'provider') === (source === 'provider'),
+    );
+    if (!item) return;
+    const at = field.caretPosition;
+    storeField(
+      field.replaceRangeWithSegments(
+        at,
+        at,
+        [
+          { type: 'token', text: `/${item.tokenName}`, value: { skill: name, source } },
+          { type: 'text', text: ' ' },
+        ],
+        true,
+      ),
+    );
+    setSettingsTab(null);
+    requestAnimationFrame(focusComposer);
+  };
+  const refreshSkills = async () => {
+    const view = viewedConversation.current;
+    const [local, provider] = await Promise.all([
+      action<import('../shared/skills').SkillDiscovery>('skills:local'),
+      action<AppSnapshot['providerSkillDiscovery']>('skills:list', { conversationId }),
+    ]);
+    if (
+      viewedConversation.current.id !== view.id ||
+      viewedConversation.current.workspace !== view.workspace ||
+      viewedConversation.current.agent !== view.agent
+    )
+      return;
+    if (local) setSkills(local.skills);
+    if (provider) {
+      setProviderSkills(provider.skills);
+      setProviderSkillDiscovery(provider);
+    }
+  };
   const selectConversation = (id: string | undefined) => {
     setShowUsage(false);
     setSettingsTab(null);
@@ -1503,6 +1662,14 @@ export default function App() {
             <Icon icon={EarthIcon} size={15} />
             浏览器
           </Tabs.Tab>
+          <Tabs.Tab id="skills">
+            <Icon icon={MagicWand01Icon} size={15} />
+            Skills
+          </Tabs.Tab>
+          <Tabs.Tab id="mcp">
+            <Icon icon={Link02Icon} size={15} />
+            MCP
+          </Tabs.Tab>
           <Tabs.Tab id="feishu">
             <Icon icon={Link02Icon} size={15} />
             飞书
@@ -1513,6 +1680,23 @@ export default function App() {
           </Tabs.Tab>
         </Tabs.List>
         <div className="settings-body">
+          {settingsTab === 'skills' && (
+            <Tabs.Panel id="skills">
+              <SkillsSettings
+                local={skills ?? []}
+                provider={providerSkills}
+                discovery={providerSkillDiscovery}
+                selected={chosenSkills}
+                onUse={useSkill}
+                onRefresh={refreshSkills}
+              />
+            </Tabs.Panel>
+          )}
+          {settingsTab === 'mcp' && (
+            <Tabs.Panel id="mcp">
+              <McpSettings key={settings.workspace} busy={busy} />
+            </Tabs.Panel>
+          )}
           {settingsTab === 'agent' && (
             <Tabs.Panel id="agent">
               <div className="settings-section-heading">
@@ -1679,6 +1863,33 @@ export default function App() {
                   )}
                 </div>
               </section>
+              <Card className="learning-switch-card">
+                <Card.Content>
+                  <Switch
+                    aria-label="快速页面初稿"
+                    isSelected={settings.pagePreview === true}
+                    isDisabled={busy}
+                    onChange={(enabled) =>
+                      void action<Settings>('settings:page-preview', { enabled }).then((next) => {
+                        if (next) setSettings(next);
+                      })
+                    }
+                  >
+                    <Switch.Content>
+                      <span className="learning-switch-text">
+                        <strong>快速页面初稿</strong>
+                        <small>
+                          本机 Claude 可用时，由 Sonnet 并行生成首屏，当前 Agent
+                          继续完善。会增加一次模型调用，计入用量。
+                        </small>
+                      </span>
+                      <Switch.Control>
+                        <Switch.Thumb />
+                      </Switch.Control>
+                    </Switch.Content>
+                  </Switch>
+                </Card.Content>
+              </Card>
               <details className="runtime-installations">
                 <summary>本机 CLI 检测详情</summary>
                 <div className="agent-settings-list">
@@ -2448,13 +2659,29 @@ export default function App() {
                                     {message.images?.length ? (
                                       <ImageAttachments images={message.images} />
                                     ) : null}
-                                    {(message.displayText ?? message.text) && (
-                                      <ProChatMessage.Bubble className="user-message-text">
-                                        <MentionText
-                                          text={message.displayText ?? message.text}
-                                          mentions={message.mentions}
-                                        />
-                                      </ProChatMessage.Bubble>
+                                    {(message.text || message.displayText) && (
+                                      <div className="user-message-row">
+                                        {message.text && (
+                                          <ChatMessageActions>
+                                            <Tooltip delay={500}>
+                                              <ChatMessageActions.Copy
+                                                aria-label="复制消息"
+                                                isCopied={toast?.copiedMessageId === message.id}
+                                                onPress={() => copyMessage(message)}
+                                              />
+                                              <Tooltip.Content>复制消息</Tooltip.Content>
+                                            </Tooltip>
+                                          </ChatMessageActions>
+                                        )}
+                                        {(message.displayText ?? message.text) && (
+                                          <ProChatMessage.Bubble className="user-message-text">
+                                            <MentionText
+                                              text={message.displayText ?? message.text}
+                                              mentions={message.mentions}
+                                            />
+                                          </ProChatMessage.Bubble>
+                                        )}
+                                      </div>
                                     )}
                                     {message.source === 'feishu' && (
                                       <div className="message-source">
@@ -2462,33 +2689,25 @@ export default function App() {
                                         来自飞书
                                       </div>
                                     )}
-                                    {message.context && message.source !== 'feishu' && (
-                                      <div className="message-context">
-                                        <Icon icon={Cursor01Icon} size={11} />
-                                        已附加页面上下文
-                                      </div>
-                                    )}
-                                    {message.text && (
-                                      <ChatMessageActions>
-                                        <Tooltip delay={500}>
-                                          <ChatMessageActions.Copy
-                                            aria-label="复制消息"
-                                            isCopied={toast?.copiedMessageId === message.id}
-                                            onPress={() => copyMessage(message)}
-                                          />
-                                          <Tooltip.Content>复制消息</Tooltip.Content>
-                                        </Tooltip>
-                                      </ChatMessageActions>
-                                    )}
+                                    {message.context &&
+                                      !message.mentions?.length &&
+                                      message.source !== 'feishu' && (
+                                        <div className="message-context">
+                                          <Icon icon={Cursor01Icon} size={11} />
+                                          已附加页面上下文
+                                        </div>
+                                      )}
                                   </ProChatMessage.User>
                                 ) : (
                                   <ProChatMessage.Assistant>
                                     <ProChatMessage.Body>
-                                      <div className="assistant-label">
-                                        <ProChatMessage.Avatar src={athenaLogo} alt="" />
-                                        <span>Athena</span>
-                                      </div>
                                       <AssistantTurn
+                                        heading={
+                                          <div className="assistant-label">
+                                            <ProChatMessage.Avatar src={athenaLogo} alt="" />
+                                            <span>Athena</span>
+                                          </div>
+                                        }
                                         message={message}
                                         conversationId={conversationId!}
                                         agent={currentAgentId}
@@ -2500,35 +2719,32 @@ export default function App() {
                                         busy={busy}
                                         onAction={action}
                                         onShowBrowser={() => setBrowserVisible(true)}
+                                        historyAction={
+                                          message.status !== 'streaming' &&
+                                          message.webSessionId && (
+                                            <ProChatMessage.Action
+                                              isIconOnly={false}
+                                              onPress={() => {
+                                                setNativeRecordId(message.webSessionId);
+                                                setBrowserVisible(true);
+                                              }}
+                                            >
+                                              查看网页执行过程
+                                            </ProChatMessage.Action>
+                                          )
+                                        }
                                         actions={
                                           message.status !== 'streaming' &&
-                                          (copyableText(message, message === messages.at(-1)) ||
-                                            message.webSessionId) && (
+                                          copyableText(message, message === messages.at(-1)) && (
                                             <ChatMessageActions>
-                                              {copyableText(
-                                                message,
-                                                message === messages.at(-1),
-                                              ) && (
-                                                <Tooltip delay={500}>
-                                                  <ChatMessageActions.Copy
-                                                    aria-label="复制回答"
-                                                    isCopied={toast?.copiedMessageId === message.id}
-                                                    onPress={() => copyMessage(message)}
-                                                  />
-                                                  <Tooltip.Content>复制回答</Tooltip.Content>
-                                                </Tooltip>
-                                              )}
-                                              {message.webSessionId && (
-                                                <ProChatMessage.Action
-                                                  isIconOnly={false}
-                                                  onPress={() => {
-                                                    setNativeRecordId(message.webSessionId);
-                                                    setBrowserVisible(true);
-                                                  }}
-                                                >
-                                                  查看网页执行过程
-                                                </ProChatMessage.Action>
-                                              )}
+                                              <Tooltip delay={500}>
+                                                <ChatMessageActions.Copy
+                                                  aria-label="复制回答"
+                                                  isCopied={toast?.copiedMessageId === message.id}
+                                                  onPress={() => copyMessage(message)}
+                                                />
+                                                <Tooltip.Content>复制回答</Tooltip.Content>
+                                              </Tooltip>
                                             </ChatMessageActions>
                                           )
                                         }
@@ -2613,7 +2829,9 @@ export default function App() {
                           const first = skillMenuVisible
                             ? skillOptions.find((skill) => !skillUnavailable(skill.name))
                             : undefined;
-                          if (first) insertSkill(first.name);
+                          if (skillMenuVisible && commandOptions[0])
+                            void executeCommand(commandOptions[0]);
+                          else if (first) insertSkill(first);
                           else void send();
                         }}
                         onStop={() => void action('conversation:stop')}
@@ -2678,12 +2896,14 @@ export default function App() {
                                         className="element-token-body"
                                         title={
                                           value
-                                            ? `${value.tag}${value.role ? ` · ${value.role}` : ''}`
+                                            ? `${value.tag}${value.role ? ` · ${value.role}` : ''} · ${value.name}`
                                             : undefined
                                         }
                                       >
                                         <Icon icon={Cursor01Icon} size={11} aria-hidden />
-                                        <span>{value?.name ?? segment.text}</span>
+                                        <span className="element-reference-label">
+                                          {value?.name ?? segment.text}
+                                        </span>
                                         <small>{segment.text.slice(1, -1)}</small>
                                       </span>
                                     </PromptInput.Token>
@@ -2698,17 +2918,40 @@ export default function App() {
                               className="skill-slash-menu"
                               maxHeight={320}
                             >
-                              <Menu aria-label="可用 Skill">
+                              <Menu aria-label="命令与 Skills">
+                                {commandOptions.map((command) => (
+                                  <Menu.Item
+                                    key={`command:${command.name}`}
+                                    id={`command:${command.name}`}
+                                    textValue={command.name}
+                                    onAction={() => void executeCommand(command)}
+                                  >
+                                    <Icon icon={commandIcons[command.icon]} size={16} />
+                                    <div className="skill-option-copy">
+                                      <Label>
+                                        /{command.name}
+                                        <span className="integration-source">{command.label}</span>
+                                      </Label>
+                                      <Description>{command.description}</Description>
+                                    </div>
+                                  </Menu.Item>
+                                ))}
                                 {skillOptions.map((skill) => (
                                   <Menu.Item
-                                    key={skill.name}
-                                    id={skill.name}
+                                    key={skill.key}
+                                    id={skill.key}
                                     textValue={skill.name}
                                     isDisabled={skillUnavailable(skill.name)}
-                                    onAction={() => insertSkill(skill.name)}
+                                    onAction={() => insertSkill(skill)}
                                   >
+                                    <Icon icon={MagicWand01Icon} size={16} />
                                     <div className="skill-option-copy">
-                                      <Label>/{skill.name}</Label>
+                                      <Label>
+                                        /{skill.tokenName}
+                                        <span className="integration-source">
+                                          {skill.source === 'provider' ? 'CLI Skill' : '本机 Skill'}
+                                        </span>
+                                      </Label>
                                       <Description>{skill.description}</Description>
                                     </div>
                                   </Menu.Item>
@@ -2807,6 +3050,7 @@ export default function App() {
                               />
                               <ModelPicker
                                 settings={conversationSettings}
+                                openRequest={modelMenuRequest}
                                 conversationId={conversationId}
                                 busy={busy}
                                 connectionReady={currentConnection?.status === 'ready'}
@@ -3037,6 +3281,32 @@ export default function App() {
               onSelect={selectConversation}
               onNew={() => void newConversation()}
             />
+            <Modal.Backdrop isOpen={commandHelp} onOpenChange={setCommandHelp}>
+              <Modal.Container size="md">
+                <Modal.Dialog>
+                  <Modal.CloseTrigger aria-label="关闭命令帮助" />
+                  <Modal.Header>
+                    <Modal.Heading>命令与 Skills</Modal.Heading>
+                  </Modal.Header>
+                  <Modal.Body>
+                    <div className="command-help-list">
+                      {composerCommands.map((command) => (
+                        <div key={command.name}>
+                          <strong>
+                            /{command.name} · {command.label}
+                          </strong>
+                          <p>{command.description}</p>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="integration-notice">
+                      输入 / 选择命令或 Skill，↑↓ 选择，Enter 确认，Esc 关闭。Shift+Enter
+                      换行；中文输入确认不会发送任务。带来源的 Skill 引用只对当前任务生效。
+                    </p>
+                  </Modal.Body>
+                </Modal.Dialog>
+              </Modal.Container>
+            </Modal.Backdrop>
             {deleteTarget && (
               <DeleteConversationDialog
                 title={deleteTarget.title}

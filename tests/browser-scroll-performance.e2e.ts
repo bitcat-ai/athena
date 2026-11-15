@@ -123,7 +123,8 @@ try {
         url + '/?round=' + round,
       );
       await expect(page.locator('.frame-loading')).toHaveCount(0);
-      await page.getByRole('tab', { name: '对话', exact: true }).click();
+      const closeInspector = page.getByRole('button', { name: '关闭元素检查器', exact: true });
+      if (await closeInspector.isVisible()) await closeInspector.click();
     }
     for (const selected of [false, true]) {
       if (selected) {

@@ -3,12 +3,18 @@ import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { LocalSandbox, type SandboxCallContext } from '../src/main/local-sandbox';
 
-export async function startCustomerRuntime(source: string, directory: string, phase: string) {
+export async function startCustomerRuntime(
+  source: string,
+  directory: string,
+  phase: string,
+  signal?: AbortSignal,
+) {
+  signal?.throwIfAborted();
   const controller = new AbortController();
   const context: SandboxCallContext = {
     conversationId: phase,
     turnId: phase,
-    signal: controller.signal,
+    signal: signal ? AbortSignal.any([signal, controller.signal]) : controller.signal,
   };
   const sandbox = (kind: string) =>
     new LocalSandbox(

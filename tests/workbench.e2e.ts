@@ -300,7 +300,7 @@ try {
   checks.push(
     'Source-edit handoff carries precise tab, element locator and accumulated preview changes to the local CLI',
   );
-  await page.getByRole('tab', { name: '元素', exact: true }).click();
+  await page.getByRole('button', { name: '元素检查器', exact: true }).click();
 
   await page.getByRole('button', { name: '撤销页面修改', exact: true }).click();
   await expect(page.getByRole('textbox', { name: '字号', exact: true })).toHaveValue('24px');
@@ -368,7 +368,7 @@ try {
   );
   assert.equal(carriedPreview.animation.duration, 1600);
   assert.equal(carriedPreview.styles['background-image'], redGradient);
-  await page.getByRole('tab', { name: '元素', exact: true }).click();
+  await page.getByRole('button', { name: '元素检查器', exact: true }).click();
   await chooseOption(page, '元素动效', '无');
   await page.getByRole('button', { name: '应用预览', exact: true }).click();
   await expect.poll(async () => (await inspectSelected()).animation ?? null).toBeNull();

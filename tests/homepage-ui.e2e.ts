@@ -7,6 +7,8 @@ import { chromium, expect } from '@playwright/test';
 import { checkTaskPanels } from './task-panel-checks';
 import { checkAppNotices } from './app-notice-checks';
 import { checkRuntimeSettings } from './runtime-settings-checks';
+import { checkChatLayout } from './chat-layout-checks';
+import { checkLocalIntegrations } from './local-integrations-ui-checks';
 import { createServer, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
@@ -109,6 +111,9 @@ window.workbench={
   if(action==='app:snapshot')return fixture.ready?structuredClone(fixture.snapshot):new Promise(resolve=>fixture.pendingSnapshots.push(resolve));
   if(action==='codex:update-status')return fixture.updateStatus || {status:'unknown'};
   if(action==='skills:list')return {status:'ready',source:'provider',provider:{id:'codex',name:'Codex'},skills:[{name:'review',description:'Review code',source:'provider',provider:{id:'codex',name:'Codex'},providerPath:'/opt/codex/review/SKILL.md',userInvocable:true}],diagnostics:[]};
+  if(action==='skills:local')return {skills:[{name:'layout',description:'检查页面布局',source:'global',packagePath:'/fixture/skills/layout',entryPath:'/fixture/skills/layout/SKILL.md',availability:'usable',diagnostics:[]}],workspace:{source:'workspace',rootPath:'/workspace/athena/.agents/skills',diagnostics:[]},global:{source:'global',rootPath:'/fixture/skills',diagnostics:[]}};
+  if(action==='local-mcp:list'){fixture.mcp??={available:true,diagnostics:[],servers:[{id:'docs',name:'Documentation',source:'Codex',location:'/fixture/.codex/config.toml',transport:'http',enabled:false,status:'discovered'}]};return structuredClone(fixture.mcp);}
+  if(action==='local-mcp:connect'){if(fixture.failMcp)throw Error('连接失败，请检查原 CLI 中的服务状态');const server=fixture.mcp.servers.find(s=>s.id===payload.id);Object.assign(server,{enabled:payload.enabled,status:payload.enabled?'connected':'discovered',toolCount:payload.enabled?5:undefined});fixture.emit({type:'local-mcp:state',state:structuredClone(fixture.mcp)});return structuredClone(fixture.mcp);}
   if(action==='models:list')return fixture.runtimeModels?.[payload.agent] ?? [{model:'fixture-model',name:${JSON.stringify(longModelName)},efforts:[{id:'low',description:'Low'},{id:'high',description:'High'}],defaultEffort:'low'}];
   if(action==='conversation:prepare')return {status:'ready',conversationId:payload.conversationId};
   if(action==='conversation:new'){if(fixture.failRuntimeSwitch)throw Error('无法切换运行时');const item={id:'new-'+fixture.calls.length,title:'新对话',updatedAt:Date.now(),workspace:fixture.snapshot.settings.workspace,agent:payload?.agent||fixture.snapshot.settings.agent,messages:[]};fixture.snapshot.conversations.unshift(item);return item;}
@@ -131,6 +136,7 @@ window.workbench={
   if(action==='conversation:stop'){for(const item of fixture.snapshot.conversations){for(const message of item.messages)if(message.status==='streaming')message.status='done';fixture.emit({type:'conversation:updated',conversation:structuredClone(item)})}return true;}
   if(action==='settings:workspace'){if(!fixture.folderChoice)return null;fixture.snapshot.settings.workspace=fixture.folderChoice;return structuredClone(fixture.snapshot.settings);}
   if(action==='settings:agent'){if(fixture.failAgentSave)throw Error('无法保存默认运行时');fixture.snapshot.settings.agent=payload.id;return structuredClone(fixture.snapshot.settings);}
+  if(action==='settings:page-preview'){fixture.snapshot.settings.pagePreview=payload.enabled;return structuredClone(fixture.snapshot.settings);}
   if(action==='settings:model'){
     const selection={model:payload.model,effort:payload.effort};
     if(payload.conversationId!==undefined){
@@ -148,6 +154,7 @@ window.workbench={
   }
   if(action==='agents:refresh')return fixture.snapshot.agents;
   if(action==='browser:inspect'){fixture.browser({inspecting:payload.enabled});return true;}
+  if(action==='browser:element-details')return fixture.snapshot.browser.selectedElement;
   if(action==='recording:start'){fixture.browser({recording:true});return true;}
   if(action==='browser:resize')return {width:payload.fitToWidth?Math.max(900,payload.width):payload.width,height:payload.height,tabId:payload.tabId};
   if(action==='share:state')return {active:false,participants:[]};
@@ -292,6 +299,87 @@ try {
     'Initial snapshot gate prevents early model requests; actual local username/initial, 216px sidebar, 760px composer, 34/56px official logos, neutral borderless 24px surface',
   );
 
+  const longElementName =
+    '写一段代码，探索一个网页，或聊聊刚冒出来的想法。你来决定下一步，Athena 与你一起。';
+  const elementInput = page.getByRole('textbox', { name: '发送给 Agent 的任务' });
+  await page.evaluate((name) => {
+    const f = (window as any).__homeFixture;
+    const element = {
+      ref: 'long-paragraph',
+      tag: 'p',
+      name,
+      documentId: 'fixture-document',
+      textContent: name,
+      editableText: true,
+      attributes: {},
+      computed: {},
+      ancestors: [],
+      shadowPath: [],
+    };
+    f.browser({ selectedElement: element });
+    f.emit({ type: 'browser:selected', element, reason: 'pick' });
+  }, longElementName);
+  const elementToken = page.locator('.composer .element-token');
+  await expect(elementToken).toHaveCount(1);
+  for (const width of [1600, 1060]) {
+    await page.setViewportSize({ width, height: 1000 });
+    const bounds = await elementToken.boundingBox();
+    assert.ok(bounds && bounds.width <= 241, 'Long element references must remain compact');
+    assert(await elementInput.evaluate((node) => node.scrollWidth <= node.clientWidth + 1));
+    await expect(elementToken.locator('.element-token-body')).toHaveAttribute(
+      'title',
+      new RegExp(longElementName),
+    );
+    const label = elementToken.locator('.element-reference-label');
+    assert(
+      await label.evaluate(
+        (node) =>
+          node.scrollWidth > node.clientWidth && getComputedStyle(node).textOverflow === 'ellipsis',
+      ),
+    );
+    const identifier = (await elementToken.locator('small').boundingBox())!;
+    assert.ok(identifier.x + identifier.width <= bounds.x + bounds.width + 1);
+  }
+  await elementInput.focus();
+  await elementInput.pressSequentially('请调整这段内容');
+  await expect(elementInput).toHaveText(/请调整这段内容$/);
+  await page.screenshot({ path: path.join(output, 'long-element-reference.png') });
+  await elementInput.press('Meta+a');
+  await elementInput.press('Backspace');
+  await expect(elementToken).toHaveCount(0);
+  await expect(elementInput).toHaveText('');
+  await page.evaluate((name) => {
+    const f = (window as any).__homeFixture;
+    const item = f.snapshot.conversations.find((c: any) => c.id === 'home');
+    item.messages = [
+      {
+        id: 'long-mention',
+        role: 'user',
+        text: '请调整 [ele1]',
+        createdAt: Date.now(),
+        mentions: [{ token: '[ele1]', ref: 'long-paragraph', tag: 'p', name }],
+      },
+    ];
+    f.emit({ type: 'conversation:updated', conversation: structuredClone(item) });
+  }, longElementName);
+  const sentReference = page.locator('.element-chip');
+  await expect(sentReference).toBeVisible();
+  await expect(sentReference).toContainText('ele1');
+  assert.ok((await sentReference.boundingBox())!.width <= 241);
+  await expect(sentReference).toHaveAttribute('title', new RegExp(longElementName));
+  await page.evaluate(() => {
+    const f = (window as any).__homeFixture;
+    const item = f.snapshot.conversations.find((c: any) => c.id === 'home');
+    item.messages = [];
+    f.emit({ type: 'conversation:updated', conversation: structuredClone(item) });
+    f.browser({ selectedElement: undefined });
+  });
+  await page.locator('.topbar .browser-toggle').click();
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  checks.push(
+    'Long element references stay bounded with full-text tooltips, visible IDs, typing and deletion at wide and narrow widths, including sent messages',
+  );
+
   const userMenu = page.getByRole('button', { name: '本机用户菜单' });
   await userMenu.click();
   await expect(page.locator('.local-user-menu')).toBeVisible();
@@ -339,7 +427,7 @@ try {
   const composer = page.getByRole('textbox', { name: '发送给 Agent 的任务' });
   // Mount the production App; the initial snapshot has no skills, so this menu
   // can only populate through the real refresh IPC wiring.
-  await composer.fill('/');
+  await composer.fill('/rev');
   await expect(page.getByRole('menuitem', { name: /review/ })).toBeVisible();
   assert.ok((await calls('skills:list')).some((call: any) => call.payload.conversationId === 'a'));
   await composer.press('Enter');
@@ -477,7 +565,8 @@ try {
   await expect(page.getByRole('button', { name: '停止任务', exact: true })).toBeVisible();
   await page.keyboard.press('Meta+n');
   await composer.fill('下一段草稿');
-  await expect(page.getByText('另一任务进行中', { exact: true })).toBeVisible();
+  await expect(page.getByText('↵ 加入队列', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '加入队列', exact: true })).toBeEnabled();
   await page.getByRole('button', { name: '停止任务', exact: true }).click();
   await expect(composer).toHaveText('下一段草稿');
   await expect(page.getByRole('button', { name: '发送任务', exact: true })).toBeEnabled();
@@ -569,6 +658,8 @@ try {
   checks.push(
     'Settings occupies the main workspace, retains real provider detail, browser controls and Feishu disconnected/restoring/failed/pairing branches, and preserves draft on return',
   );
+
+  await checkLocalIntegrations(page, checks, output);
 
   const beforeCancel = (await calls('conversation:new')).length;
   await userMenu.click();
@@ -800,7 +891,7 @@ try {
         zoom.bottom >= 6,
       state + ': zoom label, arrow or window inset is cramped: ' + JSON.stringify(zoom),
     );
-    assert.equal(buttons.length, 4);
+    assert.ok(buttons.length >= 4, state + ': required toolbar actions are missing');
     assert.ok(
       buttons.every(
         (b) =>
@@ -857,6 +948,11 @@ try {
   await checkRuntimeSettings(page);
   checks.push(
     'Runtime settings follow the current conversation; default CLI and scoped model changes remain separate, including legacy, unknown, busy and failed-save states',
+  );
+  assert.deepEqual(errors, []);
+  await checkChatLayout(page, output);
+  checks.push(
+    'Chat groups identity, status and copy in one row, removes duplicate context and keeps history and inspector controls available on demand',
   );
   assert.deepEqual(errors, []);
   await writeFile(

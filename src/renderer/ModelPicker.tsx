@@ -13,14 +13,21 @@ export function ModelPicker({
   connectionReady = false,
   conversationId,
   onChange,
+  openRequest = 0,
 }: {
   settings: Settings;
   busy: boolean;
   connectionReady?: boolean;
   conversationId?: string;
   onChange: (settings: Settings) => void;
+  openRequest?: number;
 }) {
   const [open, setOpen] = useState(false);
+  const lastOpenRequest = useRef(openRequest);
+  useEffect(() => {
+    if (openRequest !== lastOpenRequest.current) setOpen(true);
+    lastOpenRequest.current = openRequest;
+  }, [openRequest]);
   const [models, setModels] = useState<ModelOption[]>([]);
   const [catalogStatus, setCatalogStatus] = useState<'loading' | 'ready' | 'failed'>('loading');
   const loading = catalogStatus === 'loading';

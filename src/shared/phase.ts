@@ -12,7 +12,7 @@ import type {
 export type RequestKind = 'approval' | 'input' | 'handoff';
 export type TurnOutcome = 'succeeded' | 'blocked' | 'failed' | 'cancelled';
 export type TurnPhase =
-  | { kind: 'preparing' }
+  | { kind: 'preparing'; tool?: string }
   | { kind: 'thinking' }
   | { kind: 'acting'; tool: string; target?: string }
   | { kind: 'verifying'; checkpoint: string }
@@ -33,6 +33,12 @@ export type GlyphKind = ToolKind | 'connect' | 'stopping' | 'done' | 'warn' | 'f
 const names: Record<string, string> = {
   workbench_skill_list: '查找业务 Skill',
   workbench_skill_read: '读取业务 Skill',
+  workbench_mcp_list: '查看 MCP 服务',
+  workbench_mcp_tools: '读取 MCP 工具',
+  workbench_mcp_call: '调用 MCP 工具',
+  workbench_preview_draft: '生成页面初稿',
+  workbench_preview_result: '查看页面初稿',
+  create_page: '创建页面预览',
   workbench_feishu_index: '索引知识库',
   workbench_feishu_search: '检索资料',
   workbench_feishu_read: '读取文档',
@@ -73,6 +79,7 @@ const names: Record<string, string> = {
   inspect: '检查元素',
   query: '查找元素',
   edit: '预览元素修改',
+  restyle: '预览页面外观',
   undo: '撤销页面修改',
   tabs: '查看标签页',
   new_tab: '新建标签页',
@@ -98,6 +105,7 @@ const nativeNames: Record<string, string> = {
   ls: '列出目录',
   webfetch: '打开网页',
   websearch: '搜索网页',
+  skill: '使用 Skill',
 };
 const kinds: Record<string, ToolKind> = {
   workbench_skill_list: 'read',
@@ -124,6 +132,12 @@ const kinds: Record<string, ToolKind> = {
   logs: 'read',
   inspect: 'read',
   query: 'read',
+  create_page: 'edit',
+  workbench_preview_draft: 'edit',
+  workbench_preview_result: 'read',
+  workbench_mcp_list: 'read',
+  workbench_mcp_tools: 'read',
+  workbench_mcp_call: 'run',
   tabs: 'read',
   status: 'read',
   navigate: 'web',
@@ -143,6 +157,7 @@ const kinds: Record<string, ToolKind> = {
   scroll: 'click',
   key: 'click',
   edit: 'edit',
+  restyle: 'edit',
   undo: 'edit',
   controls: 'edit',
   checkpoint: 'verify',
@@ -166,6 +181,7 @@ const nativeKinds: Record<string, ToolKind> = {
   shell: 'run',
   webfetch: 'web',
   websearch: 'web',
+  skill: 'read',
 };
 // Short verbs read better than the full tool name once a concrete target follows them.
 const verbs: Record<string, string> = {
@@ -223,6 +239,16 @@ export function toolTarget(tool: Pick<ToolCall, 'name' | 'input'>): string {
         ? Object.keys(value)
         : [];
   const data = input as Record<string, unknown>;
+  if (bare(tool.name) === 'create_page' && typeof data.title === 'string')
+    return oneLine(data.title);
+  if (tool.name === 'workbench_preview_draft')
+    return typeof data.model === 'string'
+      ? data.model
+      : typeof data.requestedModel === 'string'
+        ? `${data.requestedModel}（请求）`
+        : '';
+  if (tool.name === 'workbench_mcp_call' && typeof data.tool === 'string')
+    return oneLine(data.tool);
   const files = Array.isArray(input) ? changed(input) : changed(data.changes);
   if (files.length)
     return shortPath(files[0]) + (files.length > 1 ? ` 等 ${files.length} 个文件` : '');
@@ -239,6 +265,8 @@ export function toolTarget(tool: Pick<ToolCall, 'name' | 'input'>): string {
   }
   for (const key of ['path', 'file_path', 'filePath', 'file'])
     if (typeof data[key] === 'string' && data[key]) return shortPath(data[key] as string);
+  if (typeof data.skill === 'string') return oneLine(data.skill);
+  if (typeof data.selector === 'string') return oneLine(data.selector);
   if (typeof data.page === 'number') return `页面 ${data.page}`;
   return '';
 }
@@ -296,6 +324,7 @@ export function resolvedText(request: ResolvedRequest): string {
 export function runningPhase(turn: {
   connected: boolean;
   stopping: boolean;
+  preparingTool?: string;
   requests: Array<Pick<PendingAgentRequest, 'kind' | 'request'>>;
   tools: ToolCall[];
 }): TurnPhase {
@@ -313,6 +342,7 @@ export function runningPhase(turn: {
     const target = toolTarget(tool);
     return { kind: 'acting', tool: tool.name, ...(target ? { target } : {}) };
   }
+  if (turn.preparingTool) return { kind: 'preparing', tool: turn.preparingTool };
   return turn.connected || turn.tools.length ? { kind: 'thinking' } : { kind: 'preparing' };
 }
 /** Remembers when each plan step first left pending so the timeline can order it among actions. */
@@ -442,7 +472,7 @@ const outcomeGlyphs: Record<TurnOutcome, GlyphKind> = {
 export function phaseTitle(phase: TurnPhase, agent: AgentId = 'codex'): string {
   switch (phase.kind) {
     case 'preparing':
-      return '正在连接';
+      return phase.tool ? `准备${toolTitle(phase.tool, agent)}` : '正在连接';
     case 'thinking':
       return '思考中';
     case 'acting':
@@ -464,7 +494,7 @@ export function phaseTitle(phase: TurnPhase, agent: AgentId = 'codex'): string {
 export function phaseGlyph(phase: TurnPhase, agent: AgentId = 'codex'): GlyphKind {
   switch (phase.kind) {
     case 'preparing':
-      return 'connect';
+      return phase.tool ? toolKind(phase.tool, agent) : 'connect';
     case 'thinking':
       return 'think';
     case 'acting':

@@ -352,7 +352,7 @@ export const browserPageSource = String.raw`(() => {
   function textEditState(el) {
     if (sensitive(el)) return {editableText:false,editReason:'Sensitive fields cannot be edited.'};
     if (blockedTextTags.has(el.localName.toUpperCase())) return {editableText:false,editReason:'Select a plain text leaf element.'};
-    if (el.children.length || el.shadowRoot) return {editableText:false,editReason:'This element contains child elements. Select the text leaf to preserve its structure.'};
+    if ([...el.children].some(child=>child.tagName!=='BR') || el.shadowRoot) return {editableText:false,editReason:'This element contains child elements. Select the text leaf to preserve its structure.'};
     const text=leafText(el);
     if (text.length>textLimit || clean(text,textLimit+1)!==text) return {editableText:false,editReason:'This text exceeds 20000 characters or contains sensitive content.'};
     return {editableText:true};
@@ -534,7 +534,7 @@ export const browserPageSource = String.raw`(() => {
         if(!Array.isArray(node.children)) throw new Error('Invalid child elements');
         node.children.forEach(child=>validate(child,depth+1));
       }
-      if(['input','img','br','hr'].includes(node.tag) && (node.text!==undefined || node.children?.length)) throw new Error('Void elements cannot contain children');
+      if(['input','img','br','hr'].includes(node.tag) && ((node.text!==undefined && node.text!=='') || node.children?.length)) throw new Error('Void elements cannot contain children');
     };
     validate(insertion.node,1);
     const build=node=> {
@@ -542,7 +542,7 @@ export const browserPageSource = String.raw`(() => {
       for(const [key,value] of Object.entries(node.attributes || {})) el.setAttribute(key,value);
       if(node.tag==='button') el.type='button';
       if(['input','textarea','select'].includes(node.tag)) el.setAttribute('form','athena-preview-'+docId);
-      if(node.text!==undefined) el.appendChild(document.createTextNode(node.text));
+      if(node.text!==undefined && !['input','img','br','hr'].includes(node.tag)) el.appendChild(document.createTextNode(node.text));
       for(const [key,value] of Object.entries(node.styles || {})) if(value) el.style.setProperty(key,value);
       for(const child of node.children || []) el.appendChild(build(child));
       if(sensitive(el)) throw new Error('Sensitive controls cannot be created as previews');
@@ -588,7 +588,7 @@ export const browserPageSource = String.raw`(() => {
     if (overlays.has(el) || sensitive(el) || blockedTextTags.has(el.localName.toUpperCase()) || el.shadowRoot || el.isContentEditable) return null;
     const nodes=[...el.childNodes].filter(node=>node.nodeType===Node.TEXT_NODE);
     if (nodes.some(node=>node.nodeValue.length>textLimit || clean(node.nodeValue,textLimit+1)!==node.nodeValue)) return null;
-    if (!el.children.length) return nodes;
+    if (![...el.children].some(child=>child.tagName!=='BR')) return nodes;
     const filled=nodes.filter(node=>node.nodeValue.trim());
     return filled.length===1 ? filled : null;
   }
@@ -827,7 +827,7 @@ export const browserPageSource = String.raw`(() => {
         result.push(el);
         if (result.length>limit) break;
       }
-      return {documentId:docId,elements:result.slice(0,limit).map(describe),truncated:truncated || result.length>limit};
+      return {documentId:docId,elements:result.slice(0,limit).map(el=>({...describe(el),...textEditState(el)})),truncated:truncated || result.length>limit};
     },
     inspect,
     reveal(ref) {
@@ -896,7 +896,7 @@ export const browserPageSource = String.raw`(() => {
       for (const [name,value] of entries) value==='' ? el.style.removeProperty(name) : el.style.setProperty(name,value);
       if (hasAnimation) applyAnimation(el,prepared);
       const editId=docId+':edit:'+(++nextEditId);
-      patches.set(editId,{ref:request.ref,el,textNodes,beforeText,created,hasText,afterText:textNodes.map(node=>node.nodeValue),hasStyles:entries.length>0,beforeCssText,afterCssText:el.style.cssText,hasAnimation,beforeAnimation,afterAnimationToken:prepared?.token});
+      patches.set(editId,{ref:request.ref,el,textNodes,textStructure:[...el.childNodes],beforeText,created,hasText,afterText:textNodes.map(node=>node.nodeValue),hasStyles:entries.length>0,beforeCssText,afterCssText:el.style.cssText,hasAnimation,beforeAnimation,afterAnimationToken:prepared?.token});
       editOrder.push(editId);
       send({kind:'edit',target:describe(el),editId,value:JSON.stringify({...(hasText ? {text:request.text} : {}),...(entries.length ? {styles} : {}),...(hasAnimation ? {animation} : {})})});
       feedback(request.ref,'applied');
@@ -930,7 +930,8 @@ export const browserPageSource = String.raw`(() => {
       }
       if (patch.hasText) {
         const current=[...el.childNodes].filter(node=>node.nodeType===Node.TEXT_NODE);
-        if (el.children.length || current.length!==patch.textNodes.length || current.some((node,index)=>node!==patch.textNodes[index] || node.nodeValue!==patch.afterText[index])) throw new Error('Page text changed after this edit; refusing to overwrite newer changes');
+        const structure=[...el.childNodes];
+        if (structure.length!==patch.textStructure.length || structure.some((node,index)=>node!==patch.textStructure[index]) || current.length!==patch.textNodes.length || current.some((node,index)=>node!==patch.textNodes[index] || node.nodeValue!==patch.afterText[index])) throw new Error('Page text changed after this edit; refusing to overwrite newer changes');
       }
       if (patch.hasStyles && el.style.cssText!==patch.afterCssText) throw new Error('Page styles changed after this edit; refusing to overwrite newer changes');
       let restoredAnimation;

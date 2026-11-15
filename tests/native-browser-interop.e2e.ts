@@ -112,7 +112,11 @@ const server = createServer(async (request, response) => {
     if (step === 3)
       invoke('workbench_browser_edit', {
         ref: parsed(2).element.ref,
-        styles: { 'border-radius': '16px', 'background-color': '#e8f0ff' },
+        styles: {
+          'border-radius': '16px',
+          'background-color': '#e8f0ff',
+          'font-family': '"Songti SC", serif',
+        },
       });
     if (step === 4) invoke('web_snapshot', { page: pageId });
     if (step === 5) {
@@ -407,6 +411,8 @@ try {
       state.browser.selectedElement!.ref,
     );
     assert.equal(element.computed['border-radius'], '16px');
+    assert.match(element.computed['font-family'], /Songti SC/);
+    assert.equal(message.requests?.filter((request) => request.kind === 'approval').length ?? 0, 0);
     await page.screenshot({ path: path.join(output, `${cli}-native.png`), animations: 'disabled' });
     await page.evaluate(
       (editId) => window.workbench.invoke('browser:undo', { editId }),
@@ -423,7 +429,7 @@ try {
     assert.match(protectedUndo, /newer changes/);
     assert.equal((await query(`#search-${cli}`)).elements[0].value, `typed-${cli}`);
     checks.push(
-      `${cli}: real CLI -> host tools -> visible browser -> nested element creation, restyling, native fill, page checkpoint, conversation result and protected undo`,
+      `${cli}: real CLI -> host tools -> visible browser -> nested element creation, font/style changes and native fill without approval, page checkpoint, conversation result and protected undo`,
     );
     const sessionId = state.conversations.find((c) => c.id === `${cli}-run`)!.agentSessionId;
     assert.ok(sessionId);

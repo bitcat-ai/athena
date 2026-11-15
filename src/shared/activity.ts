@@ -137,6 +137,19 @@ export function activityItems(message: ChatMessage, agent: AgentId = 'codex'): A
   return entries.sort((a, b) => a.at - b.at).map((entry) => entry.item);
 }
 
+/** Public milestones stay visible; long tool payloads belong to the expanded timeline. */
+export function activityOverview(message: ChatMessage, agent: AgentId = 'codex'): ActivityItem[] {
+  const items = activityItems(message, agent);
+  const plans = items.filter((item) => item.kind === 'plan');
+  const current = plans.findIndex((item) => item.kind === 'plan' && item.state === 'now');
+  const visiblePlans = plans.slice(Math.max(0, current - 1), Math.max(0, current - 1) + 4);
+  const actions = items.filter((item) => item.kind === 'tool');
+  const visibleActions = actions.slice(message.status === 'streaming' ? -3 : -1);
+  const checks = items.filter((item) => item.kind === 'check').slice(-1);
+  const shown = new Set<ActivityItem>([...visiblePlans, ...visibleActions, ...checks]);
+  return items.filter((item) => shown.has(item) || item.kind === 'artifact');
+}
+
 export interface ActivitySummary {
   steps: number;
   checks: number;

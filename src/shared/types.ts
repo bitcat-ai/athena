@@ -36,6 +36,8 @@ export interface ElementRef {
   name: string;
   selector?: string;
   text?: string;
+  editableText?: boolean;
+  editReason?: string;
   value?: string;
   shadowPath?: string[];
   bounds?: { x: number; y: number; width: number; height: number };
@@ -44,6 +46,7 @@ export interface ElementRef {
 export const ELEMENT_STYLE_PROPERTIES = [
   'color',
   'background-color',
+  'font-family',
   'font-size',
   'font-weight',
   'font-style',
@@ -63,6 +66,10 @@ export const ELEMENT_STYLE_PROPERTIES = [
   'padding-bottom',
   'padding-left',
   'border',
+  'border-top',
+  'border-right',
+  'border-bottom',
+  'border-left',
   'border-color',
   'border-width',
   'border-style',
@@ -74,13 +81,49 @@ export const ELEMENT_STYLE_PROPERTIES = [
   'max-width',
   'max-height',
   'display',
+  'box-sizing',
+  'position',
+  'top',
+  'right',
+  'bottom',
+  'left',
+  'inset',
+  'z-index',
+  'overflow',
+  'overflow-x',
+  'overflow-y',
+  'object-fit',
+  'object-position',
+  'aspect-ratio',
   'opacity',
   'gap',
   'row-gap',
   'column-gap',
   'flex-direction',
+  'flex-wrap',
+  'flex',
+  'flex-grow',
+  'flex-shrink',
+  'flex-basis',
+  'order',
   'justify-content',
   'align-items',
+  'align-content',
+  'align-self',
+  'justify-items',
+  'justify-self',
+  'place-items',
+  'grid-template-columns',
+  'grid-template-rows',
+  'grid-auto-columns',
+  'grid-auto-rows',
+  'grid-auto-flow',
+  'grid-column',
+  'grid-row',
+  'text-overflow',
+  'text-transform',
+  'overflow-wrap',
+  'word-break',
   'background',
   'background-image',
   'background-size',
@@ -414,6 +457,7 @@ export interface BrowserTool {
 }
 export interface ToolResult {
   text: string;
+  execution?: 'not_executed' | 'completed' | 'unknown';
   image?: string;
   images?: string[];
   isError?: boolean;
@@ -444,6 +488,7 @@ export interface WebExecutionEvent {
     | 'started'
     | 'plan'
     | 'operation'
+    | 'control'
     | 'observation'
     | 'checkpoint'
     | 'recovery'
@@ -453,6 +498,7 @@ export interface WebExecutionEvent {
     | 'finished';
   status: 'running' | 'succeeded' | 'failed' | 'blocked';
   operationId?: string;
+  control?: { scope: 'viewport' | 'interaction'; reason: string };
   tool?: string;
   page?: number;
   durationMs?: number;
@@ -505,6 +551,7 @@ export type AgentEvent =
     }
   | { type: 'model'; threadId: string; turnId: string; model: import('./usage').ExecutionModel }
   | { type: 'delta'; text: string }
+  | { type: 'tool-preparing'; name: string }
   | { type: 'tool'; call: ToolCall }
   | { type: 'plan'; steps: AgentPlanStep[]; at: number }
   | { type: 'web-execution'; event: WebExecutionEvent }
@@ -611,6 +658,10 @@ export interface Settings {
   agent: AgentId;
   modelSelection?: import('./usage').ModelSelection;
   modelSelections?: Partial<Record<AgentId, import('./usage').ModelSelection>>;
+  /** References only; connection secrets remain in their original CLI configuration. */
+  localMcpEnabled?: string[];
+  localMcpReview?: string[];
+  pagePreview?: boolean;
 }
 export interface CodexConnectionState {
   status: 'idle' | 'starting' | 'ready' | 'error';
@@ -628,6 +679,7 @@ export interface AppSnapshot {
   skills?: WorkspaceSkill[];
   providerSkills?: import('./skills').ProviderSkill[];
   providerSkillDiscovery?: import('./skills').ProviderSkillDiscovery;
+  localMcp?: import('./local-mcp').LocalMcpState;
   codexConnection?: CodexConnectionState;
   browser: BrowserState;
   web?: WebExecutorState;
@@ -648,6 +700,7 @@ export interface AppSnapshot {
   queue?: import('./queue').MessageQueueState;
 }
 export type AppEvent =
+  | { type: 'local-mcp:state'; state: import('./local-mcp').LocalMcpState }
   | { type: 'sandbox:state'; state: import('./sandbox').LocalSandboxView }
   | {
       type: 'sandbox:pip';

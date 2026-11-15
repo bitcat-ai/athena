@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { displayPhase, replyText } from '../shared/phase';
+import { displayPhase } from '../shared/phase';
 import type { AgentId, ChatMessage, PendingAgentRequest } from '../shared/types';
 import { ActivityRow } from './ActivityRow';
 import { ActivityTimeline } from './ActivityTimeline';
@@ -11,8 +11,8 @@ import { isPrdArtifact } from '../shared/activity';
 
 /**
  * Status of one assistant turn, laid out in reading order: what it is doing, what it needs from
- * the user, the reply (`children`), and what is left to decide once it has ended. `actions` sit
- * right under the text they act on: the reply, or the outcome card when there is no reply.
+ * the user, the reply (`children`), and what is left to decide once it has ended. Identity,
+ * status and copy share one header; detailed history stays inside the expanded activity.
  */
 export function AssistantTurn({
   message,
@@ -24,6 +24,8 @@ export function AssistantTurn({
   busy,
   onAction,
   onShowBrowser,
+  heading,
+  historyAction,
   actions,
   children,
 }: {
@@ -39,6 +41,8 @@ export function AssistantTurn({
   busy: boolean;
   onAction: <T = unknown>(action: string, payload?: unknown) => Promise<T>;
   onShowBrowser: () => void;
+  heading?: ReactNode;
+  historyAction?: ReactNode;
   actions?: ReactNode;
   children?: ReactNode;
 }) {
@@ -50,34 +54,59 @@ export function AssistantTurn({
     message.plan?.length ||
     message.execution?.length ||
     message.requests?.length ||
-    message.model
+    message.model ||
+    historyAction
   );
   // A plain answer needs no status line once it is there to read.
   const quiet = phase.kind === 'ended' && phase.outcome === 'succeeded' && !detailed;
   const outcome = phase.kind === 'ended' ? phase.outcome : undefined;
-  const replied = !!replyText(message);
   const target = { conversationId, messageId: message.id };
   return (
     <>
-      {!quiet && (
+      {quiet ? (
+        (heading || actions) && (
+          <div className="assistant-turn-heading">
+            {heading}
+            {actions}
+          </div>
+        )
+      ) : (
         <ActivityRow
           message={message}
           phase={phase}
           agent={agent}
           expanded={expanded}
           onExpandedChange={setExpanded}
+          heading={heading}
+          actions={actions}
         >
           {detailed && (
-            <ActivityTimeline
-              message={message}
-              agent={agent}
-              conversationId={conversationId}
-              openToolId={openToolId}
-              onOpenTool={setOpenToolId}
-              onAction={onAction}
-            />
+            <>
+              <ActivityTimeline
+                message={message}
+                agent={agent}
+                conversationId={conversationId}
+                openToolId={openToolId}
+                onOpenTool={setOpenToolId}
+                onAction={onAction}
+              />
+              {historyAction && <div className="activity-history-action">{historyAction}</div>}
+            </>
           )}
         </ActivityRow>
+      )}
+      {!expanded && detailed && (
+        <ActivityTimeline
+          overview
+          message={message}
+          agent={agent}
+          conversationId={conversationId}
+          onOpenTool={(id) => {
+            setExpanded(true);
+            setOpenToolId(id);
+          }}
+          onAction={onAction}
+        />
       )}
       {phase.kind === 'waiting' &&
         requests.map((pending, index) => (
@@ -106,7 +135,6 @@ export function AssistantTurn({
           />
         ))}
       {children}
-      {replied && actions}
       {last && (outcome === 'blocked' || outcome === 'failed') && (
         <OutcomeCard
           message={message}
@@ -122,7 +150,6 @@ export function AssistantTurn({
           }}
         />
       )}
-      {!replied && actions}
     </>
   );
 }

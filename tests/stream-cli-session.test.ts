@@ -67,6 +67,8 @@ process.stdin.setEncoding('utf8'); process.stdin.on('data',s=>input+=s); process
  if(mode==='tool-disabled'){out(cli==='gemini'?{type:'tool_use',tool_id:'tool-1',tool_name:'write_file',parameters:{}}:{type:'assistant',message:{role:'assistant',content:[{type:'tool_use',id:'tool-1',name:'Write',input:{}}]}});return;}
  if(mode==='denied'){out({type:'result',subtype:'success',is_error:false,permission_denials:[{tool_name:'Write'}],result:'blocked'});return;}
  if(cli==='claude' && mode.startsWith('read-')) {
+  out({type:'stream_event',event:{type:'content_block_start',content_block:{type:'tool_use',id:'read:1',name:'Read',input:{}}}});
+  out({type:'stream_event',event:{type:'content_block_delta',delta:{type:'input_json_delta',partial_json:'HIDDEN_PARTIAL_INPUT'}}});
   out({type:'assistant',message:{role:'assistant',content:[{type:'tool_use',id:'read:1',name:'Read',input:{file_path:'evidence.txt'}}]}});
   if(mode!=='read-pending') out({type:'user',message:{role:'user',content:[{type:'tool_result',tool_use_id:'read:1',is_error:mode==='read-error',content:'HIDDEN_TOOL_OUTPUT'}]}});
  }
@@ -799,6 +801,11 @@ for (const mode of ['read-success', 'read-error', 'read-pending']) {
           false,
         );
       }
+      assert.deepEqual(
+        f.events.filter((event) => event.type === 'tool-preparing'),
+        [{ type: 'tool-preparing', name: 'Read' }],
+      );
+      assert.equal(JSON.stringify(f.events).includes('HIDDEN_PARTIAL_INPUT'), false);
       assert.equal(f.hostCalls(), 0);
     } finally {
       await f.cleanup();

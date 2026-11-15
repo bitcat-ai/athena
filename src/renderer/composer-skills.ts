@@ -1,8 +1,9 @@
 import type { ProviderSkill, ProviderSkillDiscovery, WorkspaceSkill } from '../shared/skills';
 import type { ElementMention } from '../shared/types';
+import { composerCommands } from './composer-commands';
 
 /** What an inline token of the composer stands for: a page element or a Skill of the current CLI. */
-export type ComposerToken = ElementMention | { skill: string };
+export type ComposerToken = ElementMention | { skill: string; source?: 'local' | 'provider' };
 export const MAX_SKILLS = 3;
 
 interface Segment {
@@ -11,7 +12,9 @@ interface Segment {
   value?: ComposerToken;
 }
 
-export function isSkillToken(value?: ComposerToken): value is { skill: string } {
+export function isSkillToken(
+  value?: ComposerToken,
+): value is { skill: string; source?: 'local' | 'provider' } {
   return !!value && 'skill' in value;
 }
 
@@ -36,6 +39,35 @@ export function slashSkillOptions(
       skill.userInvocable &&
       skill.name.toLowerCase().startsWith(prefix) &&
       skills.findIndex((other) => other.name === skill.name) === index,
+  );
+}
+
+export function slashAllSkills(
+  local: readonly WorkspaceSkill[],
+  provider: readonly ProviderSkill[],
+  discovery: ProviderSkillDiscovery | undefined,
+  query: string,
+) {
+  if (!/^[a-zA-Z0-9:._-]*$/.test(query)) return [];
+  const reserved = new Set<string>(composerCommands.map((item) => item.name));
+  const owned = slashSkillOptions(provider, discovery, '').map((skill) => ({
+    ...skill,
+    key: `provider:${skill.name}`,
+    tokenName: reserved.has(skill.name) ? `skill:${skill.name}` : skill.name,
+  }));
+  const shared = local
+    .filter((skill) => skill.availability === 'usable')
+    .map((skill) => ({
+      ...skill,
+      source: 'local' as const,
+      key: `local:${skill.name}`,
+      tokenName:
+        reserved.has(skill.name) || owned.some((item) => item.name === skill.name)
+          ? `local:${skill.name}`
+          : skill.name,
+    }));
+  return [...owned, ...shared].filter((skill) =>
+    skill.tokenName.toLowerCase().startsWith(query.toLowerCase()),
   );
 }
 
@@ -66,17 +98,24 @@ export function buildSkillSubmission(input: {
   discovery?: ProviderSkillDiscovery;
 }): SkillSubmission | { error: string } {
   const referenced = referencedSkills(input.segments);
+  const localReferences = input.segments.flatMap((segment) =>
+    segment.type === 'token' && isSkillToken(segment.value) && segment.value.source === 'local'
+      ? [segment.value.skill]
+      : [],
+  );
   const picked = input.picked.filter((name) => !referenced.includes(name));
   const selectedSkills = [...picked, ...referenced];
   if (selectedSkills.length > MAX_SKILLS) return { error: `最多选择 ${MAX_SKILLS} 个 Skill` };
-  const owned = referenced.map((name) =>
-    input.discovery?.status === 'ready'
-      ? input.providerSkills.find((skill) => skill.name === name && skill.userInvocable)
-      : undefined,
-  );
+  const owned = referenced
+    .filter((name) => !localReferences.includes(name))
+    .map((name) =>
+      input.discovery?.status === 'ready'
+        ? input.providerSkills.find((skill) => skill.name === name && skill.userInvocable)
+        : undefined,
+    );
   const local = (name: string) =>
     input.localSkills.some((skill) => skill.name === name && skill.availability === 'usable');
-  if (owned.includes(undefined) || !picked.every(local))
+  if (owned.includes(undefined) || ![...picked, ...localReferences].every(local))
     return { error: '引用的 Skill 当前不可用，请刷新或移除引用后重试。' };
   const text = (skipSkills: boolean) =>
     input.segments

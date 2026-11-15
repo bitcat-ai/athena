@@ -12,7 +12,7 @@ const dataDir = await mkdtemp(path.join(root, '.runtime/ui-test-'));
 await seedLegacyWorkspace(dataDir);
 await mkdir(path.join(root, 'test-results'), { recursive: true });
 const application = await electron.launch({
-  args: ['.'],
+  args: [path.join(root, 'tests/electron-background.cjs')],
   cwd: root,
   env: {
     ...process.env,
@@ -24,6 +24,15 @@ const errors: string[] = [];
 const checks: string[] = [];
 try {
   const page = await application.firstWindow();
+  await page.addLocatorHandler(
+    page
+      .getByRole('region', { name: '工作台提示', exact: true })
+      .filter({ hasText: 'Codex CLI 有新版本' })
+      .getByRole('button', { name: '收起提醒', exact: true }),
+    async (button) => {
+      await button.click();
+    },
+  );
   page.on('pageerror', (error) => errors.push(error.message));
   await expect(page.getByRole('heading', { name: '今天想完成什么？' })).toBeVisible();
   await page.getByRole('button', { name: '展开浏览器', exact: true }).click();
@@ -61,7 +70,7 @@ try {
     );
   };
   const composer = page.getByRole('textbox', { name: '发送给 Agent 的任务' });
-  const conversationTab = page.getByRole('tab', { name: '对话' });
+  const conversationTab = page.getByRole('tab', { name: '对话', includeHidden: true });
   const tokens = page.locator('.composer .element-token');
 
   // 1. Pick → inline token, conversation tab stays selected, nothing submitted.

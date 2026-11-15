@@ -23,7 +23,12 @@ export interface AgentSessionOptions {
   callTool: (name: string, args: Record<string, unknown>) => Promise<ToolResult>;
   onEvent: (event: AgentEvent) => void;
   onClose?: (reason: string) => void;
+  /** A single bounded page insertion, isolated from files and general-purpose tools. */
+  previewOnly?: boolean;
 }
+
+export const previewInstructions =
+  'Immediately call workbench_browser_edit once with the exact body ref provided. Insert one styled hero section (prepend), at most 8 nodes and 2000 JSON characters: brand name, headline, short copy and a button. Only the first viewport; leave all lower sections to the main assistant. Use real product copy matching the request, never placeholders, development notes or invented business results. Use compact inline styles; inherit typography from the root. No preamble, scripts, URLs, files, commands, Skills or other tools. After the tool succeeds reply only "首屏已呈现".';
 
 export interface AgentSession {
   readonly sessionId: string | undefined;

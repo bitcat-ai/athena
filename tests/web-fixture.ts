@@ -149,8 +149,8 @@ export async function webFixture(start = '/lab'): Promise<WebFixture> {
     onFrame() {},
     onStep() {},
     onSelected() {},
-    onHumanTakeover() {
-      runtime?.onHumanInteraction();
+    onHumanTakeover(reason) {
+      runtime?.onHumanInteraction(reason);
     },
   });
   runtime = new WebRuntime(browser, {
@@ -178,7 +178,7 @@ export async function webFixture(start = '/lab'): Promise<WebFixture> {
   }
   const call: WebFixture['call'] = async (name, args) => {
     const result = await runtime.callTool(name, args);
-    assert.equal(result.isError, false, result.text);
+    assert.ok(!result.isError, result.text);
     return result;
   };
   return {

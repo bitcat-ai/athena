@@ -49,3 +49,25 @@ _Avoid_: authentication level, trust level
 **External thread**:
 An external Agent's handle mapped to an existing Athena Conversation and AgentSession lifecycle.
 _Avoid_: separate Thread model, raw CLI thread
+
+## Local records and webpage interaction
+
+**Local profile**:
+The local collection of Athena preferences, conversations, interaction history and saved knowledge belonging to one application data identity.
+_Avoid_: cloud account, tenant, project workspace
+
+**Workspace**:
+The project directory or personal working location selected for a task. It does not own every record in the Local profile.
+_Avoid_: all application data, browser profile
+
+**Interaction evidence**:
+A recorded action, observation, result or artifact used to explain and check what happened on a webpage.
+_Avoid_: execution permission, proof that every business effect succeeded
+
+**Execution authority**:
+The current permission for a task or participant to act on a particular live page. Historical evidence does not preserve this permission.
+_Avoid_: saved approval, permanent page ownership
+
+**Historical reference**:
+An identifier retained to explain a record's origin even when the original conversation, page or task no longer exists.
+_Avoid_: live object handle, permission to replay

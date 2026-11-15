@@ -76,6 +76,30 @@ Athena 会检查本机 Codex CLI 的官方稳定版。发现新版本时会显�
 
 更多执行与恢复约束见 [复杂网页任务](complex-web-tasks.md)；模型证据与用量口径见 [Agent 交互与用量](agent-experience.md)。
 
+### Skills、MCP 与命令
+
+「设置 → Skills」列出当前 CLI 的原生 Skills 与本机/项目共享 Skills，支持搜索、查看来源和加入任务。输入 `/` 也能选择；同名条目用 `skill:` 或 `local:` 区分来源，最多选择三个。宿主发送前重新核对来源与可用性。
+
+「设置 → MCP」读取 Codex、Claude、Cursor、Gemini、OpenCode 的已有本机配置。点击「连接」后才能在任务中使用；不会改写原 CLI 配置。连接通过已安装的 Codex 原生 MCP 运行时，保留 Codex 的 OAuth 身份；其他 CLI 的专用 OAuth 登录不能直接移植。写入或未声明只读的工具会显示具体审批，停止后不重放未知结果。结果不确定时先在原服务核对，再选择「核对后重连」。
+
+| 命令 | 作用 |
+| --- | --- |
+| `/new` | 新建对话，保留历史 |
+| `/model`、`/model 模型名称` | 打开模型选择，或使用目录中实际支持的模型 |
+| `/agent`、`/agent codex` | 选择可用 CLI；已有执行会话不搬迁 |
+| `/skills`、`/mcp` | 打开对应设置 |
+| `/settings`、`/settings browser` | 打开设置；分类为 agent、browser、skills、mcp、feishu、learning |
+| `/usage` | 查看真实用量与估算 |
+| `/browser`、`/browser hide` | 显示或收起右侧浏览器 |
+| `/stop` | 停止当前执行 |
+| `/help` | 查看命令与键盘帮助 |
+
+这些命令直接执行对应操作，不作为普通消息发给模型。方向键选择、Enter 确认、Esc 关闭；输入法确认不会提交。未接入的终端专用命令不会被伪装成原生能力。
+
+创建新网页使用独立预览页，原页面保留。用户滚动查看时，内容读取和 DOM 预览可以继续；点击、输入、导航、停止与不确定结果遵守 [浏览器交互协议](browser-interaction-protocol.md)。
+
+「本机 Agent → 快速页面初稿」默认关闭。开启后，本机 Claude 的 Sonnet 可用于并行首屏，当前 Agent 继续完善；额外模型调用会独立计入用量。它不代替浏览器协议与结果核对。
+
 ## 浏览网页与调整元素
 
 1. 打开浏览器，在地址栏输入 HTTP(S) 地址。使用标签栏或 `⌘T` 新建页，`⌘W` 关闭活动页，`⌘L` 定位地址栏。
@@ -211,7 +235,7 @@ npx tsx tests/onboarding.e2e.ts
 
 - 浏览器工作流和本机文件修改已有实现；它们不代表所有网站都兼容。
 - 桌面 Computer Use 仍在调研，未实现通用 Mac 应用控制或隔离桌面控制。
-- CLI 支持与各自的验收边界见 [本机 CLI 适配](mainstream-cli-support.md)；通用 MCP 服务配置/管理、多 Agent 并行调度、账户/订阅服务尚未实现。
+- CLI 支持与各自的验收边界见 [本机 CLI 适配](mainstream-cli-support.md)；本机 MCP 可读取并连接，通用配置编辑、完整多 Agent 调度、账户/订阅服务尚未实现。
 - 已有内部网页工具链不等于任意第三方 MCP 服务都可接入。
 - 登录、验证码、支付、外部 OAuth 弹窗和其他敏感流程不得从普通网页验收外推。
 - 录制分析尚不提供一键完整 Playwright 测试、PRD 覆盖率报告或后端状态复原。

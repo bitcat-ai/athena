@@ -150,7 +150,7 @@ function validateInsertion(value: unknown): asserts value is ElementInsertion {
     }
     if (
       ['input', 'img', 'br', 'hr'].includes(node.tag) &&
-      (node.text !== undefined || node.children?.length)
+      ((node.text !== undefined && node.text !== '') || node.children?.length)
     )
       throw new Error('此元素不能包含子节点');
   };
@@ -477,7 +477,7 @@ interface BrowserOptions {
   onStep: (step: RecordedStep) => void;
   /** `pick`: the user chose an element in the inspector; `edit`: an edit or undo re-reported it. */
   onSelected: (element: ElementRef, reason: 'pick' | 'edit') => void;
-  onHumanTakeover: () => void;
+  onHumanTakeover: (reason: string) => void;
 }
 
 interface FrameContext {
@@ -542,6 +542,15 @@ interface PreparedContext {
 }
 
 /** One BrowserHost owns all Chrome targets and grants input only to the visible tab. */
+export const domPreviewTools = new Set([
+  'workbench_browser_create_page',
+  'workbench_browser_edit',
+  'workbench_browser_restyle',
+  'workbench_browser_undo',
+  'workbench_browser_controls',
+]);
+export const domReadTools = new Set(['workbench_browser_query', 'workbench_browser_inspect']);
+
 export class BrowserRuntime {
   private state: BrowserState = {
     status: 'missing',
@@ -586,7 +595,9 @@ export class BrowserRuntime {
     epoch: number;
   };
   private leaseGeneration = 0;
+  private previewLeaseGeneration = 0;
   private agentAllowed = true;
+  private previewAllowed = true;
   private agentNeedsObservation = false;
   private nativeAgentActive = false;
   private pendingDialogs = new Map<
@@ -1826,6 +1837,7 @@ export class BrowserRuntime {
   allowAgentControl(): void {
     if (this.sharedTab) throw new Error('共享期间由参与者操作页面，请先停止共享再启动 Agent');
     this.agentAllowed = true;
+    this.previewAllowed = true;
     this.agentNeedsObservation = false;
   }
   async setNativeAgentActive(value: boolean): Promise<void> {
@@ -2306,17 +2318,23 @@ export class BrowserRuntime {
   }
   revokeAgentControl(): void {
     this.leaseGeneration++;
+    this.previewLeaseGeneration++;
     this.agentAllowed = false;
+    this.previewAllowed = false;
     this.agentNeedsObservation = false;
     const feedback = this.workingFeedback;
     this.workingFeedback = undefined;
     if (feedback) void this.serialize(() => this.clearWorkingFeedback(feedback)).catch(() => {});
   }
   private humanTakeover(source: string): void {
-    this.revokeAgentControl();
+    if (source === 'wheel') {
+      // Scrolling invalidates interaction coordinates, not document-bound preview edits.
+      this.leaseGeneration++;
+      this.agentAllowed = false;
+    } else this.revokeAgentControl();
     this.agentNeedsObservation = true;
     this.log(this.tabs.get(this.activeTabId), 'control', `Human takeover: ${source}`);
-    this.options.onHumanTakeover();
+    this.options.onHumanTakeover(source);
   }
   newTab(url?: string): Promise<BrowserTab> {
     if (this.sharedTab) return Promise.reject(new Error('请先停止共享再新建标签页'));
@@ -2896,7 +2914,6 @@ export class BrowserRuntime {
     if (
       (input.type === 'mouse' && input.action === 'down') ||
       input.type === 'text' ||
-      input.type === 'wheel' ||
       (input.type === 'key' && input.action === 'down')
     )
       this.humanTakeover(
@@ -2918,6 +2935,8 @@ export class BrowserRuntime {
         (!Number.isInteger(input.modifiers) || input.modifiers < 0 || input.modifiers > 15)
       )
         return Promise.reject(new Error('Invalid keyboard modifiers'));
+      if (input.deltaX === 0 && input.deltaY === 0) return Promise.resolve();
+      this.humanTakeover('wheel');
       input = {
         ...input,
         tabId: id,
@@ -3533,10 +3552,19 @@ export class BrowserRuntime {
     changes: ElementEdit,
     source: 'human' | 'agent',
     guard?: () => void,
+    onDispatch?: () => void,
   ): Promise<ElementEditResult> {
     this.validateEdit(changes);
     const { tab, frame, scope } = await this.resolveRef(ref);
     await this.setSource(tab, source, frame);
+    await this.bridge(
+      tab,
+      frame,
+      `!!globalThis.__workbenchPage.node(${JSON.stringify(scope.localRef)})`,
+      guard,
+    );
+    guard?.();
+    onDispatch?.();
     const result = await this.bridge(
       tab,
       frame,
@@ -3851,7 +3879,8 @@ export class BrowserRuntime {
             ? {
                 tabId: {
                   type: 'string',
-                  description: '目标必须是当前活动标签页；其他页面先用 switch_tab。',
+                  description:
+                    'query/inspect 返回的字符串 tabId，不是 web_* 的数字 page。省略时使用当前活动标签页；其他页面先切换。',
                 },
               }
             : {}),
@@ -3863,9 +3892,61 @@ export class BrowserRuntime {
     });
     const ref = {
       type: 'string',
-      description: '当前活动标签页 snapshot/query 返回的精确元素引用；切换或导航后必须重取。',
+      description:
+        'workbench_browser_query/inspect/create_page 返回的精确 DOM ref，不是 web_snapshot 的交互引用；导航后必须重取。',
+    };
+    const insertion = {
+      type: 'object',
+      additionalProperties: false,
+      required: ['node'],
+      description: '受约束的 HTML 元素树。不能传 HTML 字符串、脚本或事件属性。',
+      properties: {
+        position: { type: 'string', enum: ['append', 'prepend', 'before', 'after'] },
+        node: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['tag'],
+          properties: {
+            tag: { type: 'string', enum: [...ELEMENT_INSERT_TAGS] },
+            text: { type: 'string', maxLength: 20_000 },
+            attributes: {
+              type: 'object',
+              maxProperties: 20,
+              propertyNames: { enum: [...ELEMENT_INSERT_ATTRIBUTES] },
+              additionalProperties: { type: 'string', maxLength: 4096 },
+            },
+            styles: {
+              type: 'object',
+              maxProperties: ELEMENT_PREVIEW_LIMITS.styleCount,
+              propertyNames: { enum: [...ELEMENT_STYLE_PROPERTIES] },
+              additionalProperties: {
+                type: 'string',
+                maxLength: ELEMENT_PREVIEW_LIMITS.styleValueLength,
+              },
+            },
+            children: {
+              type: 'array',
+              maxItems: 80,
+              items: { $ref: '#/properties/insert/properties/node' },
+            },
+          },
+        },
+      },
     };
     return [
+      tool(
+        'create_page',
+        '在右侧浏览器新建并显示一个空白预览页，直接放入用户要求的首屏或完整页面；保留原标签页。生成/绘制/构建新网页优先用本工具，不要把欢迎页改装成新页面，也不要导航到 data: URL 或运行脚本。title 是页面标题，insert.node 是包含真实内容和样式的元素树，最多 80 节点/8 层。一次调用完成建页、定位 body 和插入，返回 tabId、documentId、根元素 ref 与 editId；继续编辑用返回的 ref，交互点击前再 web_snapshot。需要更多分区时继续 edit insert；整页样式可用 restyle。仅是可撤销预览，不写本机源码、不建立后端。失败后先检查已返回的页面，不重复创建。',
+        {
+          title: { type: 'string', minLength: 1, maxLength: 180 },
+          insert: {
+            ...insertion,
+            properties: { ...insertion.properties, position: { type: 'string', enum: ['append'] } },
+          },
+        },
+        ['title', 'insert'],
+        false,
+      ),
       tool('tabs', '列出工作台中的真实浏览器标签页及活动页。', {}, [], false),
       tool(
         'new_tab',
@@ -3884,14 +3965,18 @@ export class BrowserRuntime {
       tool('close_tab', '关闭指定标签页。', { tabId: { type: 'string' } }, ['tabId'], false),
       tool('snapshot', '读取当前标签页及可访问iframe的DOM文字、元素与frame标识。'),
       tool('screenshot', '获取当前可见标签页截图，遮盖可访问frame中的敏感输入框。'),
-      tool('query', '按CSS selector、文字或role查找精确DOM节点（含开放Shadow DOM）。', {
-        selector: { type: 'string' },
-        text: { type: 'string' },
-        role: { type: 'string' },
-        exact: { type: 'boolean' },
-        limit: { type: 'integer', minimum: 1, maximum: 100 },
-        frameId: { type: 'string' },
-      }),
+      tool(
+        'query',
+        '按 CSS selector、文字或 role 查找精确 DOM 节点（含开放 Shadow DOM），返回可编辑 ref、editableText 与限制原因。改文案前遵守 editableText；不要用 CSS content 伪造替换后的文字。滚动查看不会使 DOM 预览失效；点击、输入或导航后需重新读取。',
+        {
+          selector: { type: 'string' },
+          text: { type: 'string' },
+          role: { type: 'string' },
+          exact: { type: 'boolean' },
+          limit: { type: 'integer', minimum: 1, maximum: 100 },
+          frameId: { type: 'string' },
+        },
+      ),
       tool(
         'controls',
         '为当前选中元素提供 A2UI v0.9.1 调整面板。只创建控件，不改变网页；用户拖动后本地预览。组件格式 {id,component,property,min?,max?,step?}，类型与属性必须匹配：' +
@@ -3927,49 +4012,11 @@ export class BrowserRuntime {
       ),
       tool(
         'edit',
-        '修改精确 DOM 的文字、样式、可撤销 WAAPI 动效；或单独用 insert 在 ref 内部/前后创建嵌套 HTML 元素。新建返回新元素 ref，可继续 inspect/edit；要点击或填写它时重新获取 snapshot。结构最多 80 节点/8 层，不接受 HTML 字符串、脚本、事件属性或敏感控件。新增输入控件不提交到原有表单。styles 禁止 URL、var/attr、代码和 !important；animation:null 只取消自己的动画。所有修改可撤销，仅影响当前页面预览，不代表源码已保存。',
+        '直接修改精确 DOM 的文字、字体、字号、颜色、间距等样式与可撤销 WAAPI 动效，无需额外审批；这些基础调整优先使用本工具，不要改走页面脚本。也可单独用 insert 在 ref 内部/前后创建嵌套 HTML 元素。新建返回新元素 ref，可继续 inspect/edit；要点击或填写它时重新获取 snapshot。结构最多 80 节点/8 层，不接受 HTML 字符串、脚本、事件属性或敏感控件。新增输入控件不提交到原有表单。styles 禁止 URL、var/attr、代码和 !important；animation:null 只取消自己的动画。所有修改可撤销，仅影响当前页面预览，不代表源码已保存。',
         {
           ref,
           text: { type: 'string', maxLength: 20_000 },
-          insert: {
-            type: 'object',
-            additionalProperties: false,
-            required: ['node'],
-            description:
-              '与 text/styles/animation 互斥。styles 可放在 node 内；position 默认 append。',
-            properties: {
-              position: { type: 'string', enum: ['append', 'prepend', 'before', 'after'] },
-              node: {
-                type: 'object',
-                additionalProperties: false,
-                required: ['tag'],
-                properties: {
-                  tag: { type: 'string', enum: [...ELEMENT_INSERT_TAGS] },
-                  text: { type: 'string', maxLength: 20_000 },
-                  attributes: {
-                    type: 'object',
-                    maxProperties: 20,
-                    propertyNames: { enum: [...ELEMENT_INSERT_ATTRIBUTES] },
-                    additionalProperties: { type: 'string', maxLength: 4096 },
-                  },
-                  styles: {
-                    type: 'object',
-                    maxProperties: ELEMENT_PREVIEW_LIMITS.styleCount,
-                    propertyNames: { enum: [...ELEMENT_STYLE_PROPERTIES] },
-                    additionalProperties: {
-                      type: 'string',
-                      maxLength: ELEMENT_PREVIEW_LIMITS.styleValueLength,
-                    },
-                  },
-                  children: {
-                    type: 'array',
-                    maxItems: 80,
-                    items: { $ref: '#/properties/insert/properties/node' },
-                  },
-                },
-              },
-            },
-          },
+          insert: insertion,
           styles: {
             type: 'object',
             maxProperties: ELEMENT_PREVIEW_LIMITS.styleCount,
@@ -3979,7 +4026,7 @@ export class BrowserRuntime {
               maxLength: ELEMENT_PREVIEW_LIMITS.styleValueLength,
             },
             description:
-              '支持linear/radial/conic-gradient及安全颜色、box-shadow/text-shadow、transform/filter。空值删除该行内属性。',
+              '字体使用 font-family（如 "Songti SC", serif），并支持字号、字重、行高、字间距、对齐、颜色、间距、渐变、阴影与变换。空值删除该行内属性。',
           },
           animation: {
             anyOf: [
@@ -4223,6 +4270,47 @@ export class BrowserRuntime {
       },
     };
   }
+  /** Pure preflight shared by the task router and direct callers; never touches the page. */
+  validateToolCall(name: string, args: unknown): void {
+    if (!args || typeof args !== 'object' || Array.isArray(args))
+      throw new Error('Tool arguments must be an object');
+    const input = args as Record<string, unknown>;
+    const definition = this.getTools().find((tool) => tool.name === name);
+    if (!definition) throw new Error('Unknown browser tool');
+    const properties = definition.inputSchema.properties as Record<string, unknown>;
+    if (Object.keys(input).some((key) => !(key in properties)))
+      throw new Error('Unexpected browser tool argument');
+    if (input.tabId !== undefined && (typeof input.tabId !== 'string' || input.tabId.length > 200))
+      throw new Error('tabId is invalid');
+    if (name === 'workbench_browser_create_page') {
+      if (typeof input.title !== 'string' || !input.title.trim() || input.title.length > 180)
+        throw new Error('页面标题需要 1–180 个字符');
+      validateInsertion(input.insert);
+      if (
+        (input.insert as ElementInsertion).position &&
+        (input.insert as ElementInsertion).position !== 'append'
+      )
+        throw new Error('新页面内容使用 append');
+    }
+    if (name === 'workbench_browser_edit') {
+      if (typeof input.ref !== 'string') throw new Error('ref is required');
+      const { ref: _, tabId: __, ...changes } = input;
+      this.validateEdit(changes as ElementEdit);
+    }
+    if (name === 'workbench_browser_controls') validateElementControls(input.components);
+    if (name === 'workbench_browser_restyle') {
+      if (input.css !== undefined && typeof input.css !== 'string')
+        throw new Error('css is invalid');
+      if (input.texts !== undefined && !Array.isArray(input.texts))
+        throw new Error('texts is invalid');
+    }
+    if (
+      name === 'workbench_browser_undo' &&
+      input.editId !== undefined &&
+      typeof input.editId !== 'string'
+    )
+      throw new Error('editId is invalid');
+  }
   callTool(name: string, args: unknown): Promise<ToolResult> {
     if (name === 'workbench_browser_guide')
       return this.guide(args).then(
@@ -4232,43 +4320,73 @@ export class BrowserRuntime {
           isError: true,
         }),
       );
-    const generation = this.leaseGeneration,
+    const preview = domPreviewTools.has(name);
+    const documentScoped = preview || domReadTools.has(name);
+    const interactionGeneration = this.leaseGeneration;
+    const generation = documentScoped ? this.previewLeaseGeneration : this.leaseGeneration,
       capturedTab = this.activeTabId;
     return this.serialize(async () => {
+      let createdPage: BrowserTab | undefined;
+      let writeStarted = false;
       try {
         this.activeTab();
-        if (!args || typeof args !== 'object' || Array.isArray(args))
-          throw new Error('Tool arguments must be an object');
-        const input = args as Record<string, unknown>,
-          definition = this.getTools().find((tool) => tool.name === name);
-        if (!definition) throw new Error('Unknown browser tool');
-        const properties = definition.inputSchema.properties as Record<string, unknown>;
-        if (Object.keys(input).some((key) => !(key in properties)))
-          throw new Error('Unexpected browser tool argument');
-        if (
-          input.tabId !== undefined &&
-          (typeof input.tabId !== 'string' || input.tabId.length > 200)
-        )
-          throw new Error('tabId is invalid');
+        this.validateToolCall(name, args);
+        const input = args as Record<string, unknown>;
         const assertLease = () => {
-          if (!this.agentAllowed || generation !== this.leaseGeneration)
+          if (
+            !(preview ? this.previewAllowed : this.agentAllowed) ||
+            generation !== (preview ? this.previewLeaseGeneration : this.leaseGeneration)
+          )
             throw new Error(
               '用户正在操作页面。请重新读取当前页面，再按新状态继续；不要重放未核对的动作。',
             );
         };
         const observed = async (operation: Promise<ToolResult>): Promise<ToolResult> => {
           const result = await operation;
-          if (generation !== this.leaseGeneration)
+          if (generation !== (documentScoped ? this.previewLeaseGeneration : this.leaseGeneration))
             throw new Error('观察期间页面被用户操作，请重新读取当前页面。');
-          if (this.agentNeedsObservation && !result.isError && !this.sharedTab)
-            this.allowAgentControl();
+          if (this.agentNeedsObservation && !result.isError && !this.sharedTab) {
+            if (interactionGeneration === this.leaseGeneration) this.allowAgentControl();
+            else if (documentScoped) this.previewAllowed = true;
+          }
           return result;
         };
         const json = (value: unknown): ToolResult => ({ text: JSON.stringify(value, null, 2) });
+        if (name === 'workbench_browser_create_page') {
+          assertLease();
+          writeStarted = true;
+          createdPage = await this.createTab('about:blank', 'agent', assertLease);
+          const created = this.tabs.get(createdPage.id)!;
+          const body = (await this.queryInternal(created, { selector: 'body', limit: 1 }))
+            .elements[0];
+          assertLease();
+          if (!body) throw new Error('新页面的 body 尚未就绪');
+          await created.page.call('Runtime.evaluate', {
+            expression: `document.title=${JSON.stringify(input.title)}`,
+            returnByValue: true,
+          });
+          const result = await this.editInternal(
+            body.ref,
+            { insert: input.insert as ElementInsertion },
+            'agent',
+            assertLease,
+          );
+          await this.refreshTab(created);
+          return json({
+            status: 'created',
+            kind: 'page-preview',
+            title: input.title,
+            tabId: created.info.id,
+            documentId: result.element.documentId,
+            url: created.info.url,
+            ...result,
+          });
+        }
         if (name === 'workbench_browser_tabs')
           return json({ activeTabId: this.activeTabId, tabs: this.listTabs() });
         if (name === 'workbench_browser_new_tab') {
           assertLease();
+          writeStarted = true;
           if (input.url !== undefined && typeof input.url !== 'string')
             throw new Error('url is invalid');
           return json(
@@ -4281,6 +4399,7 @@ export class BrowserRuntime {
         }
         if (name === 'workbench_browser_switch_tab') {
           assertLease();
+          writeStarted = true;
           const target = typeof input.tabId === 'string' && this.tabs.get(input.tabId);
           if (!target) throw new Error('标签页不存在');
           await this.activateTab(target, 'agent');
@@ -4288,6 +4407,7 @@ export class BrowserRuntime {
         }
         if (name === 'workbench_browser_close_tab') {
           assertLease();
+          writeStarted = true;
           if (typeof input.tabId !== 'string') throw new Error('tabId is required');
           await this.closeTabInternal(input.tabId, 'agent');
           return json({ activeTabId: this.activeTabId, tabs: this.listTabs() });
@@ -4321,6 +4441,7 @@ export class BrowserRuntime {
           return await observed(this.detailsInternal(input.ref).then(json));
         }
         assertLease();
+        if (name !== 'workbench_browser_edit') writeStarted = true;
         if (name === 'workbench_browser_navigate') {
           if (typeof input.url !== 'string') throw new Error('url is required');
           await this.navigateInternal(tab, normalizeBrowserUrl(input.url), 'agent');
@@ -4343,6 +4464,9 @@ export class BrowserRuntime {
               },
               'agent',
               assertLease,
+              () => {
+                writeStarted = true;
+              },
             ),
           );
         }
@@ -4467,8 +4591,19 @@ export class BrowserRuntime {
         }
         return { text: '操作已执行，请用 snapshot 或 screenshot 核对实际结果。' };
       } catch (error) {
+        const message = redactBrowserText(error instanceof Error ? error.message : error);
         return {
-          text: redactBrowserText(error instanceof Error ? error.message : error),
+          text:
+            name === 'workbench_browser_create_page'
+              ? JSON.stringify({
+                  status: createdPage ? 'incomplete' : 'not_created',
+                  tabId: createdPage?.id,
+                  message,
+                })
+              : writeStarted
+                ? message
+                : `本次操作尚未执行：${message}`,
+          execution: writeStarted ? 'unknown' : 'not_executed',
           isError: true,
         };
       }

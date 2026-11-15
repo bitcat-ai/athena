@@ -432,6 +432,21 @@ select {
 .message.user {
   margin-left: 24px;
 }
+.user-message-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 6px;
+  max-width: 100%;
+  min-width: 0;
+}
+.user-message-row .user-message-text {
+  min-width: 0;
+}
+.user-message-row > [data-slot='chat-message-actions'] {
+  flex-shrink: 0;
+  margin-top: 4px;
+}
 .message.assistant .chat-message__body {
   padding-inline-end: 0;
 }
@@ -463,6 +478,11 @@ select {
   width: 23px;
   height: 23px;
   border-radius: 7px;
+}
+.act-summary .assistant-label,
+.assistant-turn-heading .assistant-label {
+  flex: none;
+  margin: 0 8px 0 0;
 }
 .markdown {
   font-size: 13px;
@@ -2240,6 +2260,11 @@ select {
   border: 0;
   padding-top: 10px;
   background: transparent;
+  display: none;
+}
+.chat-panel.is-editing .workspace-view-tabs,
+.workspace-view-tabs:focus-within {
+  display: block;
 }
 .workspace-view-tabs .tabs__list {
   gap: 2px;
@@ -2999,6 +3024,7 @@ html[data-theme='dark'] .composer [data-slot='prompt-input-shell'] {
 
 /* Page elements embedded in the composer as inline tokens, and as chips once sent. */
 .composer .element-token {
+  max-width: min(15rem, calc(100% - 2px));
   margin: 0 1px;
   padding: 1px 7px 1px 5px;
   border-radius: 8px;
@@ -3008,15 +3034,20 @@ html[data-theme='dark'] .composer [data-slot='prompt-input-shell'] {
 }
 .composer .element-token-body {
   display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
   align-items: center;
   gap: 4px;
 }
-.composer .element-token small {
+.composer .element-token small,
+.element-chip small {
+  flex-shrink: 0;
   font-size: 10px;
   opacity: 0.7;
 }
 .element-chip {
   display: inline-flex;
+  max-width: min(15rem, calc(100% - 2px));
   align-items: center;
   gap: 4px;
   margin: 0 1px;
@@ -3027,6 +3058,16 @@ html[data-theme='dark'] .composer [data-slot='prompt-input-shell'] {
   font-size: 12px;
   line-height: 18px;
   vertical-align: baseline;
+}
+.element-reference-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.composer .element-token svg,
+.element-chip svg {
+  flex-shrink: 0;
 }
 
 .image-attachments {

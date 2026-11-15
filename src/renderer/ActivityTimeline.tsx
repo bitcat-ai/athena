@@ -1,6 +1,11 @@
 import { Button } from '@heroui/react';
 import { FolderOpenIcon } from '@hugeicons-pro/core-stroke-rounded';
-import { activityItems, isPrdArtifact, type ActivityItem } from '../shared/activity';
+import {
+  activityItems,
+  activityOverview,
+  isPrdArtifact,
+  type ActivityItem,
+} from '../shared/activity';
 import type { AgentId, ChatMessage } from '../shared/types';
 import { PhaseGlyph } from './PhaseGlyph';
 import { Icon } from './ui';
@@ -27,6 +32,7 @@ export function ActivityTimeline({
   openToolId,
   onOpenTool,
   onAction,
+  overview = false,
 }: {
   message: ChatMessage;
   agent: AgentId;
@@ -34,6 +40,7 @@ export function ActivityTimeline({
   openToolId?: string;
   onOpenTool: (id?: string) => void;
   onAction: <T = unknown>(action: string, payload?: unknown) => Promise<T>;
+  overview?: boolean;
 }) {
   const row = (item: ActivityItem) => {
     if (item.kind === 'plan')
@@ -148,7 +155,7 @@ export function ActivityTimeline({
   const { model } = message;
   return (
     <>
-      {model && (
+      {model && !overview && (
         <div
           className="tl-model"
           title={modelSources[model.source as keyof typeof modelSources] ?? '本轮 CLI 执行记录'}
@@ -158,7 +165,8 @@ export function ActivityTimeline({
         </div>
       )}
       <ul
-        className="tl"
+        className={`tl${overview ? ' tl-overview' : ''}`}
+        aria-label={overview ? '任务进展' : '完整执行记录'}
         onKeyDown={(event) => {
           const rows = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('.tl-row'));
           const index = rows.indexOf(event.target as HTMLElement);
@@ -174,7 +182,7 @@ export function ActivityTimeline({
           rows[Math.max(0, Math.min(rows.length - 1, next))].focus();
         }}
       >
-        {activityItems(message, agent).map(row)}
+        {(overview ? activityOverview(message, agent) : activityItems(message, agent)).map(row)}
       </ul>
     </>
   );

@@ -20,13 +20,22 @@ const url = `http://127.0.0.1:${(site.address() as any).port}`;
 const packaged = process.env.ATHENA_TEST_APP;
 const app = await electron.launch({
   ...(packaged ? { executablePath: packaged } : {}),
-  args: packaged ? [] : ['.'],
+  args: packaged ? [] : [path.join(root, 'tests/electron-background.cjs')],
   cwd: packaged ? dir : root,
   env: { ...process.env, WORKBENCH_USER_DATA_DIR: path.join(dir, 'data') },
 });
 const errors: string[] = [];
 try {
   const page = await app.firstWindow();
+  await page.addLocatorHandler(
+    page
+      .getByRole('region', { name: '工作台提示', exact: true })
+      .filter({ hasText: 'Codex CLI 有新版本' })
+      .getByRole('button', { name: '收起提醒', exact: true }),
+    async (button) => {
+      await button.click();
+    },
+  );
   await page.evaluate('window.__name = (fn) => fn');
   page.on('pageerror', (e) => errors.push(e.message));
   if (packaged) {
@@ -139,6 +148,7 @@ try {
     searchInputFocused: true,
     escapeClosedSearch: true,
   };
+  await page.getByRole('textbox', { name: '发送给 Agent 的任务' }).fill('保留这段草稿 ');
   const target = await page.evaluate(async () => {
     const result = await window.workbench.invoke<any>('browser:query', { selector: '#target' });
     return result.elements[0];
@@ -148,6 +158,7 @@ try {
     before.x + ((target.bounds.x + target.bounds.width / 2) * before.width) / before.frameWidth,
     before.y + ((target.bounds.y + target.bounds.height / 2) * before.height) / before.frameHeight,
   );
+  await page.getByRole('button', { name: '元素检查器', exact: true }).click();
   await expect(page.getByRole('slider', { name: '圆角滑块' })).toBeVisible();
   const after = await geometry();
   assert.deepEqual(
@@ -169,7 +180,7 @@ try {
   await page.getByRole('tab', { name: '对话', exact: true }).click();
   assert.deepEqual(await geometry(), before);
   await expect(page.getByRole('textbox', { name: '发送给 Agent 的任务' })).toBeVisible();
-  await page.getByRole('tab', { name: '元素', exact: true }).click();
+  await page.getByRole('button', { name: '元素检查器', exact: true }).click();
   await expect(page.getByRole('textbox', { name: '元素文字', exact: true })).toHaveValue(
     '我的开始按钮',
   );
@@ -212,7 +223,7 @@ try {
   const narrow = await geometry();
   await page.getByRole('tab', { name: '对话', exact: true }).click();
   assert.deepEqual(await geometry(), narrow);
-  await page.getByRole('tab', { name: '元素', exact: true }).click();
+  await page.getByRole('button', { name: '元素检查器', exact: true }).click();
   assert.deepEqual(await geometry(), narrow);
   await page.getByRole('tab', { name: '元素', exact: true }).focus();
   await page.keyboard.press('ArrowLeft');
@@ -232,11 +243,13 @@ try {
   assert(overflow.scroll <= overflow.width + 1);
   await page.screenshot({ path: path.join(root, 'test-results/inspector-layout-narrow.png') });
   await page.getByRole('button', { name: '修改源码', exact: true }).click();
-  await expect(page.getByRole('tab', { name: '对话', exact: true })).toHaveAttribute(
-    'aria-selected',
-    'true',
+  await expect(
+    page.getByRole('tab', { name: '对话', exact: true, includeHidden: true }),
+  ).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('textbox', { name: '发送给 Agent 的任务' })).toContainText(
+    '保留这段草稿',
   );
-  await expect(page.getByRole('textbox', { name: '发送给 Agent 的任务' })).toHaveValue(/源码/);
+  await expect(page.locator('.composer .element-token')).toContainText('我的开始按钮');
   assert.equal((await state()).browser.selectedElement.ref, selected.ref);
   assert.deepEqual(errors, []);
   const report = {

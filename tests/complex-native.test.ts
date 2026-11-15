@@ -34,7 +34,7 @@ test(
       onFrame() {},
       onSelected() {},
       onStep() {},
-      onHumanTakeover: () => web?.onHumanInteraction(),
+      onHumanTakeover: (reason) => web?.onHumanInteraction(reason),
     });
     web = new WebRuntime(browser, {
       directory: path.join(dir, 'records'),
@@ -159,8 +159,8 @@ test(
       onFrame() {},
       onSelected() {},
       onStep() {},
-      onHumanTakeover() {
-        web?.onHumanInteraction();
+      onHumanTakeover(reason) {
+        web?.onHumanInteraction(reason);
       },
     });
     web = new WebRuntime(browser, {
@@ -473,7 +473,7 @@ test(
       onFrame() {},
       onSelected() {},
       onStep() {},
-      onHumanTakeover: () => web?.onHumanInteraction(),
+      onHumanTakeover: (reason) => web?.onHumanInteraction(reason),
     });
     web = new WebRuntime(browser, {
       directory: path.join(directory, 'records'),

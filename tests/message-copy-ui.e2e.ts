@@ -269,19 +269,19 @@ try {
     };
   });
   assert.ok(
-    geometry.userCopy.top >= geometry.bubble.bottom,
+    geometry.userCopy.right <= geometry.bubble.left,
     'the copy entry must not cover the message',
   );
   assert.ok(
-    Math.abs(geometry.userCopy.right - geometry.bubble.right) <= 1,
-    'the copy entry aligns with the right edge of the user message',
+    geometry.userCopy.top >= geometry.bubble.top && geometry.userCopy.top < geometry.bubble.bottom,
+    'the copy entry shares the message row rather than adding another row',
   );
   assert.equal(geometry.userCopy.width, geometry.userCopy.height, 'icon button stays square');
   assert.equal(geometry.userCopy.height, geometry.assistantCopy.height);
   assert.equal(geometry.userCopy.width, geometry.assistantCopy.width);
   await expect(userMessage).toContainText('已附加页面上下文');
   checks.push(
-    'User messages and assistant answers both expose a visible copy button of the same size; the user entry sits under the bubble on its right edge',
+    'User messages and assistant answers expose visible copy buttons of the same size, in the bubble row and assistant header',
   );
 
   await page.getByRole('button', { name: '展开浏览器', exact: true }).focus();
@@ -361,13 +361,13 @@ try {
   const failedMessage = page.locator('article.message.assistant').nth(1);
   await expect(failedMessage).toContainText('任务未完成');
   const failedCopy = failedMessage.getByRole('button', { name: '复制回答', exact: true });
-  // 只有失败原因的一轮没有回复正文：原因显示在结果卡片里，复制入口紧跟在卡片下方。
+  // Failure-only turns keep copy in the shared header, above the outcome card.
   const failedCard = failedMessage.locator('.req.outcome');
   await expect(failedCard).toContainText(failedText);
   assert.ok(
-    (await failedCopy.boundingBox())!.y >=
-      (await failedCard.boundingBox())!.y + (await failedCard.boundingBox())!.height,
-    'the copy entry of a failed turn sits under its outcome card',
+    (await failedCopy.boundingBox())!.y + (await failedCopy.boundingBox())!.height <=
+      (await failedCard.boundingBox())!.y,
+    'the copy entry of a failed turn stays in its header without covering the outcome card',
   );
   await failedCopy.click();
   assert.deepEqual((await copies()).at(-1), { text: failedText });

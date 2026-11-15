@@ -263,7 +263,7 @@ test(
       await f.recover(takeover.page, 'Nothing saved');
       await f.runtime.finishTask('takeover');
       assert(!alive(resumedPid), 'a session with errors must not hand on its daemon');
-      assert.equal((await f.runtime.server.detail(resumedClient.id)).session.status, 'done');
+      assert.equal((await f.runtime.server.detail(resumedClient.id)).session.status, 'failed');
       const failed = await f.begin('model-failed');
       const failedPid = failed.worker.daemon.pid;
       await f.runtime.finishTask('model-failed', false);

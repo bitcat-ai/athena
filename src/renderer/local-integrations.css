@@ -1,0 +1,111 @@
+.local-integrations {
+  max-width: 820px;
+}
+.local-integrations > .input {
+  width: min(100%, 420px);
+}
+.integration-count,
+.integration-notice,
+.integration-empty {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+  margin: 16px 0;
+}
+.integration-empty {
+  padding: 32px 0;
+}
+.integration-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.integration-list > li {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 20px 0;
+  border-bottom: 1px solid var(--line);
+}
+.integration-list > li > svg {
+  margin-top: 3px;
+  flex-shrink: 0;
+  color: var(--muted);
+}
+.integration-copy {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.integration-copy strong {
+  font-size: 14px;
+  font-weight: 600;
+}
+.integration-source {
+  color: var(--muted);
+  font-size: 11px;
+  margin-left: 10px;
+}
+.integration-copy p {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--muted);
+  margin: 6px 0;
+}
+.integration-copy details {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.integration-copy summary {
+  cursor: pointer;
+  min-height: 28px;
+  line-height: 28px;
+  margin-left: 14px;
+  display: list-item;
+}
+.integration-copy code {
+  display: block;
+  overflow-wrap: anywhere;
+  margin: 6px 0;
+}
+.integration-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+.integration-list .button {
+  flex-shrink: 0;
+}
+.skill-slash-menu .menu-item > svg {
+  flex-shrink: 0;
+}
+.command-help-list {
+  display: grid;
+  gap: 16px;
+}
+.command-help-list p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.settings-tab-layout[data-orientation='horizontal'] .settings-tabs {
+  overflow-x: auto;
+  flex-wrap: nowrap;
+}
+.settings-tab-layout[data-orientation='horizontal'] .settings-tabs [role='tab'] {
+  flex: 0 0 auto;
+}
+@media (max-width: 600px) {
+  .integration-list > li {
+    flex-wrap: wrap;
+  }
+  .integration-copy {
+    min-width: calc(100% - 32px);
+  }
+  .integration-list > li > .button,
+  .integration-actions {
+    margin-left: 30px;
+  }
+}

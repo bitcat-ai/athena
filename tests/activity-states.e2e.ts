@@ -379,7 +379,12 @@ try {
   }
   await expect(activity.locator('.act-target')).toHaveText(longCommand);
   await expect(activity.locator('.act-meta').first()).toHaveText('第 2 步');
+  await expect(page.getByRole('list', { name: '任务进展' })).toContainText('调整按钮文案并构建');
+  await expect(page.getByRole('list', { name: '任务进展' })).toContainText(longCommand);
+  await expect(page.locator('.tl-detail')).toHaveCount(0);
+  await page.screenshot({ path: path.join(output, 'acting-overview.png') });
   await activity.getByRole('button').first().click();
+  await expect(page.getByRole('list', { name: '任务进展' })).toHaveCount(0);
   await expect(activity.locator('.tl li.plan')).toHaveText([
     '阅读首页结构',
     '调整按钮文案并构建',
@@ -466,6 +471,10 @@ try {
   await expect(activity.locator('.act-meta')).toHaveText(['2 步', '核对 1 处', '1 个文件', '38s']);
   await expect(page.locator('.req')).toHaveCount(0);
   await expect(activity.locator('.act-body')).toHaveCount(0);
+  await expect(page.getByRole('list', { name: '任务进展' })).toContainText(
+    '按钮文案为「开始使用」',
+  );
+  await expect(page.getByRole('list', { name: '任务进展' })).toContainText('report.pdf');
   await activity.getByRole('button').first().click();
   await expect(activity.locator('.tl')).toContainText('已允许 · npm run build');
   await expect(activity.locator('.tl')).toContainText('已核对 · 按钮文案为「开始使用」');
