@@ -30,7 +30,12 @@
 
 详情见 [网页执行器](docs/web-executor.md)。
 
-本版本的 macOS 安装包没有上传到 GitHub Releases，公开下载仍为 0.9.0；从源码运行即可使用以上全部功能。
+macOS Apple Silicon：
+
+- [DMG 安装包](https://github.com/bitcat-ai/athena/releases/download/v0.10.0/Athena-0.10.0-mac-arm64.dmg)
+- [ZIP 归档](https://github.com/bitcat-ai/athena/releases/download/v0.10.0/Athena-0.10.0-mac-arm64.zip)
+- [SHA-256 校验文件](https://github.com/bitcat-ai/athena/releases/download/v0.10.0/SHA256SUMS.txt)
+- [Release 页面](https://github.com/bitcat-ai/athena/releases/tag/v0.10.0)
 
 ## 0.9.0 · 2026-11-06
 

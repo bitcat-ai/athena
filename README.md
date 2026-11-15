@@ -24,7 +24,7 @@
 </p>
 
 <p align="center">
-  <sub>macOS · Apple Silicon · 源码 v0.10.0 · 公开安装包 v0.9.0</sub>
+  <sub>macOS · Apple Silicon · v0.10.0</sub>
 </p>
 
 <p align="center">
@@ -103,9 +103,15 @@
 
 ## 快速开始
 
+### 安装包
+
+下载 **[Athena 0.10.0](https://github.com/bitcat-ai/athena/releases/tag/v0.10.0)**（[DMG](https://github.com/bitcat-ai/athena/releases/download/v0.10.0/Athena-0.10.0-mac-arm64.dmg) · [ZIP](https://github.com/bitcat-ai/athena/releases/download/v0.10.0/Athena-0.10.0-mac-arm64.zip) · [SHA-256 校验](https://github.com/bitcat-ai/athena/releases/download/v0.10.0/SHA256SUMS.txt) · [全部版本](https://github.com/bitcat-ai/athena/releases)），打开 DMG 后把 Athena 拖入「应用程序」。安装包包含本页介绍的全部能力，已完成 Developer ID 签名和 Apple 公证，尚无自动更新。
+
+需要 macOS（Apple Silicon）、Google Chrome，以及一个已登录的本机 Agent CLI（如 Codex）。启动后，右侧浏览器默认打开 Athena 的起始页。页面上为三种协作方式各准备了一句示例，照着说一遍就能体验。
+
 ### 从源码运行
 
-包含本页介绍的全部能力。需要 macOS（Apple Silicon）、Node.js **22.12+**、Google Chrome，以及一个已登录的本机 Agent CLI（如 Codex）。
+需要 Node.js **22.12+**，其余要求与安装包相同。
 
 ```bash
 npm ci
@@ -113,13 +119,7 @@ npm run setup:agent-browser
 npm run dev
 ```
 
-启动后，右侧浏览器默认打开 Athena 的起始页。页面上为三种协作方式各准备了一句示例，照着说一遍就能体验。构建授权的准备见下方「从源码开发」。
-
-### 安装包
-
-公开下载的版本是 **[0.9.0](https://github.com/bitcat-ai/athena/releases/tag/v0.9.0)**（[DMG](https://github.com/bitcat-ai/athena/releases/download/v0.9.0/Athena-0.9.0-mac-arm64.dmg) · [ZIP](https://github.com/bitcat-ai/athena/releases/download/v0.9.0/Athena-0.9.0-mac-arm64.zip) · [SHA-256 校验](https://github.com/bitcat-ai/athena/releases/download/v0.9.0/SHA256SUMS.txt) · [全部版本](https://github.com/bitcat-ai/athena/releases)），已完成 Developer ID 签名和 Apple 公证，尚无自动更新。
-
-> 0.9.0 适合了解基础工作台，它的网页功能使用 BrowserOS neo。光标演示、整页改版、带做、页面改动落到源码、记忆和消息队列在 0.10.0 加入，0.10.0 的安装包尚未上传到 GitHub Releases，体验这些能力请从源码运行。
+构建授权的准备见下方「从源码开发」。
 
 <details>
 <summary>看看与 Athena 的第一次对话</summary>
