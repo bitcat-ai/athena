@@ -378,6 +378,7 @@ export class AgentBrowserWorker {
   /** Private to this daemon; removed with it. */
   directory = '';
   private daemon?: ChildProcess;
+  private guard?: ChildProcess;
   private sockets = new Set<Socket>();
   private stopped = false;
   private cancellation?: Promise<void>;
@@ -415,6 +416,7 @@ export class AgentBrowserWorker {
     this.daemon = spawn(this.binary, [], { env: this.environment(), stdio: 'ignore' });
     let startupError: Error | undefined;
     this.daemon.once('error', (error) => (startupError = error));
+    this.watch(this.daemon, directory);
     const deadline = Date.now() + 5000;
     while (true) {
       this.check();
@@ -431,6 +433,30 @@ export class AgentBrowserWorker {
       await new Promise((resolve) => setTimeout(resolve, 10));
     }
     await this.command({ action: 'launch', cdpUrl: this.endpoint, noAutoDialog: true });
+  }
+  /**
+   * A daemon must not outlive Athena, however Athena ends. The shell blocks on a pipe that
+   * only this process holds open, so it wakes when this process is gone and stops the daemon.
+   */
+  private watch(daemon: ChildProcess, directory: string) {
+    if (!daemon.pid) return;
+    const guard = spawn(
+      '/bin/sh',
+      [
+        '-c',
+        'read _; [ "$(/bin/ps -p "$1" -o comm=)" = "$2" ] && kill -9 "$1"; /bin/rm -rf "$3"',
+        'sh',
+        String(daemon.pid),
+        this.binary,
+        directory,
+      ],
+      { env: {}, stdio: ['pipe', 'ignore', 'ignore'] },
+    );
+    guard.once('error', () => {});
+    guard.stdin?.once('error', () => {});
+    // A daemon that already ended leaves nothing to stop, and its PID may be reused.
+    daemon.once('exit', () => guard.kill('SIGKILL'));
+    this.guard = guard;
   }
   private check() {
     if (this.stopped) throw new Error('网页执行器已停止');
@@ -490,6 +516,7 @@ export class AgentBrowserWorker {
   private async stopInternal() {
     this.stopped = true;
     for (const socket of this.sockets) socket.destroy();
+    this.guard?.kill('SIGKILL');
     const child = this.daemon;
     if (child?.pid && child.exitCode === null && child.signalCode === null) {
       const ended = new Promise<void>((resolve) => child.once('exit', () => resolve()));
