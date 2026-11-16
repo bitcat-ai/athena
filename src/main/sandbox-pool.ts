@@ -126,6 +126,13 @@ export class SandboxPool {
   private docker: SandboxInstancesState['docker'] = { available: true };
   private policy = defaultSandboxPolicy;
   private starting = new Map<string, AbortController>();
+  /** Tool calls in progress per sandbox: such a sandbox is in use from their first moment. */
+  private calls = new Map<string, number>();
+  /** Sandboxes given a running place whose container Docker does not report as running yet. */
+  private placed = new Map<string, number>();
+  private reservations: Promise<void> = Promise.resolve();
+  /** Stops and removals in progress; whoever wants the sandbox next waits for them. */
+  private releasing = new Map<string, Promise<void>>();
   private failures = new Map<string, string>();
   /** The conversation that last used each of the user's instances. */
   private callers = new Map<string, string>();
@@ -344,6 +351,7 @@ export class SandboxPool {
       status: starting ? 'starting' : running ? 'running' : message ? 'failed' : 'stopped',
       busy:
         starting ||
+        this.calls.has(record.id) ||
         view?.connection === 'connecting' ||
         (running && (view?.command?.status === 'running' || view?.service?.status === 'starting')),
       message,
@@ -367,7 +375,7 @@ export class SandboxPool {
         id: record.id,
         lastUsedAt: record.lastUsedAt,
         keep: record.keep,
-        running: view.status === 'running' || view.status === 'starting',
+        running: view.status === 'running' || this.placed.has(record.id),
         busy: view.busy,
         held: this.options.held?.(view) ?? false,
       };
@@ -426,9 +434,26 @@ export class SandboxPool {
     return this.writes;
   }
 
-  /** Keeps the number of running sandboxes within the limit before one more starts. */
-  private async reserve(record: SandboxRecord) {
-    if (this.containers.get(record.container) === 'running') return;
+  private count(map: Map<string, number>, id: string, by: 1 | -1) {
+    const next = (map.get(id) ?? 0) + by;
+    if (next > 0) map.set(id, next);
+    else map.delete(id);
+  }
+  /**
+   * Gives a sandbox that is about to start one of the running places, to be handed back
+   * through `placed` once the start is over. One request at a time: two sandboxes starting
+   * together would otherwise each count the same free place.
+   */
+  private reserve(record: SandboxRecord) {
+    const run = this.reservations.catch(() => {}).then(() => this.place(record));
+    this.reservations = run;
+    return run;
+  }
+  private async place(record: SandboxRecord) {
+    if (this.containers.get(record.container) !== 'running') await this.makeRoom(record);
+    this.count(this.placed, record.id, 1);
+  }
+  private async makeRoom(record: SandboxRecord) {
     const room = () =>
       makeRoom(
         this.items().filter((item) => item.id !== record.id),
@@ -445,8 +470,19 @@ export class SandboxPool {
       );
     if (evict) await this.release(this.records.get(evict)!, false);
   }
-  private async release(record: SandboxRecord, remove: boolean) {
+  /** Stops or removes a sandbox; a second request for the same one waits for the first. */
+  private release(record: SandboxRecord, remove: boolean) {
     this.starting.get(record.id)?.abort();
+    const run: Promise<void> = (this.releasing.get(record.id) ?? Promise.resolve())
+      .catch(() => {})
+      .then(() => (this.records.get(record.id) === record ? this.end(record, remove) : undefined))
+      .finally(() => {
+        if (this.releasing.get(record.id) === run) this.releasing.delete(record.id);
+      });
+    this.releasing.set(record.id, run);
+    return run;
+  }
+  private async end(record: SandboxRecord, remove: boolean) {
     await this.backend(record.runtime).release(record.container, remove);
     const view = this.views.get(record.id);
     if (remove) {
@@ -497,16 +533,23 @@ export class SandboxPool {
     void this.start(id).catch(() => {});
     return this.snapshot();
   }
-  async start(id: unknown) {
+  async start(id: unknown): Promise<SandboxInstancesState> {
     const record = this.record(id);
     if (record.origin === 'legacy') throw new Error('这个沙箱的对话已不存在，只能删除');
+    const leaving = this.releasing.get(record.id);
+    if (leaving) {
+      await leaving.catch(() => {});
+      return this.start(id);
+    }
     if (this.starting.has(record.id)) return this.snapshot();
     const abort = new AbortController();
     this.starting.set(record.id, abort);
     this.failures.delete(record.id);
     this.publish();
+    let placed = false;
     try {
       await this.reserve(record);
+      placed = true;
       await this.backend(record.runtime).open({
         conversationId: record.origin === 'user' ? record.id : record.conversationId!,
         turnId: 'open-' + record.id,
@@ -519,6 +562,7 @@ export class SandboxPool {
         this.failures.set(record.id, error instanceof Error ? error.message : '沙箱启动失败');
       throw error;
     } finally {
+      if (placed) this.count(this.placed, record.id, -1);
       this.starting.delete(record.id);
       this.publish();
     }
@@ -585,8 +629,10 @@ export class SandboxPool {
         [plan.stop, false],
       ] as const)
         for (const id of ids) {
+          // Each stop takes a while: one that came into use in the meantime is left alone.
           const record = this.records.get(id);
-          if (record) await this.release(record, remove).catch(() => {});
+          if (record && due()[remove ? 'remove' : 'stop'].includes(id))
+            await this.release(record, remove).catch(() => {});
         }
       await this.save();
     } finally {
@@ -606,7 +652,11 @@ export class SandboxPool {
       );
     return record;
   }
-  async call(name: string, args: Record<string, unknown>, context: SandboxCallContext) {
+  async call(
+    name: string,
+    args: Record<string, unknown>,
+    context: SandboxCallContext,
+  ): ReturnType<SandboxBackend['call']> {
     const { sandbox: requested, ...input } = args;
     let record: SandboxRecord | undefined;
     let target: SandboxTarget;
@@ -642,6 +692,12 @@ export class SandboxPool {
         }),
       };
     }
+    const leaving = this.releasing.get(record?.id ?? `${context.conversationId}:${target}`);
+    if (leaving) {
+      // Being stopped or removed right now: use it once that is over, or whatever replaces it.
+      await leaving.catch(() => {});
+      return this.call(name, args, context);
+    }
     const known = !!record;
     record ??= {
       id: `${context.conversationId}:${target}`,
@@ -655,16 +711,23 @@ export class SandboxPool {
       keep: false,
     };
     this.failures.delete(record.id);
-    await this.reserve(record);
+    // Listed and in use before anything is awaited, so that no recycling pass picks it now.
     this.records.set(record.id, record);
-    this.touch(record);
+    this.count(this.calls, record.id, 1);
+    let placed = false;
     try {
+      await this.reserve(record);
+      placed = true;
+      this.records.set(record.id, record);
+      this.touch(record);
       return await backend.call(name, input, inner);
     } catch (error) {
       // A first use that never got as far as a container leaves nothing to list.
       if (!known && !this.containers.has(record.container)) this.records.delete(record.id);
       throw error;
     } finally {
+      this.count(this.calls, record.id, -1);
+      if (placed) this.count(this.placed, record.id, -1);
       if (this.records.has(record.id)) this.touch(record);
     }
   }

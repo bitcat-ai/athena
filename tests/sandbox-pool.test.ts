@@ -23,7 +23,13 @@ async function world(conversations: string[] = []) {
   const directories = new Set<string>();
   const released: string[] = [];
   const removed: string[] = [];
-  const state = { now: 1000 * DAY, down: false, held: new Set<string>() };
+  const state = {
+    now: 1000 * DAY,
+    down: false,
+    held: new Set<string>(),
+    /** Runs while Docker is busy stopping or removing a container. */
+    releasing: undefined as ((container: string) => void | Promise<void>) | undefined,
+  };
   const name = (target: SandboxTarget, id: string) =>
     `athena-${target}-${createHash('sha256').update(id).digest('hex').slice(0, 10)}`;
   const backend = (
@@ -51,6 +57,7 @@ async function world(conversations: string[] = []) {
       async release(container, remove) {
         if (state.down) throw new Error('Cannot connect to the Docker daemon');
         released.push(`${remove ? 'remove' : 'stop'} ${container}`);
+        await state.releasing?.(container);
         if (remove) {
           containers.delete(container);
           directories.delete(container);
@@ -260,6 +267,109 @@ test('the running limit stops the least recently used sandbox, never one in use'
     w.containers.set(w.name('frontend', b.id), 'exited');
     await pool.start(a.id);
     assert.deepEqual(await status(), { a: 'running', b: 'stopped', c: 'running' });
+  } finally {
+    await pool.dispose();
+    await rm(w.directory, { recursive: true, force: true });
+  }
+});
+
+test('two sandboxes starting at the same moment do not share the last free place', async () => {
+  const w = await world();
+  const pool = w.pool();
+  try {
+    await pool.setPolicy({ maxRunning: 2 });
+    const a = await create(pool, 'a');
+    w.state.held.add(a.id);
+    const results = await Promise.allSettled(
+      ['conversation-1', 'conversation-2'].map((id) =>
+        pool.call('athena_sandbox_exec', { command: 'pwd' }, context(id)),
+      ),
+    );
+    assert.deepEqual(
+      results.map((result) => result.status),
+      ['fulfilled', 'rejected'],
+    );
+    assert.match(String((results[1] as PromiseRejectedResult).reason), /已达上限/);
+    assert.equal([...w.containers.values()].filter((status) => status === 'running').length, 2);
+    assert.deepEqual((await pool.instances()).instances.map((instance) => instance.id).sort(), [
+      'conversation-1:default',
+      a.id,
+    ]);
+
+    // With an idle one to stop, both start and only that one gives way.
+    w.state.held.clear();
+    w.state.now += 2 * MINUTE;
+    await pool.setPolicy({ maxRunning: 4 });
+    await create(pool, 'b');
+    await create(pool, 'c');
+    w.state.now += 2 * MINUTE;
+    w.released.length = 0;
+    await Promise.all(
+      ['conversation-3', 'conversation-4'].map((id) =>
+        pool.call('athena_sandbox_exec', { command: 'pwd' }, context(id)),
+      ),
+    );
+    assert.equal([...w.containers.values()].filter((status) => status === 'running').length, 4);
+    assert.equal(w.released.length, 2);
+  } finally {
+    await pool.dispose();
+    await rm(w.directory, { recursive: true, force: true });
+  }
+});
+
+test('a sandbox that comes into use during a recycling pass is left alone', async () => {
+  const w = await world();
+  const pool = w.pool();
+  try {
+    const a = await create(pool, 'a');
+    const b = await create(pool, 'b');
+    w.state.now += 8 * DAY;
+    // While Docker removes the first, the preview of the second is opened in a tab.
+    w.state.releasing = () => void w.state.held.add(b.id);
+    await pool.sweep();
+    assert.deepEqual(w.released, [`remove ${w.name('frontend', a.id)}`]);
+    assert.deepEqual(
+      (await pool.instances()).instances.map((instance) => [instance.name, instance.status]),
+      [['b', 'running']],
+    );
+  } finally {
+    await pool.dispose();
+    await rm(w.directory, { recursive: true, force: true });
+  }
+});
+
+test('a call that arrives while its sandbox is being removed waits for the removal', async () => {
+  const w = await world();
+  const pool = w.pool();
+  try {
+    const web = await create(pool, 'web');
+    await pool.call('athena_sandbox_exec', { command: 'pwd' }, context('conversation-1'));
+    w.state.releasing = () => wait(20);
+    const exec = (args: Record<string, unknown>) =>
+      pool.call('athena_sandbox_exec', { ...args, command: 'pwd' }, context('conversation-1'));
+
+    // The user's instance is gone afterwards, so the call says so instead of reviving it.
+    const removed = pool.remove(web.id);
+    await assert.rejects(exec({ sandbox: 'web' }), /用户还没有创建沙箱实例/);
+    await removed;
+    assert.equal(w.containers.has(w.name('frontend', web.id)), false);
+    assert.equal(w.directories.has(w.name('frontend', web.id)), false);
+
+    // The conversation's own sandbox is made again, complete, after the old one is gone.
+    const own = w.name('default', 'conversation-1');
+    const recycled = pool.remove('conversation-1:default');
+    await exec({});
+    await recycled;
+    assert.equal(w.containers.get(own), 'running');
+    assert.deepEqual(
+      (await pool.instances()).instances.map((instance) => [instance.id, instance.status]),
+      [['conversation-1:default', 'running']],
+    );
+    // A stop in progress is waited for as well; the next call starts the sandbox again.
+    const stopped = pool.stop('conversation-1:default');
+    await exec({});
+    await stopped;
+    assert.equal(w.containers.get(own), 'running');
   } finally {
     await pool.dispose();
     await rm(w.directory, { recursive: true, force: true });
