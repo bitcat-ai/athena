@@ -34,6 +34,11 @@ test('redact hides tokens and secrets', () => {
     redact('Bearer abc sk-123 token=xyz password: p@ss'),
     'Bearer [hidden] [hidden] token=[hidden] password=[hidden]',
   );
+  // A value that follows no pattern is hidden when it is named.
+  assert.equal(
+    redact('session Zx9-opaque rejected', ['Zx9-opaque', '']),
+    'session [hidden] rejected',
+  );
 });
 
 test('handshake, subscribe, ordered events and validated results', async (t) => {
@@ -229,6 +234,22 @@ test('ssh failure on first connect is reported with the login hint', async () =>
     assert.match(error.message, /SSH 连接失败.*Permission denied/);
     assert.match(error.message, /ssh athena-sbx/);
     assert.doesNotMatch(error.message, /abc/);
+    return true;
+  });
+  client.close();
+});
+
+test('a secret handed to the channel never shows in what it reports of the failure', async () => {
+  const client = new SandboxClient({
+    host: 'athena-sbx',
+    clientVersion: 'test',
+    command: '/bin/sh',
+    args: ['-c', 'echo "session Zx9-opaque was rejected" >&2; exit 255'],
+    secrets: ['Zx9-opaque'],
+  });
+  await assert.rejects(client.connect(), (error: Error) => {
+    assert.match(error.message, /SSH 连接失败：session \[hidden\] was rejected/);
+    assert.doesNotMatch(error.message, /Zx9-opaque/);
     return true;
   });
   client.close();

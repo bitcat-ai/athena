@@ -28,10 +28,18 @@ async function world() {
   const artifacts: SandboxArtifact[] = [];
   const updates: LocalSandboxUpdate[] = [];
   const scripts: string[] = [];
+  // What the coder command prints before it fails, when a test wants it to fail.
+  const broken = { stderr: '' };
   const home = (workspace: string) => path.join(directory, 'homes', workspace);
   const env = (workspace: string) => ({ ...process.env, HOME: home(workspace) });
   const transport: CoderTransport = {
     async shell(workspace, script) {
+      if (broken.stderr)
+        return {
+          command: '/bin/sh',
+          args: ['-c', 'cat >/dev/null; printf "%s\\n" "$0" >&2; exit 1', broken.stderr],
+          secrets: ['test-token'],
+        };
       // As with a real workspace, there is no shell to reach unless it runs.
       if (coder.byName(workspace)?.status !== 'running')
         return { command: '/bin/sh', args: ['-c', 'echo "workspace is not running" >&2; exit 1'] };
@@ -69,7 +77,18 @@ async function world() {
       ).catch(() => {});
     await rm(directory, { recursive: true, force: true });
   };
-  return { directory, coder, artifacts, updates, scripts, templates, home, sandbox, cleanup };
+  return {
+    directory,
+    coder,
+    artifacts,
+    updates,
+    scripts,
+    broken,
+    templates,
+    home,
+    sandbox,
+    cleanup,
+  };
 }
 const context = (conversationId: string, signal = new AbortController().signal) => ({
   conversationId,
@@ -284,6 +303,24 @@ test('a workspace without a usable Node.js is refused with the reason', async ()
   }
 });
 
+test('a token printed by the coder command is hidden from the error the user sees', async () => {
+  const w = await world();
+  const sandbox = w.sandbox();
+  try {
+    w.templates.set('sbx_leak', 'tpl-node');
+    w.broken.stderr = 'error: session test-token was rejected';
+    await assert.rejects(sandbox.open(context('sbx_leak')), (error: Error) => {
+      assert.match(error.message, /安装 athena-sandbox：error: session \[hidden\] was rejected/);
+      assert.doesNotMatch(error.message, /test-token/);
+      return true;
+    });
+  } finally {
+    w.broken.stderr = '';
+    await sandbox.dispose();
+    await w.cleanup();
+  }
+});
+
 test('the coder command gets the address and token in its environment, never as arguments', async () => {
   const access = { origin: 'https://coder.example', token: 'secret-token-value' };
   const transport = coderCliTransport(
@@ -296,6 +333,7 @@ test('the coder command gets the address and token in its environment, never as 
   assert.ok(!shell.args.join(' ').includes(access.token));
   assert.ok(!shell.args.join(' ').includes('coder.example'));
   assert.equal(shell.env!.CODER_SESSION_TOKEN, access.token);
+  assert.deepEqual(shell.secrets, [access.token]);
   assert.equal(shell.env!.CODER_URL, access.origin);
   assert.equal(shell.env!.CODER_CONFIG_DIR, '/profile/coder/cli');
   // The user's own ssh configuration is not read, and a stopped workspace is not started.
@@ -309,6 +347,7 @@ test('the coder command gets the address and token in its environment, never as 
 
   const forward = await transport.forward('athena-0a1b2c3d-0123456789', 50123, 4173);
   assert.ok(forward.args.includes('-N'));
+  assert.deepEqual(forward.secrets, [access.token]);
   assert.equal(forward.args[forward.args.indexOf('-L') + 1], '127.0.0.1:50123:127.0.0.1:4173');
   assert.equal(forward.args.at(-1), 'coder.athena-0a1b2c3d-0123456789');
 

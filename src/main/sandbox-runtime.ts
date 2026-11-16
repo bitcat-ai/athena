@@ -33,6 +33,8 @@ export interface SandboxProcess {
   command: string;
   args: string[];
   env?: NodeJS.ProcessEnv;
+  /** Values handed to the program that must not show up in what is reported of its output. */
+  secrets?: readonly string[];
 }
 
 /** Port inside every sandbox on which its preview service listens. */
@@ -111,7 +113,9 @@ export abstract class SandboxRuntime {
       child.stdin.on('error', () => reject(new Error(options.failure + '：通道已断开')));
       child.on('close', (code) => {
         if (code === 0) return resolve(stdout);
-        const error = new Error(redact(stderr).trim().slice(-1800) || options.failure);
+        const error = new Error(
+          redact(stderr, program.secrets).trim().slice(-1800) || options.failure,
+        );
         reject(Object.assign(error, { code }));
       });
       child.stdin.end(input);

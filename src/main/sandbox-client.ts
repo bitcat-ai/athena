@@ -39,6 +39,8 @@ export interface SandboxClientOptions {
   onEvent?: (envelope: SandboxEventEnvelope) => void;
   /** Local state may be stale: fetch sandboxes and active tasks again. */
   onResync?: () => void;
+  /** Values the child was given that must not show up in any message. */
+  secrets?: readonly string[];
 }
 
 export class SandboxError extends Error {
@@ -68,7 +70,9 @@ const reasonByCode = new Map<number, SandboxErrorReason>(
 const MAX_INVALID_MESSAGES = 20;
 const STDERR_TAIL = 4096;
 
-export function redact(text: string): string {
+/** Hides what looks like a credential, and every one of `secrets` wherever it appears. */
+export function redact(text: string, secrets: readonly string[] = []): string {
+  for (const secret of secrets) if (secret) text = text.split(secret).join('[hidden]');
   return text
     .replace(/Bearer\s+\S+/gi, 'Bearer [hidden]')
     .replace(/(?:sk-|ghp_|github_pat_)[A-Za-z0-9_-]+/g, '[hidden]')
@@ -297,7 +301,7 @@ export class SandboxClient {
     if ('error' in parsed.data) {
       const { code, message: text, data } = parsed.data.error;
       const reason = reasonByCode.get(code) ?? 'INTERNAL';
-      pending.reject(new SandboxError(redact(text), reason, data));
+      pending.reject(new SandboxError(redact(text, this.options.secrets), reason, data));
       return;
     }
     const result = methods[pending.method].result.safeParse(parsed.data.result);
@@ -342,12 +346,15 @@ export class SandboxClient {
     if (this.fatal) {
       const message =
         this.fatal.reason === 'DAEMON_UNAVAILABLE'
-          ? `沙箱服务未运行：${redact(this.fatal.message)}`
-          : redact(this.fatal.message);
+          ? `沙箱服务未运行：${redact(this.fatal.message, this.options.secrets)}`
+          : redact(this.fatal.message, this.options.secrets);
       return this.lost(generation, message, true);
     }
     if (code === 127) return this.lost(generation, '远端未安装 athena-sandbox', true);
-    const detail = redact(this.stderr.trim().split('\n').slice(-3).join(' ')).slice(0, 500);
+    const detail = redact(
+      this.stderr.trim().split('\n').slice(-3).join(' '),
+      this.options.secrets,
+    ).slice(0, 500);
     if (code === 255)
       return this.lost(
         generation,

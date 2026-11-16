@@ -155,6 +155,7 @@ export function coderCliTransport(
         CODER_CONFIG_DIR: configDirectory,
         CODER_NO_VERSION_WARNING: 'true',
       },
+      secrets: [current.token],
     };
   };
   return {
@@ -396,7 +397,11 @@ export class CoderSandbox extends SandboxRuntime {
   /** A loopback port here that leads to the workspace's preview port, for as long as it lasts. */
   private async forward(name: string): Promise<Forward> {
     const local = await freePort();
-    const { command, args, env } = await this.options.transport.forward(name, local, PREVIEW_PORT);
+    const { command, args, env, secrets } = await this.options.transport.forward(
+      name,
+      local,
+      PREVIEW_PORT,
+    );
     const child = spawn(command, args, { env, stdio: ['ignore', 'ignore', 'pipe'] });
     let stderr = '';
     child.stderr.setEncoding('utf8');
@@ -409,7 +414,7 @@ export class CoderSandbox extends SandboxRuntime {
       if (child.exitCode !== null || child.signalCode !== null || Date.now() > deadline) {
         child.kill();
         throw new Error(
-          `无法把沙箱的预览端口转发到本机：${redact(stderr.trim()).slice(0, 300) || '超时'}`,
+          `无法把沙箱的预览端口转发到本机：${redact(stderr.trim(), secrets).slice(0, 300) || '超时'}`,
         );
       }
       await sleep(200);
