@@ -8,7 +8,7 @@ import { test } from 'node:test';
 import { setTimeout as wait } from 'node:timers/promises';
 import { promisify } from 'node:util';
 import type { LocalSandboxUpdate } from '../src/main/local-sandbox';
-import { SandboxPool, type SandboxBackend } from '../src/main/sandbox-pool';
+import { SandboxPool, type SandboxBackend, type SandboxPoolCoder } from '../src/main/sandbox-pool';
 import type { SandboxInstanceView, SandboxTarget } from '../src/shared/sandbox';
 
 const MINUTE = 60_000,
@@ -71,21 +71,97 @@ async function world(conversations: string[] = []) {
       dispose: async () => {},
     };
   };
+  /** A Coder deployment: its workspaces, and whether it is connected and answers. */
+  const coder = {
+    connected: true,
+    down: false,
+    workspaces: new Map<string, string>(),
+    templates: [{ id: 'tpl-node', name: 'Node 工作区' }],
+    forgotten: 0,
+    name: (id: string) =>
+      `athena-coder-${createHash('sha256').update(id).digest('hex').slice(0, 10)}`,
+  };
+  const reach = () => {
+    if (coder.down) throw new Error('无法连接 Coder（https://coder.example）：fetch failed');
+  };
+  const coderBackend: SandboxPoolCoder['backend'] = (onUpdate, template) => {
+    const open = async ({ conversationId }: { conversationId: string }) => {
+      reach();
+      if (!template(conversationId)) throw new Error('这个沙箱没有记录 Coder 模板');
+      coder.workspaces.set(coder.name(conversationId), 'running');
+      onUpdate({
+        conversationId,
+        type: 'connection',
+        status: 'ready',
+        name: coder.name(conversationId),
+      });
+      return coder.name(conversationId);
+    };
+    return {
+      prefix: 'athena-coder-',
+      containerName: coder.name,
+      open,
+      async containers() {
+        reach();
+        return new Map(coder.workspaces);
+      },
+      workspaces: async () => [],
+      async release(workspace, remove) {
+        reach();
+        released.push(`${remove ? 'remove' : 'stop'} ${workspace}`);
+        await state.releasing?.(workspace);
+        if (remove) coder.workspaces.delete(workspace);
+        else if (coder.workspaces.has(workspace)) coder.workspaces.set(workspace, 'stopped');
+      },
+      async call(tool, _args, context) {
+        if (tool !== 'athena_sandbox_status') await open(context);
+        return { text: JSON.stringify({ tool, container: coder.name(context.conversationId) }) };
+      },
+      cancelTurn: async () => {},
+      dispose: async () => {},
+      async forget() {
+        coder.forgotten++;
+        for (const [workspace, status] of coder.workspaces)
+          if (status === 'running') coder.workspaces.set(workspace, 'stopped');
+      },
+    };
+  };
   const pool = () =>
     new SandboxPool(directory, '/nowhere/athena-sandbox.mjs', () => {}, undefined, {
       backend,
+      coder: {
+        backend: coderBackend,
+        connection: () =>
+          coder.connected
+            ? {
+                connected: true,
+                origin: 'https://coder.example',
+                username: 'tester',
+                insecure: false,
+              }
+            : { connected: false },
+        async templates() {
+          reach();
+          return coder.templates;
+        },
+      },
       now: () => state.now,
       conversations: () => conversations,
       held: (instance) => state.held.has(instance.id),
       onRemoved: (_conversation, key) => removed.push(key),
     });
-  return { directory, containers, directories, released, removed, state, name, pool };
+  return { directory, containers, directories, released, removed, state, name, coder, pool };
 }
 const byName = (instances: SandboxInstanceView[], name: string) =>
   instances.find((instance) => instance.name === name)!;
 /** Creating returns at once; the start it kicks off finishes a few ticks later. */
-async function create(pool: SandboxPool, name: string, runtime: SandboxTarget = 'frontend') {
-  await pool.create(name, runtime);
+async function create(
+  pool: SandboxPool,
+  name: string,
+  runtime: SandboxTarget = 'frontend',
+  template?: string,
+) {
+  await pool.create(name, runtime, template);
   await wait(5);
   return byName((await pool.instances()).instances, name);
 }
@@ -176,7 +252,7 @@ test('an agent reaches a user sandbox by name and its own by target', async () =
       (await pool.call('athena_sandbox_status', { target: 'default' }, context('c'))).text,
     );
     assert.deepEqual(status.instances, [
-      { name: 'Checkout', runtime: 'frontend', status: 'running' },
+      { name: 'Checkout', provider: 'docker', runtime: 'frontend', status: 'running' },
     ]);
     assert.equal((await pool.instances()).instances.length, 2);
     assert.match(pool.prompt(), /「Checkout」（Node 前端，运行中）/);
@@ -464,6 +540,206 @@ test('nothing is recycled or forgotten while Docker does not answer', async () =
     await pool.sweep();
     assert.equal((await pool.instances()).instances.length, 0);
     assert.equal(w.containers.size, 0);
+  } finally {
+    await pool.dispose();
+    await rm(w.directory, { recursive: true, force: true });
+  }
+});
+
+test('a user creates sandboxes on Coder beside local ones, and they share the running limit', async () => {
+  const w = await world();
+  const pool = w.pool();
+  try {
+    await pool.load();
+    await pool.reconcile();
+    const state = await pool.instances();
+    assert.deepEqual(state.coder, {
+      available: true,
+      templates: w.coder.templates,
+      connected: true,
+      origin: 'https://coder.example',
+      username: 'tester',
+      insecure: false,
+    });
+
+    const remote = await create(pool, '远程联调', 'default', 'tpl-node');
+    assert.deepEqual(
+      [remote.provider, remote.template, remote.status, remote.origin],
+      ['coder', 'Node 工作区', 'running', 'user'],
+    );
+    assert.deepEqual([...w.coder.workspaces], [[w.coder.name(remote.id), 'running']]);
+    assert.equal(w.containers.size, 0);
+    await assert.rejects(pool.create('other', 'default', 'tpl-gone'), /找不到这个 Coder 模板/);
+    await assert.rejects(pool.create('远程联调', 'frontend'), /已有名为/);
+
+    // The agent reaches it by name like any other instance, and is told what kind it is.
+    const named = await pool.call(
+      'athena_sandbox_exec',
+      { sandbox: '远程联调', command: 'pwd' },
+      context('conversation-1'),
+    );
+    assert.equal(JSON.parse(named.text).container, w.coder.name(remote.id));
+    const status = JSON.parse(
+      (await pool.call('athena_sandbox_status', {}, context('conversation-1'))).text,
+    );
+    assert.deepEqual(status.instances, [
+      { name: '远程联调', provider: 'coder', runtime: 'Node 工作区', status: 'running' },
+    ]);
+    assert.match(pool.prompt(), /「远程联调」（Coder · Node 工作区，运行中）/);
+    assert.match(pool.prompt(), /没有 \/workspace/);
+    // An agent's own sandbox, opened without a name, stays a local container.
+    await pool.call('athena_sandbox_exec', { command: 'pwd' }, context('conversation-1'));
+    assert.deepEqual([...w.containers.keys()], [w.name('default', 'conversation-1')]);
+
+    // One limit for both kinds: the least recently used gives way, wherever it runs.
+    await pool.setPolicy({ maxRunning: 2 });
+    w.state.now += 2 * MINUTE;
+    await pool.call('athena_sandbox_exec', { command: 'pwd' }, context('conversation-1'));
+    w.state.now += 2 * MINUTE;
+    const local = await create(pool, 'local');
+    assert.equal(local.status, 'running');
+    assert.deepEqual(w.released, [`stop ${w.coder.name(remote.id)}`]);
+    assert.equal(byName((await pool.instances()).instances, '远程联调').status, 'stopped');
+    await pool.dispose();
+
+    const reopened = w.pool();
+    await reopened.load();
+    await reopened.reconcile();
+    const again = byName((await reopened.instances()).instances, '远程联调');
+    assert.deepEqual(
+      [again.provider, again.template, again.id],
+      ['coder', 'Node 工作区', remote.id],
+    );
+    // Started again from its record: the template it was made from is still known.
+    await reopened.setPolicy({ maxRunning: 4 });
+    await reopened.start(remote.id);
+    assert.equal(w.coder.workspaces.get(w.coder.name(remote.id)), 'running');
+    await reopened.dispose();
+  } finally {
+    await pool.dispose();
+    await rm(w.directory, { recursive: true, force: true });
+  }
+});
+
+test('Coder sandboxes are recycled like local ones, but never while Coder does not answer', async () => {
+  const w = await world();
+  const pool = w.pool();
+  try {
+    const remote = await create(pool, 'remote', 'default', 'tpl-node');
+    const kept = await create(pool, 'kept', 'default', 'tpl-node');
+    await pool.keep(kept.id, true);
+    await create(pool, 'web');
+
+    w.state.now += 31 * MINUTE;
+    await pool.sweep();
+    assert.deepEqual(
+      w.released.sort(),
+      [
+        `stop ${w.coder.name(kept.id)}`,
+        `stop ${w.coder.name(remote.id)}`,
+        `stop ${w.name('frontend', byName((await pool.instances()).instances, 'web').id)}`,
+      ].sort(),
+    );
+    assert.deepEqual([...w.coder.workspaces.values()], ['stopped', 'stopped']);
+
+    // Coder is away for a month: the local sandbox goes, the Coder ones wait untouched.
+    w.released.length = 0;
+    w.coder.down = true;
+    w.state.now += 30 * DAY;
+    await pool.sweep();
+    let state = await pool.instances(true);
+    assert.equal(state.coder.available, false);
+    assert.match(state.coder.message ?? '', /无法连接 Coder/);
+    assert.deepEqual(state.coder.templates, w.coder.templates);
+    assert.deepEqual(state.instances.map((instance) => instance.name).sort(), ['kept', 'remote']);
+    assert.equal(w.released.filter((entry) => entry.includes('athena-coder-')).length, 0);
+    await assert.rejects(pool.remove(remote.id), /无法连接 Coder/);
+    await assert.rejects(pool.create('new', 'default', 'tpl-node'), /无法连接 Coder/);
+
+    w.coder.down = false;
+    await pool.sweep();
+    state = await pool.instances();
+    assert.deepEqual(
+      state.instances.map((instance) => instance.name),
+      ['kept'],
+    );
+    assert.deepEqual([...w.coder.workspaces.keys()], [w.coder.name(kept.id)]);
+    assert.ok(w.removed.includes(remote.id));
+  } finally {
+    await pool.dispose();
+    await rm(w.directory, { recursive: true, force: true });
+  }
+});
+
+test('recycling that fails is tried again later, not every minute', async () => {
+  const w = await world();
+  const pool = w.pool();
+  try {
+    const remote = await create(pool, 'remote', 'default', 'tpl-node');
+    w.state.releasing = () => {
+      throw new Error('Coder 工作区停止失败（failed），请在 Coder 中查看构建日志');
+    };
+    w.state.now += 31 * MINUTE;
+    await pool.sweep();
+    w.state.now += MINUTE;
+    await pool.sweep();
+    w.state.now += MINUTE;
+    await pool.sweep();
+    assert.equal(w.released.length, 1);
+    // The user can still stop it by hand, and sees why it fails.
+    await assert.rejects(pool.stop(remote.id), /请在 Coder 中查看构建日志/);
+    assert.equal(w.released.length, 2);
+
+    w.state.releasing = undefined;
+    w.state.now += 10 * MINUTE;
+    await pool.sweep();
+    assert.equal(w.released.length, 3);
+    assert.equal(byName((await pool.instances()).instances, 'remote').status, 'stopped');
+  } finally {
+    await pool.dispose();
+    await rm(w.directory, { recursive: true, force: true });
+  }
+});
+
+test('disconnecting Coder takes its sandboxes off the list and leaves the workspaces there', async () => {
+  const w = await world();
+  const pool = w.pool();
+  try {
+    const remote = await create(pool, 'remote', 'default', 'tpl-node');
+    const local = await create(pool, 'local');
+    await pool.forgetCoder();
+    w.coder.connected = false;
+    const state = await pool.instances(true);
+    assert.deepEqual(
+      state.instances.map((instance) => instance.name),
+      ['local'],
+    );
+    assert.deepEqual(state.coder, { available: false, templates: [], connected: false });
+    // Still on Coder, asked to stop; deleting it is up to the user there.
+    assert.equal(w.coder.forgotten, 1);
+    assert.deepEqual([...w.coder.workspaces], [[w.coder.name(remote.id), 'stopped']]);
+    assert.deepEqual(w.released, []);
+    assert.deepEqual(w.removed, [remote.id]);
+    assert.equal(w.containers.get(w.name('frontend', local.id)), 'running');
+    await assert.rejects(pool.create('again', 'default', 'tpl-node'), /尚未连接 Coder/);
+    const saved = JSON.parse(await readFile(path.join(w.directory, 'instances.json'), 'utf8'));
+    assert.deepEqual(
+      saved.instances.map((record: { name: string }) => record.name),
+      ['local'],
+    );
+
+    // Connected again, the workspace this profile left behind shows up, to be deleted or to expire.
+    w.coder.connected = true;
+    await pool.reconcile();
+    const found = (await pool.instances()).instances.find((item) => item.provider === 'coder')!;
+    assert.deepEqual(
+      [found.id, found.origin, found.name, found.status],
+      [`legacy:${w.coder.name(remote.id)}`, 'legacy', '未登记的 Coder 沙箱', 'stopped'],
+    );
+    await assert.rejects(pool.start(found.id), /只能删除/);
+    w.state.now += 8 * DAY;
+    await pool.sweep();
+    assert.equal(w.coder.workspaces.size, 0);
   } finally {
     await pool.dispose();
     await rm(w.directory, { recursive: true, force: true });

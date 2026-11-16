@@ -13,7 +13,7 @@
   max-width: 320px;
 }
 .sandbox-create .choice-select {
-  width: 132px;
+  width: 190px;
   flex-shrink: 0;
 }
 .sandbox-create .button {
@@ -37,9 +37,31 @@
 .sandbox-remove[data-focus-visible='true'] {
   color: var(--danger);
 }
+.sandbox-coder,
 .sandbox-policy {
   margin-top: 36px;
   max-width: 520px;
+}
+.sandbox-coder .settings-value-row span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.sandbox-coder-connect {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+.sandbox-coder-connect :is(.input, .button) {
+  height: var(--control-row-height);
+  min-height: var(--control-row-height);
+}
+.sandbox-coder-connect .input {
+  flex: 1;
+  min-width: 0;
+}
+.sandbox-coder-connect .button {
+  flex-shrink: 0;
 }
 .sandbox-policy .choice-select {
   width: 132px;

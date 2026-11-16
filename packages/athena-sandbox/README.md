@@ -6,16 +6,20 @@ Athena 远程沙箱协议（ASP v1）在 workspace 内的实现，POC 版本 0.1
 
 ## 安装
 
-在 Mac 上（已执行过 `coder config-ssh`）：
+Athena 在第一次使用某个 Coder 沙箱时自动安装：通过 SSH 把这个文件写到工作区的 `~/.athena-sandbox/athena-sandbox.mjs`，之后用 `node` 运行它，不需要 sudo。文件内容有变化时会替换，并先停止旧版本的守护进程。连接方式见 [沙箱实例与回收](../../docs/sandboxes.md)。
+
+也可以手动安装（已执行过 `coder config-ssh`）：
 
 ```bash
-ssh coder.<workspace> 'mkdir -p ~/.local/bin && cat > ~/.local/bin/athena-sandbox && chmod 755 ~/.local/bin/athena-sandbox' \
+ssh coder.<workspace> 'mkdir -p ~/.athena-sandbox && cat > ~/.athena-sandbox/athena-sandbox.mjs' \
   < packages/athena-sandbox/athena-sandbox.mjs
 ```
 
-或者在模板中把这个文件放到 PATH 中的任意目录。Athena 连接时会把 `~/.local/bin` 加入 PATH，所以装在用户目录即可，不需要 sudo。请确认该目录在持久卷上。
+文件要保留 `.mjs` 扩展名。请确认主目录在持久卷上，否则工作区重启后会重新安装。
 
 ## 命令
+
+下表中的 `athena-sandbox` 指 `node ~/.athena-sandbox/athena-sandbox.mjs`。
 
 | 命令 | 说明 |
 |---|---|

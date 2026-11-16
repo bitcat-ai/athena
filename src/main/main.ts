@@ -37,6 +37,8 @@ import { FeishuKnowledge, knowledgeTools, isKnowledgeTool } from './feishu-knowl
 import { feishuResource } from './feishu-documents';
 import { isLocalSandboxTool, readOnlySandboxCall, type SandboxArtifact } from './local-sandbox';
 import { SandboxPool, sandboxNames, sandboxPoolTools } from './sandbox-pool';
+import { CoderConnection } from './coder-connection';
+import { CoderSandbox, coderCliTransport, coderOwner } from './coder-sandbox';
 import { SandboxPip, pipKey, type PipTarget } from './sandbox-pip';
 import { SandboxPreview } from './sandbox-preview';
 import {
@@ -157,6 +159,9 @@ let browserDiscoveryTimer: ReturnType<typeof setInterval> | undefined;
 let feishu: FeishuConnector;
 let knowledge: FeishuKnowledge;
 let sandboxes: SandboxPool;
+let coder: CoderConnection;
+/** False until the stored Coder token may be read, see `restoreConnections`. */
+let coderRestored = false;
 let sandboxPip: SandboxPip;
 const sandboxPreviews = new Map<string, SandboxPreview>();
 const sandboxPreviewStates = new Map<string, SandboxPreviewState>();
@@ -2106,9 +2111,24 @@ async function invoke(action: string, payload: unknown) {
     const data = payload === undefined ? {} : record(payload);
     if (action === 'sandbox:instances') return sandboxes.instances(true);
     if (action === 'sandbox:policy') return sandboxes.setPolicy(data.policy);
+    if (action === 'sandbox:coder/connect') {
+      await coder.connect(data.origin, data.token);
+      coderRestored = true;
+      await sandboxes.reconcile();
+      return sandboxes.instances();
+    }
+    if (action === 'sandbox:coder/disconnect') {
+      const { instances } = await sandboxes.instances();
+      if (instances.some((item) => item.provider === 'coder' && sandboxInTask(item)))
+        throw new Error('当前任务正在使用 Coder 沙箱，请等任务结束后再断开');
+      // While still connected, so that running workspaces can be asked to stop.
+      await sandboxes.forgetCoder();
+      await coder.disconnect();
+      return sandboxes.instances(true);
+    }
     if (action === 'sandbox:instance/create') {
       assertTaskEnvironment();
-      return sandboxes.create(data.name, data.runtime);
+      return sandboxes.create(data.name, data.runtime, data.template);
     }
     if (action.startsWith('sandbox:instance/')) {
       const instance = (await sandboxes.instances()).instances.find((item) => item.id === data.id);
@@ -2896,8 +2916,32 @@ async function launch() {
   });
   learning = new Learning(path.join(app.getPath('userData'), 'learning'), emitLearning);
   await learning.load();
+  const sandboxDirectory = path.join(app.getPath('userData'), 'sandboxes');
+  const coderDirectory = path.join(app.getPath('userData'), 'coder');
+  coder = new CoderConnection({
+    file: path.join(coderDirectory, 'connection.json'),
+    encrypt: async (value) => {
+      if (!(await safeStorage.isAsyncEncryptionAvailable()))
+        throw new Error('系统密钥存储不可用，无法保存 Coder 令牌');
+      return (await safeStorage.encryptStringAsync(value)).toString('base64');
+    },
+    decrypt: async (value) =>
+      (await safeStorage.decryptStringAsync(Buffer.from(value, 'base64'))).result,
+  });
+  await coder.load();
+  // For automation: a connection from the environment lasts for this run and is not stored.
+  // The variables are removed so that no agent or command started later inherits the token.
+  const coderPreset = [process.env.WORKBENCH_CODER_URL, process.env.WORKBENCH_CODER_TOKEN];
+  delete process.env.WORKBENCH_CODER_URL;
+  delete process.env.WORKBENCH_CODER_TOKEN;
+  if (coderPreset[0] && coderPreset[1])
+    await coder.connect(coderPreset[0], coderPreset[1], false).then(
+      () => (coderRestored = true),
+      (error) => console.error('[sandbox] Coder setup failed:', error.message),
+    );
+  const coderId = await coderOwner(sandboxDirectory);
   sandboxes = new SandboxPool(
-    path.join(app.getPath('userData'), 'sandboxes'),
+    sandboxDirectory,
     sandboxProgram,
     recordArtifact,
     (view) => {
@@ -2916,6 +2960,21 @@ async function launch() {
       onInstances: (state) => emit({ type: 'sandbox:instances', state }),
       onRemoved: (conversationId, key) => {
         if (conversationId) sandboxPip.dismiss({ conversationId, target: key });
+      },
+      coder: {
+        backend: (onUpdate, template) =>
+          new CoderSandbox({
+            directory: sandboxDirectory,
+            owner: coderId,
+            program: sandboxProgram,
+            access: coder.access,
+            template,
+            transport: coderCliTransport(coder.access, path.join(coderDirectory, 'cli')),
+            onArtifact: recordArtifact,
+            onUpdate,
+          }),
+        connection: () => (coderRestored ? coder.connection() : { connected: false }),
+        templates: () => coder.templates(),
       },
     },
   );
@@ -3165,6 +3224,10 @@ async function launch() {
     if (restorationStarted) return;
     restorationStarted = true;
     void feishu.restoreConnection().catch(() => {});
+    if (!coderRestored) {
+      coderRestored = true;
+      if (coder.connection().connected) void sandboxes.reconcile().catch(() => {});
+    }
   };
   // A visible, focused host gives macOS a place to present any Keychain authorization.
   window.once('focus', restoreConnections);

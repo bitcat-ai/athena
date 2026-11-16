@@ -18,8 +18,10 @@ import {
   type RecycleItem,
 } from './sandbox-recycle';
 import {
-  SANDBOX_RUNTIMES,
+  sandboxEnvironment,
+  type CoderTemplateView,
   type LocalSandboxView,
+  type SandboxCoderState,
   type SandboxInstanceView,
   type SandboxInstancesState,
   type SandboxTarget,
@@ -58,7 +60,7 @@ export const sandboxPoolTools = localSandboxTools.map((tool) => ({
         type: 'string',
         maxLength: 40,
         description:
-          '用户在「设置 › 沙箱」创建的实例名称。用户点名某个实例时填写并省略 target；可用实例见 athena_sandbox_status。',
+          '用户在「设置 › 沙箱」创建的实例名称。用户点名某个实例时填写并省略 target；可用实例见 athena_sandbox_status。实例可以是本机 Docker 容器，也可以是 Coder 工作区；Coder 实例里没有 /workspace，命令从工作区主目录开始，文件和产物路径相对主目录。',
       },
     },
   },
@@ -72,7 +74,12 @@ interface SandboxRecord {
   runtime: SandboxTarget;
   origin: SandboxInstanceView['origin'];
   conversationId?: string;
+  /** The Docker container, or the Coder workspace. */
   container: string;
+  /** Absent for a container on this Mac. */
+  provider?: 'coder';
+  /** The Coder template the workspace is created from. */
+  template?: CoderTemplateView;
   createdAt: number;
   lastUsedAt: number;
   keep: boolean;
@@ -83,6 +90,7 @@ const isRecord = (value: any): value is SandboxRecord =>
   typeof value.container === 'string' &&
   isTarget(value.runtime) &&
   ['user', 'agent', 'legacy'].includes(value.origin) &&
+  (value.provider === undefined || value.provider === 'coder') &&
   Number.isFinite(value.createdAt) &&
   Number.isFinite(value.lastUsedAt);
 
@@ -98,7 +106,19 @@ export type SandboxBackend = Pick<
   | 'cancelTurn'
   | 'dispose'
 >;
+/** The Coder deployment the user connected, as far as the pool needs it. */
+export interface SandboxPoolCoder {
+  /** `template` tells which Coder template a sandbox, by id, is created from. */
+  backend(
+    onUpdate: (update: LocalSandboxUpdate) => void,
+    template: (id: string) => string | undefined,
+  ): SandboxBackend & { forget?: () => Promise<void> };
+  /** The stored connection; no request is made for it. */
+  connection(): Pick<SandboxCoderState, 'connected' | 'origin' | 'username' | 'insecure'>;
+  templates(): Promise<CoderTemplateView[]>;
+}
 export interface SandboxPoolOptions {
+  coder?: SandboxPoolCoder;
   /** Conversations that still exist; a sandbox left by any other can only be removed. */
   conversations?: () => string[];
   /** True while something outside the pool depends on the sandbox, e.g. its preview in a tab. */
@@ -119,11 +139,21 @@ export interface SandboxPoolOptions {
  */
 export class SandboxPool {
   private entries = new Map<SandboxTarget, SandboxBackend>();
+  private coderEntry?: ReturnType<SandboxPoolCoder['backend']>;
   private views = new Map<string, LocalSandboxView>();
   private records = new Map<string, SandboxRecord>();
-  /** Docker's last reported state per container; refreshed before anything is recycled. */
+  /**
+   * The last reported state per container and per Coder workspace; refreshed before anything
+   * is recycled. Only `running` is told apart from the rest.
+   */
   private containers = new Map<string, string>();
   private docker: SandboxInstancesState['docker'] = { available: true };
+  private coder: Pick<SandboxCoderState, 'available' | 'message' | 'templates'> = {
+    available: false,
+    templates: [],
+  };
+  /** Recycling that failed is not tried again before this time. */
+  private retryAfter = new Map<string, number>();
   private policy = defaultSandboxPolicy;
   private starting = new Map<string, AbortController>();
   /** Tool calls in progress per sandbox: such a sandbox is in use from their first moment. */
@@ -156,7 +186,10 @@ export class SandboxPool {
     return this.options.now?.() ?? Date.now();
   }
 
-  /** Reads the saved list. Docker is consulted afterwards, so a slow Docker never delays startup. */
+  /**
+   * Reads the saved list. Docker and Coder are consulted afterwards, so a slow answer from
+   * either never delays startup.
+   */
   async load() {
     try {
       const saved = JSON.parse(await readFile(this.file, 'utf8'));
@@ -171,21 +204,31 @@ export class SandboxPool {
     this.sweepTimer.unref();
     void this.reconcile().catch(() => {});
   }
-  /** Brings the list in line with Docker and the disk, then recycles what is already due. */
+  /** Brings the list in line with Docker, Coder and the disk, then recycles what is already due. */
   async reconcile() {
     await this.refresh();
     await this.adopt();
     await this.sweep();
     this.publish();
   }
+  /** Asks Docker and Coder what exists. One that does not answer keeps its last known states. */
   private async refresh() {
+    await Promise.all([this.refreshDocker(), this.refreshCoder()]);
+  }
+  private replaceStates(coder: boolean, states: Iterable<[string, string]>) {
+    const prefix = this.coderEntry?.prefix;
+    const isCoder = (name: string) => prefix !== undefined && name.startsWith(prefix);
+    for (const name of [...this.containers.keys()])
+      if (isCoder(name) === coder) this.containers.delete(name);
+    for (const [name, state] of states) this.containers.set(name, state);
+  }
+  private async refreshDocker() {
     try {
       const prefixes = targets.map((target) => this.backend(target).prefix);
-      this.containers = new Map(
-        [...(await this.backend('default').containers())].filter(([name]) =>
-          prefixes.some((prefix) => name.startsWith(prefix)),
-        ),
+      const found = [...(await this.backend('default').containers())].filter(([name]) =>
+        prefixes.some((prefix) => name.startsWith(prefix)),
       );
+      this.replaceStates(false, found);
       this.docker = { available: true };
     } catch (error) {
       const message = error instanceof Error ? error.message : '';
@@ -196,7 +239,31 @@ export class SandboxPool {
           : message || 'Docker 不可用',
       };
     }
-    return this.docker.available;
+  }
+  private async refreshCoder() {
+    const source = this.options.coder;
+    if (!source?.connection().connected) {
+      this.coder = { available: false, templates: [] };
+      return;
+    }
+    try {
+      const [found, templates] = await Promise.all([
+        this.coderBackend().containers(),
+        source.templates(),
+      ]);
+      this.replaceStates(true, found);
+      this.coder = { available: true, templates };
+    } catch (error) {
+      this.coder = {
+        available: false,
+        message: error instanceof Error && error.message ? error.message : 'Coder 不可用',
+        templates: this.coder.templates,
+      };
+    }
+  }
+  /** Whether the place a sandbox lives in answered the last time: nothing is recycled blind. */
+  private reachable(record: SandboxRecord) {
+    return record.provider === 'coder' ? this.coder.available : this.docker.available;
   }
   /**
    * Lists sandboxes that exist without being on the list, such as those made by versions
@@ -232,6 +299,24 @@ export class SandboxPool {
         changed = true;
       }
     }
+    // Workspaces this profile created whose record was lost. Their names carry an id that only
+    // this profile has, so nothing else in the Coder account is ever listed here.
+    const prefix = this.coderEntry?.prefix;
+    for (const container of prefix ? [...this.containers.keys()] : []) {
+      if (!container.startsWith(prefix!) || known.has(container)) continue;
+      this.records.set(`legacy:${container}`, {
+        id: `legacy:${container}`,
+        name: '未登记的 Coder 沙箱',
+        runtime: 'default',
+        provider: 'coder',
+        origin: 'legacy',
+        container,
+        createdAt: this.now(),
+        lastUsedAt: this.now(),
+        keep: false,
+      });
+      changed = true;
+    }
     if (changed) await this.save();
   }
 
@@ -262,6 +347,21 @@ export class SandboxPool {
       this.entries.set(target, entry);
     }
     return entry;
+  }
+  private coderBackend() {
+    const source = this.options.coder;
+    if (!source) throw new Error('这个版本没有启用 Coder 沙箱');
+    this.coderEntry ??= source.backend(
+      (update) => this.update('default', update),
+      (id) => this.records.get(id)?.template?.id,
+    );
+    return this.coderEntry;
+  }
+  private backendOf(record: SandboxRecord) {
+    return record.provider === 'coder' ? this.coderBackend() : this.backend(record.runtime);
+  }
+  private backends() {
+    return [...this.entries.values(), ...(this.coderEntry ? [this.coderEntry] : [])];
   }
   state(conversationId: string) {
     return [...this.views.values()].filter((view) => view.conversationId === conversationId);
@@ -342,7 +442,9 @@ export class SandboxPool {
     return {
       id: record.id,
       name: record.name,
+      provider: record.provider ?? 'docker',
       runtime: record.runtime,
+      template: record.template?.name,
       origin: record.origin,
       conversationId: record.conversationId ?? this.callers.get(record.id),
       createdAt: record.createdAt,
@@ -362,22 +464,34 @@ export class SandboxPool {
   private snapshot(): SandboxInstancesState {
     return {
       docker: this.docker,
+      coder: { ...this.coder, ...this.connection() },
       policy: this.policy,
       instances: [...this.records.values()]
         .sort((a, b) => b.createdAt - a.createdAt)
         .map((record) => this.present(record)),
     };
   }
-  private items(): RecycleItem[] {
+  private connection() {
+    return this.options.coder?.connection() ?? { connected: false };
+  }
+  /**
+   * The sandboxes as the recycling rules see them. With `known`, one whose Docker or Coder
+   * did not answer is left out of every decision: it is neither counted nor touched.
+   */
+  private items(known = true): RecycleItem[] {
     return [...this.records.values()].map((record) => {
       const view = this.present(record);
+      const blind = known && !this.reachable(record);
       return {
         id: record.id,
         lastUsedAt: record.lastUsedAt,
         keep: record.keep,
-        running: view.status === 'running' || this.placed.has(record.id),
+        running: !blind && (view.status === 'running' || this.placed.has(record.id)),
         busy: view.busy,
-        held: this.options.held?.(view) ?? false,
+        held:
+          blind ||
+          (this.retryAfter.get(record.id) ?? 0) > this.now() ||
+          (this.options.held?.(view) ?? false),
       };
     });
   }
@@ -392,11 +506,15 @@ export class SandboxPool {
     return `<athena_sandboxes>\n用户在「设置 › 沙箱」创建的实例：${users
       .map(
         (instance) =>
-          `「${instance.name}」（${SANDBOX_RUNTIMES[instance.runtime]}，${statusNames[instance.status]}）`,
+          `「${instance.name}」（${sandboxEnvironment(instance)}，${statusNames[instance.status]}）`,
       )
       .join(
         '、',
-      )}。用户点名其中一个时，在 athena_sandbox_* 的 sandbox 参数填它的名称并省略 target；已停止的实例会在调用时自动启动，文件仍在。未点名时照常使用 target。闲置的沙箱会被停止，长期不用的会连同文件一起回收，需要留存的结果用 athena_sandbox_artifact 导出。\n</athena_sandboxes>`;
+      )}。用户点名其中一个时，在 athena_sandbox_* 的 sandbox 参数填它的名称并省略 target；已停止的实例会在调用时自动启动，文件仍在。未点名时照常使用 target。${
+      users.some((instance) => instance.provider === 'coder')
+        ? '标为 Coder 的实例是 Coder 工作区：没有 /workspace，命令从工作区主目录开始，文件和产物路径相对主目录，可用工具取决于它的模板。'
+        : ''
+    }闲置的沙箱会被停止，长期不用的会连同文件一起回收，需要留存的结果用 athena_sandbox_artifact 导出。\n</athena_sandboxes>`;
   }
 
   private record(id: unknown) {
@@ -483,7 +601,8 @@ export class SandboxPool {
     return run;
   }
   private async end(record: SandboxRecord, remove: boolean) {
-    await this.backend(record.runtime).release(record.container, remove);
+    await this.backendOf(record).release(record.container, remove);
+    this.retryAfter.delete(record.id);
     const view = this.views.get(record.id);
     if (remove) {
       this.containers.delete(record.container);
@@ -507,10 +626,21 @@ export class SandboxPool {
     this.publish();
   }
 
-  async create(name: unknown, runtime: unknown) {
+  /** A new sandbox of the user's: on Coder when `template` names one, else a local container. */
+  async create(name: unknown, runtime: unknown, template?: unknown) {
     const title = typeof name === 'string' ? name.trim() : '';
     if (!instanceName.test(title))
       throw new Error('名称需为 1–40 个字符，可用文字、数字、空格和 . _ -');
+    let coder: CoderTemplateView | undefined;
+    if (template !== undefined) {
+      if (!this.connection().connected)
+        throw new Error('尚未连接 Coder，请先在「设置 › 沙箱」填写地址和令牌');
+      await this.refreshCoder();
+      if (!this.coder.available) throw new Error(this.coder.message ?? 'Coder 不可用');
+      coder = this.coder.templates.find((item) => item.id === template);
+      if (!coder) throw new Error('找不到这个 Coder 模板，它可能已被移除');
+      runtime = 'default';
+    }
     if (!isTarget(runtime)) throw new Error('未知的沙箱环境');
     const users = [...this.records.values()].filter((record) => record.origin === 'user');
     if (users.some((record) => record.name.toLowerCase() === title.toLowerCase()))
@@ -523,7 +653,8 @@ export class SandboxPool {
       name: title,
       runtime,
       origin: 'user',
-      container: this.backend(runtime).containerName(id),
+      container: (coder ? this.coderBackend() : this.backend(runtime)).containerName(id),
+      ...(coder ? { provider: 'coder' as const, template: coder } : {}),
       createdAt: this.now(),
       lastUsedAt: this.now(),
       keep: false,
@@ -550,7 +681,7 @@ export class SandboxPool {
     try {
       await this.reserve(record);
       placed = true;
-      await this.backend(record.runtime).open({
+      await this.backendOf(record).open({
         conversationId: record.origin === 'user' ? record.id : record.conversationId!,
         turnId: 'open-' + record.id,
         signal: abort.signal,
@@ -614,15 +745,37 @@ export class SandboxPool {
     await this.save();
     this.publish();
   }
+  /**
+   * Takes the Coder sandboxes off the list when the user disconnects. Their workspaces stay
+   * on the deployment, where only the user can delete them now; running ones are asked to stop.
+   */
+  async forgetCoder() {
+    for (const record of this.records.values())
+      if (record.provider === 'coder') this.starting.get(record.id)?.abort();
+    await this.coderEntry?.forget?.();
+    for (const record of [...this.records.values()]) {
+      if (record.provider !== 'coder') continue;
+      this.containers.delete(record.container);
+      this.records.delete(record.id);
+      this.views.delete(record.id);
+      this.failures.delete(record.id);
+      this.retryAfter.delete(record.id);
+      this.options.onRemoved?.(this.callers.get(record.id), record.id);
+      this.callers.delete(record.id);
+    }
+    this.coder = { available: false, templates: [] };
+    await this.save();
+    this.publish();
+  }
   /** One recycling pass; see `planRecycle` for what is due. */
   async sweep() {
     if (this.sweeping || this.closed || !this.records.size) return;
     this.sweeping = true;
     try {
-      const due = () => planRecycle(this.items(), this.policy, this.now());
-      if (!due().stop.length && !due().remove.length) return;
-      // Act on what Docker reports now, not on what was true a while ago.
-      if (!(await this.refresh())) return;
+      const due = (known = true) => planRecycle(this.items(known), this.policy, this.now());
+      if (!due(false).stop.length && !due(false).remove.length) return;
+      // Act on what Docker and Coder report now, not on what was true a while ago.
+      await this.refresh();
       const plan = due();
       for (const [ids, remove] of [
         [plan.remove, true],
@@ -632,7 +785,10 @@ export class SandboxPool {
           // Each stop takes a while: one that came into use in the meantime is left alone.
           const record = this.records.get(id);
           if (record && due()[remove ? 'remove' : 'stop'].includes(id))
-            await this.release(record, remove).catch(() => {});
+            await this.release(record, remove).catch(() => {
+              // Trying again every minute would only repeat the failure, e.g. a failing build.
+              this.retryAfter.set(id, this.now() + 10 * 60_000);
+            });
         }
       await this.save();
     } finally {
@@ -678,7 +834,7 @@ export class SandboxPool {
       input.timeout_seconds === undefined
     )
       input.timeout_seconds = 1200;
-    const backend = this.backend(target);
+    const backend = record ? this.backendOf(record) : this.backend(target);
     const inner = record?.origin === 'user' ? { ...context, conversationId: record.id } : context;
     if (name === 'athena_sandbox_status') {
       const result = await backend.call(name, input, inner);
@@ -688,7 +844,12 @@ export class SandboxPool {
           ...JSON.parse(result.text),
           instances: this.snapshot()
             .instances.filter((instance) => instance.origin === 'user')
-            .map(({ name, runtime, status }) => ({ name, runtime, status })),
+            .map((instance) => ({
+              name: instance.name,
+              provider: instance.provider,
+              runtime: instance.provider === 'coder' ? instance.template : instance.runtime,
+              status: instance.status,
+            })),
         }),
       };
     }
@@ -732,7 +893,7 @@ export class SandboxPool {
     }
   }
   async cancelTurn(turnId: string) {
-    await Promise.all([...this.entries.values()].map((entry) => entry.cancelTurn(turnId)));
+    await Promise.all(this.backends().map((entry) => entry.cancelTurn(turnId)));
   }
   async dispose() {
     this.closed = true;
@@ -740,6 +901,6 @@ export class SandboxPool {
     clearTimeout(this.publishTimer);
     for (const abort of this.starting.values()) abort.abort();
     await this.save().catch(() => {});
-    await Promise.all([...this.entries.values()].map((entry) => entry.dispose()));
+    await Promise.all(this.backends().map((entry) => entry.dispose()));
   }
 }

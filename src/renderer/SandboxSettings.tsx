@@ -6,6 +6,7 @@ import { ChoiceSelect } from './ChoiceSelect';
 import {
   SANDBOX_POLICY_CHOICES,
   SANDBOX_RUNTIMES,
+  sandboxEnvironment,
   type SandboxInstanceView,
   type SandboxInstancesState,
   type SandboxPolicy,
@@ -48,7 +49,9 @@ export function SandboxSettings({ conversations }: { conversations: Map<string, 
   const [confirming, setConfirming] = useState('');
   const [error, setError] = useState('');
   const [name, setName] = useState('');
-  const [runtime, setRuntime] = useState<SandboxTarget>('frontend');
+  const [choice, setChoice] = useState('');
+  const [address, setAddress] = useState('');
+  const [token, setToken] = useState('');
   const [now, setNow] = useState(Date.now());
   const showError = (error: unknown) =>
     setError(
@@ -103,7 +106,37 @@ export function SandboxSettings({ conversations }: { conversations: Map<string, 
   const instances = state?.instances ?? [];
   const running = instances.filter((item) => item.status === 'running').length;
   const dockerReady = state?.docker.available ?? false;
+  const coder = state?.coder;
+  const ready = (provider: SandboxInstanceView['provider']) =>
+    provider === 'coder' ? (coder?.available ?? false) : dockerReady;
+  // Where a new sandbox runs: `coder:<template id>` or `docker:<environment>`.
+  const environments = [
+    ...(coder?.connected ? coder.templates : []).map((template) => ({
+      value: 'coder:' + template.id,
+      label: 'Coder · ' + template.name,
+    })),
+    ...(Object.keys(SANDBOX_RUNTIMES) as SandboxTarget[]).map((value) => ({
+      value: 'docker:' + value,
+      label: '本机 · ' + SANDBOX_RUNTIMES[value],
+    })),
+  ];
+  const environment = environments.some((item) => item.value === choice)
+    ? choice
+    : environments[0].value;
+  const onCoder = environment.startsWith('coder:');
+  const coderCount = instances.filter((item) => item.provider === 'coder').length;
   const title = name.trim();
+  const connect = () => {
+    if (!token.trim() || pending) return;
+    void run('sandbox:coder/connect', {
+      origin: coder?.connected ? coder.origin : address,
+      token,
+    }).then((connected) => {
+      if (!connected) return;
+      setToken('');
+      setAddress('');
+    });
+  };
   const source = (instance: SandboxInstanceView) =>
     instance.origin === 'user'
       ? '自建'
@@ -132,8 +165,8 @@ export function SandboxSettings({ conversations }: { conversations: Map<string, 
         <div>
           <h3>沙箱</h3>
           <p>
-            独立的 Docker
-            环境，用来运行命令、构建和预览，不挂载本机项目和凭据。在对话里说出沙箱名称，Athena
+            独立的运行环境：本机的 Docker 容器，或 Coder
+            上的工作区。用来运行命令、构建和预览，不挂载本机项目和凭据。在对话里说出沙箱名称，Athena
             就在其中工作。
           </p>
         </div>
@@ -153,7 +186,12 @@ export function SandboxSettings({ conversations }: { conversations: Map<string, 
         onSubmit={(event) => {
           event.preventDefault();
           if (!title || pending) return;
-          void run('sandbox:instance/create', { name: title, runtime }).then((created) => {
+          void run(
+            'sandbox:instance/create',
+            onCoder
+              ? { name: title, template: environment.slice('coder:'.length) }
+              : { name: title, runtime: environment.slice('docker:'.length) },
+          ).then((created) => {
             if (created) setName('');
           });
         }}
@@ -167,17 +205,14 @@ export function SandboxSettings({ conversations }: { conversations: Map<string, 
         />
         <ChoiceSelect
           label="运行环境"
-          value={runtime}
-          onChange={(value) => setRuntime(value as SandboxTarget)}
-          options={(Object.keys(SANDBOX_RUNTIMES) as SandboxTarget[]).map((value) => ({
-            value,
-            label: SANDBOX_RUNTIMES[value],
-          }))}
+          value={environment}
+          onChange={setChoice}
+          options={environments}
         />
         <ActionButton
           type="submit"
           variant="primary"
-          isDisabled={!title || !dockerReady || Boolean(pending)}
+          isDisabled={!title || !ready(onCoder ? 'coder' : 'docker') || Boolean(pending)}
         >
           {pending === 'sandbox:instance/create' ? '创建中…' : '新建'}
         </ActionButton>
@@ -190,6 +225,11 @@ export function SandboxSettings({ conversations }: { conversations: Map<string, 
       {state && !state.docker.available && (
         <p role="status" className="integration-notice">
           {state.docker.message || 'Docker 不可用'}。启动后点击刷新。
+        </p>
+      )}
+      {coder?.connected && !coder.available && (
+        <p role="status" className="integration-notice">
+          {coder.message || 'Coder 不可用'}
         </p>
       )}
       <p className="integration-count" role="status">
@@ -217,7 +257,7 @@ export function SandboxSettings({ conversations }: { conversations: Map<string, 
                     {statusLabel[instance.status]}
                   </span>
                   {' · '}
-                  {SANDBOX_RUNTIMES[instance.runtime]}
+                  {sandboxEnvironment(instance)}
                   {instance.status === 'starting' ? ' · 首次使用会先准备环境，可能需要几分钟' : ''}
                 </p>
                 <p>{recycle(instance)}</p>
@@ -236,7 +276,9 @@ export function SandboxSettings({ conversations }: { conversations: Map<string, 
                 {instance.origin !== 'legacy' && (
                   <ActionButton
                     variant="secondary"
-                    isDisabled={disabled || (instance.status !== 'running' && !dockerReady)}
+                    isDisabled={
+                      disabled || (instance.status !== 'running' && !ready(instance.provider))
+                    }
                     onPress={() =>
                       void run(
                         instance.status === 'running'
@@ -269,7 +311,7 @@ export function SandboxSettings({ conversations }: { conversations: Map<string, 
                 </ActionButton>
                 <ActionButton
                   className="sandbox-remove"
-                  isDisabled={Boolean(pending) || !dockerReady}
+                  isDisabled={Boolean(pending) || !ready(instance.provider)}
                   onPress={() => {
                     if (confirming !== instance.id) return setConfirming(instance.id);
                     setConfirming('');
@@ -291,11 +333,94 @@ export function SandboxSettings({ conversations }: { conversations: Map<string, 
           );
         })}
       </ul>
+      {coder && (
+        <section className="sandbox-coder" aria-label="Coder">
+          <h4 className="settings-subheading">Coder</h4>
+          <p className="settings-card-caption">
+            连接后可以按 Coder 模板新建沙箱，它运行在 Coder 的工作区里，回收规则同样适用。需要这台
+            Mac 装有 Coder CLI，模板里带 Node.js。令牌加密保存在本机。
+          </p>
+          {coder.connected && (
+            <div className="settings-value-row">
+              <span>
+                已连接 {coder.origin} · {coder.username}
+                {coder.insecure ? ' · HTTP 未加密' : ''}
+              </span>
+              <ActionButton
+                className="sandbox-remove"
+                isDisabled={Boolean(pending)}
+                onPress={() => {
+                  if (confirming !== 'coder') return setConfirming('coder');
+                  setConfirming('');
+                  void run('sandbox:coder/disconnect');
+                }}
+              >
+                {pending === 'sandbox:coder/disconnect'
+                  ? '断开中…'
+                  : confirming === 'coder'
+                    ? '确认断开'
+                    : '断开'}
+              </ActionButton>
+            </div>
+          )}
+          {confirming === 'coder' && coderCount > 0 && (
+            <p role="status" className="integration-notice">
+              断开后，{coderCount} 个 Coder 沙箱从列表移除，运行中的会停止；它们的工作区留在 Coder
+              上，之后需在 Coder 中删除。
+            </p>
+          )}
+          {(!coder.connected || !coder.available) && (
+            <form
+              className="sandbox-coder-connect"
+              onSubmit={(event) => {
+                event.preventDefault();
+                connect();
+              }}
+            >
+              {!coder.connected && (
+                <Input
+                  aria-label="Coder 地址"
+                  placeholder="Coder 地址，例如 https://coder.example.com"
+                  maxLength={300}
+                  autoComplete="off"
+                  spellCheck={false}
+                  value={address}
+                  onChange={(event) => setAddress(event.target.value)}
+                />
+              )}
+              <Input
+                aria-label="Coder 令牌"
+                type="password"
+                placeholder={coder.connected ? '新的令牌' : '令牌'}
+                maxLength={500}
+                autoComplete="off"
+                value={token}
+                onChange={(event) => setToken(event.target.value)}
+              />
+              <ActionButton
+                type="submit"
+                variant={coder.connected ? 'secondary' : 'primary'}
+                isDisabled={
+                  !token.trim() || (!coder.connected && !address.trim()) || Boolean(pending)
+                }
+              >
+                {pending === 'sandbox:coder/connect'
+                  ? '连接中…'
+                  : coder.connected
+                    ? '更新令牌'
+                    : '连接'}
+              </ActionButton>
+            </form>
+          )}
+        </section>
+      )}
       {state && (
         <section className="sandbox-policy" aria-label="回收规则">
           <h4 className="settings-subheading">回收规则</h4>
           <p className="settings-card-caption">
-            停止只结束进程，文件保留，下次使用时自动启动。删除会移除容器和其中的全部文件；标记为保留的沙箱不会被删除。正在使用的沙箱不受影响。
+            停止只结束进程，文件保留，下次使用时自动启动。删除会移除容器或 Coder
+            工作区，连同其中的全部文件；标记为保留的沙箱不会被删除。正在使用的沙箱不受影响。退出
+            Athena 时，运行中的沙箱会停止。
           </p>
           {policyFields.map((field) => (
             <div className="settings-value-row" key={field.key}>

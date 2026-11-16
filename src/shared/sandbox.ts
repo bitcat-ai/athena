@@ -33,10 +33,20 @@ export const SANDBOX_POLICY_CHOICES = {
   retainDays: [3, 7, 14, 30],
   maxRunning: [2, 4, 6, 8],
 } as const;
+/** Where a sandbox runs: a container on this Mac, or a workspace on a Coder deployment. */
+export type SandboxProvider = 'docker' | 'coder';
+export interface CoderTemplateView {
+  id: string;
+  name: string;
+}
 export interface SandboxInstanceView {
   id: string;
   name: string;
+  provider: SandboxProvider;
+  /** The local environment; `default` for a Coder sandbox, whose template decides it. */
   runtime: SandboxTarget;
+  /** Name of the Coder template the sandbox was created from. */
+  template?: string;
   /** `legacy`: left by a conversation that no longer exists; it can only be removed. */
   origin: 'user' | 'agent' | 'legacy';
   conversationId?: string;
@@ -52,8 +62,29 @@ export interface SandboxInstanceView {
   stopsAt?: number;
   removesAt?: number;
 }
+/** The Coder deployment sandboxes can be created on, as the settings page shows it. */
+export interface SandboxCoderState {
+  /** An address and a token are stored. */
+  connected: boolean;
+  /** The deployment answered the last time it was asked. */
+  available: boolean;
+  origin?: string;
+  username?: string;
+  /** The address is plain HTTP, so the token and the traffic are not encrypted. */
+  insecure?: boolean;
+  message?: string;
+  templates: CoderTemplateView[];
+}
+/** What a sandbox's environment is called in lists and in the agent's prompt. */
+export const sandboxEnvironment = (
+  instance: Pick<SandboxInstanceView, 'provider' | 'runtime' | 'template'>,
+): string =>
+  instance.provider === 'coder'
+    ? `Coder · ${instance.template ?? '工作区'}`
+    : SANDBOX_RUNTIMES[instance.runtime];
 export interface SandboxInstancesState {
   docker: { available: boolean; message?: string };
+  coder: SandboxCoderState;
   policy: SandboxPolicy;
   instances: SandboxInstanceView[];
 }
