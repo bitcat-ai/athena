@@ -54,13 +54,12 @@ test('registry configuration and sandbox selectors reject untrusted destinations
   assert.throws(() => new RepositoryMcp('https://example.com', 'secret'), /回环/);
   assert.throws(() => new RepositoryMcp('http://127.0.0.1', ''), /回环/);
   const pool = new SandboxPool('/unused', '/unused/program', () => {});
-  assert.throws(
-    () =>
-      pool.call(
-        'athena_sandbox_status',
-        { target: '../../outside' },
-        { conversationId: 'c', turnId: 't', signal: new AbortController().signal },
-      ),
+  await assert.rejects(
+    pool.call(
+      'athena_sandbox_status',
+      { target: '../../outside' },
+      { conversationId: 'c', turnId: 't', signal: new AbortController().signal },
+    ),
     /目标/,
   );
   assert.ok(

@@ -81,6 +81,7 @@ HeroUI Pro 需要有效商业授权。沿用项目安装脚本和授权缓存，
 | 浏览器画面与工具栏       | [BrowserPane.tsx](src/renderer/BrowserPane.tsx)                                                                                                   | Pro Segment、HeroUI Tabs；现有帧与输入链路                                                    |
 | 共享主持人及访客         | [SharePanel.tsx](src/renderer/SharePanel.tsx)、[SharedPage.tsx](src/renderer/SharedPage.tsx)、[SharedSurface.tsx](src/renderer/SharedSurface.tsx) | Modal、Input、ChoiceSelect；真实共享状态与画面                                                |
 | 元素检查与调整           | [ElementInspector.tsx](src/renderer/ElementInspector.tsx)、[ElementControls.tsx](src/renderer/ElementControls.tsx)                                | [独立元素控件库](packages/element-inspector/README.md)、受约束的 A2UI 控件                    |
+| 沙箱实例与回收规则       | [SandboxSettings.tsx](src/renderer/SandboxSettings.tsx)                                                                                           | Input、ChoiceSelect、ActionButton；真实 Docker 状态与回收时间                                 |
 
 支撑样式分别位于 [agent-experience.css](src/renderer/agent-experience.css)、[model-controls.css](src/renderer/model-controls.css)、[usage-currency.css](src/renderer/usage-currency.css)、[sharing.css](src/renderer/sharing.css) 和 [inspector-surface.css](src/renderer/inspector-surface.css)。
 

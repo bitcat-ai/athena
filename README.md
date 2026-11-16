@@ -85,6 +85,7 @@
 | 🧭  | **带做**               | Agent 在页面上逐步高亮该点哪里、该填什么，操作由你完成，适合登录、付款、最后确认这类只应由本人完成的步骤。[了解带做 →](docs/guide.md)                        |
 | 🚀  | **页面改动落到源码**   | 页面上确认过的预览被逐条记录，经知识库找到对应仓库，在前端、后端两个沙箱里修改、构建并启动预览；凭据不进入沙箱。[了解流程 →](docs/page-changes-to-source.md) |
 | 🌱  | **记忆**               | 从你自己的原话和应用记录的操作中学习规范与知识，每条都能看到依据，可停用、删除或导出为 Markdown。[了解记忆 →](docs/learning.md)                              |
+| 📦  | **沙箱**               | 在「设置」里创建一个或多个命名的 Docker 沙箱，对话里点名即可使用；闲置自动停止，长期不用自动删除，可标记保留。[了解沙箱 →](docs/sandboxes.md)                |
 | 📨  | **消息队列**           | 任务进行中可以继续发送消息，前面的任务完成后按顺序逐条发送；排队的消息可取回编辑或移出。                                                                     |
 | ⏺️  | **录制与共享**         | 把一段网页操作录下来交给 Agent 理解；邀请他人进入同一张页面，分别管理查看、操作和控制权。[了解共享 →](docs/shared-workspace.md)                              |
 | 🧩  | **Skills、MCP 与命令** | 「设置」里查看本机 Skills，连接各 CLI 已配置的 MCP 服务而不改写其配置；输入 `/` 打开命令菜单（`/new`、`/model`、`/agent`、`/browser` 等）。                  |
@@ -150,6 +151,7 @@ Athena 专注浏览器页面上的协作，桌面 Computer Use 仍处调研阶�
 | [记忆](docs/learning.md) · 从使用中学习                           | [设计约定](DESIGN.md) · 视觉语言与组件映射                                |
 | [页面共享](docs/shared-workspace.md) · 邀请、权限与控制权         | [工程约定](AGENTS.md) · 开发与验证规则                                    |
 | [飞书连接](docs/feishu-setup.md) · 配对与连接恢复                 | [更新日志](CHANGELOG.md) · 版本变化与下载                                 |
+| [沙箱](docs/sandboxes.md) · 多个实例与回收规则                    | [签名与公证](docs/apple-signing.md) · 构建与发布                          |
 |                                                                   | [贡献指南](CONTRIBUTING.md) · 问题反馈、开发与 Pull Request               |
 
 <details>

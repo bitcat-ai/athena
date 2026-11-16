@@ -214,7 +214,7 @@ export function SandboxPip({
         ) : (
           <span>{state.previewAvailable ? '应用预览已就绪' : status.text}</span>
         )}
-        {state.previewAvailable && state.target !== 'backend' && (
+        {state.previewAvailable && (state.runtime ?? state.target) !== 'backend' && (
           <button type="button" onClick={onOpenPreview}>
             打开预览 ↗
           </button>

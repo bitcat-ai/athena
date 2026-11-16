@@ -36,6 +36,7 @@ import {
   ChartNoAxesCombinedIcon,
   CloudIcon,
   CommandIcon,
+  CubeIcon,
   CopyIcon,
   Cursor01Icon,
   EarthIcon,
@@ -71,6 +72,7 @@ import { effortName } from './ReasoningSlider';
 import { SkillPicker } from './SkillPicker';
 import { LearningPanel } from './LearningPanel';
 import { McpSettings, SkillsSettings } from './LocalIntegrations';
+import { SandboxSettings } from './SandboxSettings';
 import {
   composerCommands,
   parseComposerCommand,
@@ -159,7 +161,7 @@ const emptyBrowser: BrowserState = {
   inspecting: false,
 };
 const emptyFeishu: FeishuState = { status: 'disconnected', paired: false };
-type SettingsTab = 'agent' | 'browser' | 'feishu' | 'learning' | 'skills' | 'mcp';
+type SettingsTab = 'agent' | 'browser' | 'feishu' | 'learning' | 'skills' | 'mcp' | 'sandbox';
 const commandIcons = {
   new: PlusIcon,
   model: CommandIcon,
@@ -1482,7 +1484,7 @@ export default function App() {
     if (command.name === 'skills' || command.name === 'mcp') openSettings(command.name);
     if (command.name === 'settings') {
       const tab = argument || 'agent';
-      if (!['agent', 'browser', 'feishu', 'learning', 'skills', 'mcp'].includes(tab)) {
+      if (!['agent', 'browser', 'feishu', 'learning', 'skills', 'mcp', 'sandbox'].includes(tab)) {
         showToast('没有这个设置分类，请使用 /help 查看', true);
         return;
       }
@@ -1670,6 +1672,10 @@ export default function App() {
             <Icon icon={Link02Icon} size={15} />
             MCP
           </Tabs.Tab>
+          <Tabs.Tab id="sandbox">
+            <Icon icon={CubeIcon} size={15} />
+            沙箱
+          </Tabs.Tab>
           <Tabs.Tab id="feishu">
             <Icon icon={Link02Icon} size={15} />
             飞书
@@ -1695,6 +1701,13 @@ export default function App() {
           {settingsTab === 'mcp' && (
             <Tabs.Panel id="mcp">
               <McpSettings key={settings.workspace} busy={busy} />
+            </Tabs.Panel>
+          )}
+          {settingsTab === 'sandbox' && (
+            <Tabs.Panel id="sandbox">
+              <SandboxSettings
+                conversations={new Map(conversations.map((item) => [item.id, item.title]))}
+              />
             </Tabs.Panel>
           )}
           {settingsTab === 'agent' && (

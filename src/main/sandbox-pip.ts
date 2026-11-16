@@ -1,8 +1,9 @@
-import type { SandboxPipState, SandboxTarget } from '../shared/sandbox';
+import type { SandboxPipState } from '../shared/sandbox';
 
 export interface PipTarget {
   conversationId: string;
-  target: SandboxTarget;
+  /** A built-in target or the id of an instance the user created; see `sandboxKey`. */
+  target: string;
 }
 
 export const pipKey = (target: PipTarget) => `${target.conversationId}:${target.target}`;

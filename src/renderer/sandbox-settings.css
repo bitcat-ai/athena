@@ -1,0 +1,52 @@
+.sandbox-create {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sandbox-create :is(.input, .button, .choice-select-trigger) {
+  height: var(--control-row-height);
+  min-height: var(--control-row-height);
+}
+.sandbox-create .input {
+  flex: 1;
+  min-width: 0;
+  max-width: 320px;
+}
+.sandbox-create .choice-select {
+  width: 132px;
+  flex-shrink: 0;
+}
+.sandbox-create .button {
+  flex-shrink: 0;
+}
+.sandbox-settings .inline-error {
+  margin: 12px 0 0;
+}
+.sandbox-settings .integration-actions {
+  flex-wrap: nowrap;
+  flex-shrink: 0;
+}
+.sandbox-status[data-status='running'] {
+  color: var(--foreground);
+  font-weight: 550;
+}
+.sandbox-status[data-status='failed'] {
+  color: var(--danger);
+}
+.sandbox-remove[data-hovered='true'],
+.sandbox-remove[data-focus-visible='true'] {
+  color: var(--danger);
+}
+.sandbox-policy {
+  margin-top: 36px;
+  max-width: 520px;
+}
+.sandbox-policy .choice-select {
+  width: 132px;
+}
+@media (max-width: 600px) {
+  .sandbox-settings .integration-actions {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+}

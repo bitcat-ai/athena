@@ -702,6 +702,7 @@ export interface AppSnapshot {
 export type AppEvent =
   | { type: 'local-mcp:state'; state: import('./local-mcp').LocalMcpState }
   | { type: 'sandbox:state'; state: import('./sandbox').LocalSandboxView }
+  | { type: 'sandbox:instances'; state: import('./sandbox').SandboxInstancesState }
   | {
       type: 'sandbox:pip';
       state?: import('./sandbox').SandboxPipState;

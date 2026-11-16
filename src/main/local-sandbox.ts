@@ -1,6 +1,6 @@
 import { execFile, spawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdir, realpath, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, realpath, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { discoverExecutables, executableDirectories } from './agent-discovery';
@@ -609,6 +609,59 @@ export class LocalSandbox {
       text: JSON.stringify(value),
       ...((value as any)?.command?.status === 'failed' ? { isError: true } : {}),
     };
+  }
+  /** Container names start with this; it tells this profile's sandboxes from any other's. */
+  get prefix() {
+    return `athena-${this.owner}-`;
+  }
+  private owns(name: string) {
+    return name.startsWith(this.prefix) && /^[0-9a-f]{10}$/.test(name.slice(this.prefix.length));
+  }
+  containerName(id: string) {
+    return this.name(id);
+  }
+  /** Starts the sandbox without running anything in it. */
+  async open(context: SandboxCallContext) {
+    return (await this.ensure(context)).name;
+  }
+  /** Every Athena sandbox container Docker knows, by name, with its state. */
+  async containers() {
+    const listed = await this.command([
+      'container',
+      'ls',
+      '-a',
+      '--filter',
+      `label=${label}`,
+      '--format',
+      '{{.Names}}\t{{.State}}',
+    ]);
+    return new Map(
+      listed
+        .trim()
+        .split('\n')
+        .filter(Boolean)
+        .map((line) => line.split('\t') as [string, string]),
+    );
+  }
+  /** Sandbox directories of this profile, whether or not a container still exists for them. */
+  async workspaces() {
+    const names = await readdir(this.directory).catch(() => [] as string[]);
+    return names.filter((name) => this.owns(name));
+  }
+  /** Stops one sandbox, or removes it together with its files. */
+  async release(name: string, remove: boolean) {
+    if (!this.owns(name)) throw new Error('这个沙箱不属于此 Athena 档案');
+    for (const [id, pending] of this.entries)
+      if (this.name(id) === name) {
+        this.entries.delete(id);
+        await pending.then(
+          (entry) => entry.client.close(),
+          () => {},
+        );
+      }
+    if (await this.inspect(name))
+      await this.command(remove ? ['rm', '--force', name] : ['stop', '--time', '2', name]);
+    if (remove) await rm(path.join(this.directory, name), { recursive: true, force: true });
   }
   async dispose() {
     this.closed = true;
