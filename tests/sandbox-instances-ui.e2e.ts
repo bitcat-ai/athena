@@ -118,7 +118,7 @@ try {
   await expect(name).toHaveValue('');
 
   await panel.locator('[data-choice-label="运行环境"]').click();
-  await page.getByRole('option', { name: '基础 Node', exact: true }).click();
+  await page.getByRole('option', { name: '本机 · 基础 Node', exact: true }).click();
   await name.fill('scratch');
   await name.press('Enter');
   await expect(row('scratch')).toContainText('运行中', { timeout: 120_000 });
