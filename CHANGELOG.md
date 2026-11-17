@@ -1,6 +1,6 @@
 # 更新日志
 
-## 0.11.0 · 2026-11-16
+## 0.11.0 · 2026-11-17
 
 这一版让沙箱成为可以自己创建和管理的东西：运行在 Coder 的工作区里或本机 Docker 里，并带有回收规则。
 
@@ -12,6 +12,13 @@
 - `athena_sandbox_*` 工具新增可选的 `sandbox` 参数（自建沙箱的名称），`athena_sandbox_status` 的结果列出自建沙箱。尚未在真实模型对话中验证模型是否稳定地按名称选用。
 
 详情见 [沙箱实例与回收](docs/sandboxes.md)。
+
+macOS Apple Silicon：
+
+- [DMG 安装包](https://github.com/bitcat-ai/athena/releases/download/v0.11.0/Athena-0.11.0-mac-arm64.dmg)
+- [ZIP 归档](https://github.com/bitcat-ai/athena/releases/download/v0.11.0/Athena-0.11.0-mac-arm64.zip)
+- [SHA-256 校验文件](https://github.com/bitcat-ai/athena/releases/download/v0.11.0/SHA256SUMS.txt)
+- [Release 页面](https://github.com/bitcat-ai/athena/releases/tag/v0.11.0)
 
 ## 0.10.0 · 2026-11-15
 
