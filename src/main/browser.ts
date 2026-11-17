@@ -1786,6 +1786,19 @@ export class BrowserRuntime {
     for (const frame of tab.frames.values())
       await this.bridge(tab, frame, 'globalThis.__workbenchPage.clearOverlays()').catch(() => {});
   }
+  /**
+   * Chrome gives a page that is shown again the size of its own window, and from then on streams
+   * frames of that size. The viewport therefore has to be applied after the page is in front.
+   */
+  private async bringToFront(tab: TabSession): Promise<void> {
+    await tab.page.call('Page.bringToFront');
+    await tab.page.call('Emulation.setDeviceMetricsOverride', {
+      width: this.width,
+      height: this.height,
+      deviceScaleFactor: 2,
+      mobile: false,
+    });
+  }
   private async activateTab(
     tab: TabSession,
     source: 'human' | 'agent',
@@ -1813,13 +1826,7 @@ export class BrowserRuntime {
     this.suppressMouseUp = false;
     this.update({ selectedElement: undefined, inspecting: false });
     this.options.onFrame({ data: '', width: this.width, height: this.height, tabId: tab.info.id });
-    await tab.page.call('Emulation.setDeviceMetricsOverride', {
-      width: this.width,
-      height: this.height,
-      deviceScaleFactor: 2,
-      mobile: false,
-    });
-    await tab.page.call('Page.bringToFront');
+    await this.bringToFront(tab);
     // A web task can leave another tab in front; the embedded active page must keep rendering.
     await tab.page.call('Emulation.setFocusEmulationEnabled', { enabled: true });
     await this.startScreencast(tab);
@@ -1889,11 +1896,9 @@ export class BrowserRuntime {
         return result;
       } finally {
         // The web executor brings the page it works on to the front inside the browser.
-        if (targetId !== this.activeTabId)
-          await this.tabs
-            .get(this.activeTabId)
-            ?.page.call('Page.bringToFront')
-            .catch(() => {});
+        const active = this.tabs.get(this.activeTabId);
+        if (active && targetId !== this.activeTabId)
+          await this.bringToFront(active).catch(() => {});
       }
     });
   }
