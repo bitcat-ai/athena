@@ -24,7 +24,7 @@
 </p>
 
 <p align="center">
-  <sub>macOS · Apple Silicon · v0.11.0</sub>
+  <sub>macOS · Apple Silicon · v0.11.1</sub>
 </p>
 
 <p align="center">
@@ -106,7 +106,7 @@
 
 ### 安装包
 
-下载 **[Athena 0.11.0](https://github.com/bitcat-ai/athena/releases/tag/v0.11.0)**（[DMG](https://github.com/bitcat-ai/athena/releases/download/v0.11.0/Athena-0.11.0-mac-arm64.dmg) · [ZIP](https://github.com/bitcat-ai/athena/releases/download/v0.11.0/Athena-0.11.0-mac-arm64.zip) · [SHA-256 校验](https://github.com/bitcat-ai/athena/releases/download/v0.11.0/SHA256SUMS.txt) · [全部版本](https://github.com/bitcat-ai/athena/releases)），打开 DMG 后把 Athena 拖入「应用程序」。安装包包含本页介绍的全部能力，已完成 Developer ID 签名和 Apple 公证，尚无自动更新。
+下载 **[Athena 0.11.1](https://github.com/bitcat-ai/athena/releases/tag/v0.11.1)**（[DMG](https://github.com/bitcat-ai/athena/releases/download/v0.11.1/Athena-0.11.1-mac-arm64.dmg) · [ZIP](https://github.com/bitcat-ai/athena/releases/download/v0.11.1/Athena-0.11.1-mac-arm64.zip) · [SHA-256 校验](https://github.com/bitcat-ai/athena/releases/download/v0.11.1/SHA256SUMS.txt) · [全部版本](https://github.com/bitcat-ai/athena/releases)），打开 DMG 后把 Athena 拖入「应用程序」。安装包包含本页介绍的全部能力，已完成 Developer ID 签名和 Apple 公证，尚无自动更新。
 
 需要 macOS（Apple Silicon）、Google Chrome，以及一个已登录的本机 Agent CLI（如 Codex）。启动后，右侧浏览器默认打开 Athena 的起始页。页面上为三种协作方式各准备了一句示例，照着说一遍就能体验。
 

@@ -6,6 +6,13 @@
 
 - 切到另一个标签再切回来，或 Agent 在另一个标签里完成网页任务之后，当前页面的画面只更新一次就停住：滚动、输入和页面自身的变化都不再显示，拖动分栏或调整窗口大小后才恢复。页面本身一直在正常运行，停住的只是画面。现在页面回到前台后画面持续更新。
 
+macOS Apple Silicon：
+
+- [DMG 安装包](https://github.com/bitcat-ai/athena/releases/download/v0.11.1/Athena-0.11.1-mac-arm64.dmg)
+- [ZIP 归档](https://github.com/bitcat-ai/athena/releases/download/v0.11.1/Athena-0.11.1-mac-arm64.zip)
+- [SHA-256 校验文件](https://github.com/bitcat-ai/athena/releases/download/v0.11.1/SHA256SUMS.txt)
+- [Release 页面](https://github.com/bitcat-ai/athena/releases/tag/v0.11.1)
+
 ## 0.11.0 · 2026-11-17
 
 这一版让沙箱成为可以自己创建和管理的东西：运行在 Coder 的工作区里或本机 Docker 里，并带有回收规则。
