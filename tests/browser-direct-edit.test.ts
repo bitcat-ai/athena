@@ -187,6 +187,18 @@ test(
       });
       assert(!changed.isError, changed.text);
       assert.equal(await f.runtime.pointedElement(box.x, box.y, 'another-tab'), undefined);
+
+      // A selected element can be let go: its frame leaves the page, the preview stays.
+      await f.runtime.selectElement(pointed!.ref);
+      assert.equal(f.runtime.getState().selectedElement?.tag, 'button');
+      await f.runtime.clearSelection();
+      assert.equal(f.runtime.getState().selectedElement, undefined);
+      assert.equal(
+        (await f.runtime.queryElements({ selector: '.cta' })).elements[1].text,
+        'Pointed',
+        'letting go of the element keeps what was changed on it',
+      );
+      await f.runtime.clearSelection();
     } finally {
       await f.close();
     }

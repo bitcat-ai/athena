@@ -65,7 +65,9 @@ const WORLD = 'workbench-browser-observer';
 const PREVIEW_MAX_EDGE = 2048;
 const PREVIEW_INTERVAL = 1000 / 24;
 /** How long frames stay unpaced after an agent action ends: transitions and late paints. */
-const AGENT_FRAME_TAIL = 700;
+const AGENT_FRAME_TAIL = 1500;
+/** The same after a person's own input. */
+const INPUT_FRAME_TAIL = 1200;
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 /** Requests that can still change what the page shows; media and long polls are not waited for. */
 const SETTLE_RESOURCES = new Set(['Document', 'Stylesheet', 'Script', 'XHR', 'Fetch']);
@@ -1071,7 +1073,10 @@ export class BrowserRuntime {
     this.queue = result.catch(() => {});
     return result;
   }
-  private boostFrames(duration = 300): void {
+  // A gesture is followed by what it set off: a hover transition, a menu opening, a scroll
+  // easing out. Those are shown at the full rate too, rather than dropping to the idle rate
+  // part-way. A page that is not painting sends no frames, so a longer window costs nothing.
+  private boostFrames(duration = INPUT_FRAME_TAIL): void {
     this.interactiveFrameUntil = Math.max(this.interactiveFrameUntil, Date.now() + duration);
     this.releaseFrames();
   }
@@ -3904,6 +3909,15 @@ export class BrowserRuntime {
         },
       }),
     };
+  }
+  /** Drops the selection and its frame on the page; the element and any preview of it stay. */
+  clearSelection(): Promise<void> {
+    return this.serialize(async () => {
+      const tab = this.tabs.get(this.activeTabId);
+      if (!this.state.selectedElement && !this.state.elementControls) return;
+      if (tab) await this.clearOutline(tab);
+      this.update({ selectedElement: undefined, elementControls: undefined });
+    });
   }
   selectElement(ref: string): Promise<ElementDetails> {
     const scope = this.refs.get(ref);

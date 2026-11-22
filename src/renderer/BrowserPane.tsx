@@ -464,6 +464,9 @@ export function BrowserPane({
     if ((event.metaKey || event.ctrlKey) && ['k', 'l', 't', 'w'].includes(event.key.toLowerCase()))
       return;
     if (event.key === 'Tab' && event.shiftKey && event.ctrlKey) return;
+    // Esc lets go of a selected element; the key still reaches the page.
+    if (event.key === 'Escape' && action === 'down' && state.selectedElement && !state.inspecting)
+      void onAction('browser:deselect');
     event.preventDefault();
     sendInput({
       type: 'key',
@@ -1011,6 +1014,15 @@ export function BrowserPane({
             {fitLimited && zoomMode === 'fit' && <span className="viewport-limit">可横向滚动</span>}
             {state.inspecting ? (
               <span className="status-right">选择元素</span>
+            ) : state.selectedElement && !agentStatus ? (
+              <ActionButton
+                className="selection-clear"
+                title="取消选中（Esc）"
+                onPress={() => void onAction('browser:deselect')}
+              >
+                已选中 {state.selectedElement.tag}
+                <Icon icon={XIcon} size={11} />
+              </ActionButton>
             ) : agentStatus ? (
               <span className="browser-agent-status" role="status">
                 <PhaseGlyph kind={agentStatus.glyph} still={agentStatus.glyph === 'wait'} />

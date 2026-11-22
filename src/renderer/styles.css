@@ -3395,3 +3395,19 @@ html[data-theme='dark'] .composer [data-slot='prompt-input-shell'] {
   margin-inline-end: 6px;
   color: var(--faint);
 }
+
+.browser-status .selection-clear {
+  margin-left: auto;
+  height: 22px;
+  min-height: 22px;
+  padding-inline: 8px 6px;
+  gap: 5px;
+  border-radius: var(--radius-button);
+  background: var(--surface-secondary);
+  color: var(--secondary);
+  font-size: 11px;
+}
+.browser-status .selection-clear[data-hovered='true'] {
+  background: var(--surface-tertiary);
+  color: var(--foreground);
+}

@@ -1770,6 +1770,15 @@ async function runTurn(
     if (!recording) await web.finishTask(assistant.id, assistant.status === 'done').catch(() => {});
     if (feedbackRef && !readonly)
       await browser.setElementFeedback(feedbackRef, null).catch(() => {});
+    // The selection was for this request. Once it has been carried out the element is let go,
+    // so its frame does not stay on the page; a failed or stopped turn keeps it for a retry.
+    if (
+      (selectedElement || mentions?.length) &&
+      !readonly &&
+      !active?.cancelled &&
+      assistant.status === 'done'
+    )
+      await browser.clearSelection().catch(() => {});
     endPhase(assistant, active?.cancelled);
     try {
       await store.save();
