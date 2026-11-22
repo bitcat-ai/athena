@@ -1,0 +1,431 @@
+.live-voice-surface {
+  --live-level: 0;
+  -webkit-app-region: no-drag;
+  font-family: var(--font-sans);
+  color: var(--foreground);
+  outline: none;
+}
+.live-voice-surface .button {
+  flex: none;
+}
+.live-voice-surface .button:focus-visible,
+.live-voice-surface .button[data-focus-visible='true'],
+.live-captions:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* The portrait is the voice: two rings follow the measured level of whoever is speaking. */
+.live-orb {
+  position: relative;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+}
+.live-orb .live-portrait {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  user-select: none;
+  -webkit-user-drag: none;
+  transform: scale(calc(1 + var(--live-level) * 0.06));
+}
+.live-orb > i {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--foreground);
+  opacity: calc(0.05 + var(--live-level) * 0.12);
+  transform: scale(calc(1.08 + var(--live-level) * 0.55));
+  will-change: transform, opacity;
+}
+.live-orb > i + i {
+  opacity: calc(0.03 + var(--live-level) * 0.07);
+  transform: scale(calc(1.14 + var(--live-level) * 1.05));
+}
+.live-voice-surface:not([data-status='connected']) .live-orb > i {
+  opacity: 0;
+}
+.live-voice-surface[data-status='connecting'] .live-orb > i:first-of-type {
+  animation: live-ringing 1.5s ease-out infinite;
+}
+.live-voice-surface[data-muted] .live-orb .live-portrait {
+  filter: grayscale(1) opacity(0.55);
+}
+@keyframes live-ringing {
+  from {
+    opacity: 0.16;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.75);
+  }
+}
+
+.live-wave {
+  flex: none;
+  width: 46px;
+  height: 22px;
+  color: var(--secondary);
+}
+.live-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.live-status > i {
+  flex: none;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--faint);
+}
+.live-status[data-connected='true']:not([data-muted='true']) > i {
+  background: var(--success);
+}
+.live-status > [role='status'] {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.live-status[data-agent] {
+  color: var(--secondary);
+}
+.live-voice-surface time {
+  flex: none;
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Round 36px controls, the size and place of the composer's own. */
+.live-voice-surface .live-round {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
+  padding: 0;
+  border-radius: 50%;
+  color: var(--secondary);
+  background: transparent;
+}
+.live-voice-surface .live-round[data-hovered='true'] {
+  background: var(--surface-secondary);
+  color: var(--foreground);
+}
+.live-voice-surface .live-mute,
+.live-voice-surface .live-stop {
+  background: var(--surface-secondary);
+}
+.live-voice-surface .live-mute[aria-pressed='true'] {
+  background: var(--foreground);
+  color: var(--surface);
+}
+.live-voice-surface :is(.live-mute, .live-stop)[data-hovered='true'] {
+  background: var(--surface-tertiary);
+}
+.live-voice-surface .live-mute[aria-pressed='true'][data-hovered='true'] {
+  background: var(--accent-hover);
+  color: var(--accent-foreground);
+}
+.live-voice-surface .live-hangup {
+  background: var(--danger);
+  color: var(--danger-foreground);
+}
+.live-voice-surface .live-hangup[data-hovered='true'] {
+  background: color-mix(in srgb, var(--danger) 86%, #000);
+  color: var(--danger-foreground);
+}
+.live-voice-surface .live-start {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+.live-voice-surface .live-start[data-hovered='true'] {
+  background: var(--accent-hover);
+  color: var(--accent-foreground);
+}
+.live-voice-surface .live-setup {
+  height: 36px;
+  min-height: 36px;
+  padding-inline: 16px;
+  border-radius: var(--radius-button);
+  font-size: 12px;
+  font-weight: 550;
+}
+.live-call-error {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--danger);
+  overflow-wrap: anywhere;
+}
+
+/* Fragments of speech settle in as they are heard. */
+.live-word {
+  animation: live-word-in 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes live-word-in {
+  from {
+    opacity: 0;
+    filter: blur(3px);
+  }
+}
+
+/* —— In the composer: the same shell, with speech where the draft was. —— */
+.live-inline {
+  container-type: inline-size;
+  box-sizing: border-box;
+  inline-size: 100%;
+  padding: 12px;
+}
+.live-field {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-height: 56px;
+  padding: 2px 4px 0;
+}
+.live-field-body {
+  flex: 1;
+  min-width: 0;
+  padding-top: 5px;
+}
+.live-prompt {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--field-placeholder);
+}
+.live-captions {
+  max-height: min(26vh, 132px);
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  scrollbar-width: none;
+  mask-image: linear-gradient(to bottom, transparent, #000 18px);
+}
+.live-caption {
+  margin: 0 0 6px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--muted);
+  transition: color 240ms ease;
+}
+.live-caption:last-child {
+  margin-bottom: 0;
+}
+.live-caption[data-current='true'] {
+  color: var(--foreground);
+}
+.live-caption-speaker {
+  margin-inline-end: 8px;
+  font-size: 11px;
+  font-weight: 550;
+  color: var(--faint);
+}
+.live-toolbar,
+.live-toolbar-start,
+.live-toolbar-end {
+  display: flex;
+  align-items: center;
+}
+.live-toolbar {
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 36px;
+  margin-top: 8px;
+}
+.live-toolbar-start {
+  gap: 4px;
+  min-width: 0;
+}
+.live-toolbar-start .live-wave {
+  margin-inline: 6px 2px;
+}
+.live-toolbar-start .live-status {
+  margin-inline-start: 6px;
+}
+.live-toolbar-end {
+  gap: 8px;
+  flex: none;
+}
+@container (max-width: 400px) {
+  .live-inline time,
+  .live-inline .live-wave {
+    display: none;
+  }
+}
+
+/* —— Under a page: one slim row of the pane's own chrome. —— */
+.live-bar-anchor {
+  position: relative;
+  flex: none;
+  z-index: 9;
+}
+.live-bar {
+  position: relative;
+  container-type: inline-size;
+}
+.live-bar-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 60px;
+  padding: 0 16px 0 18px;
+  background: var(--paper);
+  border-top: 1px solid var(--line);
+}
+.live-bar-identity,
+.live-bar-actions,
+.live-pill {
+  display: flex;
+  align-items: center;
+}
+.live-bar-identity {
+  gap: 12px;
+  min-width: 0;
+}
+.live-bar-name {
+  display: grid;
+  min-width: 0;
+}
+.live-bar-name strong {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+.live-bar-name .live-status {
+  font-size: 11px;
+}
+.live-bar-hint {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--faint);
+}
+.live-bar-actions {
+  gap: 6px;
+  flex: none;
+}
+.live-bar-actions time {
+  margin-inline-end: 6px;
+}
+.live-bar > .live-call-error {
+  position: absolute;
+  inset: auto 16px calc(100% + 10px);
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: var(--overlay);
+  box-shadow: var(--overlay-shadow);
+}
+@container (max-width: 640px) {
+  .live-bar-hint {
+    display: none;
+  }
+}
+@container (max-width: 520px) {
+  .live-bar time,
+  .live-bar .live-wave {
+    display: none;
+  }
+}
+
+/* Subtitles sit on the page's lower edge. They show one sentence and take no input. */
+.live-subtitles {
+  position: absolute;
+  inset: auto 0 100%;
+  display: flex;
+  justify-content: center;
+  padding: 0 24px 18px;
+  pointer-events: none;
+}
+.live-subtitle {
+  max-width: min(720px, 100%);
+  margin: 0;
+  padding: 5px 14px;
+  border-radius: 12px;
+  background: rgb(18 18 18 / 74%);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+  backdrop-filter: blur(14px) saturate(1.4);
+  font-size: 16px;
+  line-height: 1.65;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  text-align: center;
+  text-wrap: balance;
+  color: #fff;
+}
+.live-subtitle-clip {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  max-height: 3.3em;
+  overflow: hidden;
+}
+.live-subtitle[data-speaker='user'] {
+  color: rgb(255 255 255 / 82%);
+  font-weight: 450;
+}
+.live-subtitle-speaker {
+  margin-inline-end: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: rgb(255 255 255 / 56%);
+}
+
+/* —— While reading the conversation or settings: a pill that keeps the call in reach. —— */
+.live-pill-dock {
+  position: absolute;
+  inset: auto 0 14px;
+  transition: inset-inline-end 280ms cubic-bezier(0.22, 1, 0.36, 1);
+  z-index: 8;
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding-inline: 12px;
+  pointer-events: none;
+}
+.workspace-panels:has(> .browser-drawer.is-open) .live-pill-dock {
+  inset-inline-end: var(--browser-drawer-width);
+}
+.live-pill {
+  gap: 8px;
+  padding: 6px 7px 6px 9px;
+  border-radius: 28px;
+  background: var(--overlay);
+  box-shadow: var(--overlay-shadow);
+  pointer-events: auto;
+}
+.live-pill .live-bar-name {
+  margin-inline: 2px 8px;
+  max-width: 190px;
+}
+.live-pill-dock .live-call-error {
+  max-width: 420px;
+  margin: 0;
+  padding: 6px 12px;
+  border-radius: 12px;
+  background: var(--overlay);
+  box-shadow: var(--overlay-shadow);
+  pointer-events: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-word,
+  .live-voice-surface[data-status='connecting'] .live-orb > i:first-of-type {
+    animation: none;
+  }
+}

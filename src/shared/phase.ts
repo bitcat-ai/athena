@@ -11,9 +11,12 @@ import type {
 
 export type RequestKind = 'approval' | 'input' | 'handoff';
 export type TurnOutcome = 'succeeded' | 'blocked' | 'failed' | 'cancelled';
+export type CodexDelivery =
+  | { state: 'submitting' | 'awaiting' | 'responding' }
+  | { state: 'retrying'; timeout?: boolean; attempt?: number; limit?: number };
 export type TurnPhase =
-  | { kind: 'preparing'; tool?: string }
-  | { kind: 'thinking' }
+  | { kind: 'preparing'; tool?: string; submitting?: true }
+  | { kind: 'thinking'; delivery?: CodexDelivery }
   | { kind: 'acting'; tool: string; target?: string }
   | { kind: 'verifying'; checkpoint: string }
   | { kind: 'waiting'; request: RequestKind; requestId: string }
@@ -31,6 +34,8 @@ export type ToolKind = 'read' | 'edit' | 'run' | 'web' | 'click' | 'verify' | 'w
 export type GlyphKind = ToolKind | 'connect' | 'stopping' | 'done' | 'warn' | 'fail' | 'stopped';
 
 const names: Record<string, string> = {
+  workbench_selection_layout: '本机布局预览',
+  imageGeneration: '生成图片',
   workbench_skill_list: '查找业务 Skill',
   workbench_skill_read: '读取业务 Skill',
   workbench_mcp_list: '查看 MCP 服务',
@@ -108,6 +113,7 @@ const nativeNames: Record<string, string> = {
   skill: '使用 Skill',
 };
 const kinds: Record<string, ToolKind> = {
+  workbench_selection_layout: 'edit',
   workbench_skill_list: 'read',
   workbench_skill_read: 'read',
   workbench_feishu_index: 'read',
@@ -324,6 +330,7 @@ export function resolvedText(request: ResolvedRequest): string {
 export function runningPhase(turn: {
   connected: boolean;
   stopping: boolean;
+  delivery?: CodexDelivery;
   preparingTool?: string;
   requests: Array<Pick<PendingAgentRequest, 'kind' | 'request'>>;
   tools: ToolCall[];
@@ -343,6 +350,8 @@ export function runningPhase(turn: {
     return { kind: 'acting', tool: tool.name, ...(target ? { target } : {}) };
   }
   if (turn.preparingTool) return { kind: 'preparing', tool: turn.preparingTool };
+  if (turn.delivery?.state === 'submitting') return { kind: 'preparing', submitting: true };
+  if (turn.delivery) return { kind: 'thinking', delivery: turn.delivery };
   return turn.connected || turn.tools.length ? { kind: 'thinking' } : { kind: 'preparing' };
 }
 /** Remembers when each plan step first left pending so the timeline can order it among actions. */
@@ -472,8 +481,16 @@ const outcomeGlyphs: Record<TurnOutcome, GlyphKind> = {
 export function phaseTitle(phase: TurnPhase, agent: AgentId = 'codex'): string {
   switch (phase.kind) {
     case 'preparing':
+      if (phase.submitting) return '正在发送给 Codex';
       return phase.tool ? `准备${toolTitle(phase.tool, agent)}` : '正在连接';
     case 'thinking':
+      if (phase.delivery?.state === 'awaiting') return '等待 Codex 输出';
+      if (phase.delivery?.state === 'responding') return '正在回复';
+      if (phase.delivery?.state === 'retrying') {
+        const { timeout, attempt, limit } = phase.delivery;
+        const title = timeout ? 'Codex 连接超时，正在重试' : 'Codex 正在重试连接';
+        return attempt && limit ? `${title}（${attempt}/${limit}）` : title;
+      }
       return '思考中';
     case 'acting':
       return (

@@ -1258,7 +1258,7 @@ test('agent insertions are drawn layer by layer and an undone insertion collapse
   await swarmDone(page);
 });
 
-test('choreography stays out of manual edits and reduced motion, and a newer edit replaces the show on its element', async (t) => {
+test('manual edits show a pointer without animating page elements, reduced motion stays still, and newer edits replace earlier shows', async (t) => {
   if (!browser) return t.skip('Browser binary unavailable');
   const { page, find } = await fixture(t);
   await captureOverlayRoot(page);
@@ -1267,7 +1267,9 @@ test('choreography stays out of manual edits and reduced motion, and a newer edi
   const players = () => page.locator('#box').evaluate((el) => el.getAnimations().length);
   await bridge(page, 'edit', { ref: box.ref, styles: { 'background-color': 'rgb(1, 2, 3)' } });
   let swarm = await readSwarm(page);
-  assert.deepEqual([swarm.nodes, swarm.muted, await players()], [0, false, 0]);
+  assert.ok(swarm.cursors > 0);
+  assert.equal(await players(), 0);
+  await swarmDone(page);
   await bridge(page, 'setSource', 'agent');
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await bridge(page, 'edit', { ref: box.ref, styles: { 'background-color': 'rgb(4, 5, 6)' } });
@@ -1299,6 +1301,163 @@ test('choreography stays out of manual edits and reduced motion, and a newer edi
   await page.locator('#heading').evaluate((el) => el.remove());
   await swarmDone(page);
 });
+
+test(
+  'layout changes and their exact undo show pointers for both real siblings, while unchanged layouts and edits stay still',
+  { skip: !executable },
+  async (t) => {
+    const { page, find } = await fixture(t);
+    await captureOverlayRoot(page);
+    await page.locator('#box').evaluate((box) => {
+      box.innerHTML =
+        '<h3 id="pair-head" style="margin:0">标题</h3><p class="intro" style="margin:0">副标题</p>';
+      box.style.height = 'auto';
+    });
+    const heading = await find('#pair-head');
+    await bridge(page, 'setSource', 'agent');
+    const rects = () =>
+      page.locator('#box > *').evaluateAll((els) =>
+        els.map((el) => {
+          const { x, y, width, height } = el.getBoundingClientRect();
+          return { x, y, width, height };
+        }),
+      );
+    const original = await rects();
+    const request = { ref: heading.ref, direction: 'row' };
+    const change = await bridge<EditResult & { applied: boolean; reason?: string }>(
+      page,
+      'layoutPair',
+      request,
+    );
+    assert.ok(change.applied, change.reason ?? 'layout was not applied');
+    const row = await rects();
+    assert.ok(row[1].x >= row[0].x + row[0].width - 1);
+    assert.ok((await readSwarm(page)).cursors >= 2, 'each sibling has a cursor');
+    await swarmDone(page);
+    assert.equal((await bridge<{ already?: boolean }>(page, 'layoutPair', request)).already, true);
+    assert.equal((await readSwarm(page)).nodes, 0);
+    await bridge(page, 'undo', change.editId);
+    assert.deepEqual(await rects(), original);
+    assert.ok((await readSwarm(page)).cursors >= 2);
+    await swarmDone(page);
+    const noop = await bridge<EditResult>(page, 'edit', { ref: heading.ref, text: '标题' });
+    assert.equal((await readSwarm(page)).nodes, 0);
+    await bridge(page, 'undo', noop.editId);
+    assert.equal((await readSwarm(page)).nodes, 0);
+  },
+);
+
+test(
+  'direct manipulation shows a pointer only on a changed commit',
+  { skip: !executable },
+  async (t) => {
+    const { page, find } = await fixture(t);
+    await captureOverlayRoot(page);
+    const { ref } = await find('#box');
+    const preview = await bridge<EditResult>(page, 'previewStyles', {
+      ref,
+      styles: { width: '250px' },
+    });
+    await bridge(page, 'previewStyles', {
+      ref,
+      editId: preview.editId,
+      styles: { width: '200px' },
+    });
+    assert.equal((await readSwarm(page)).nodes, 0);
+    await bridge(page, 'commitStyles', preview.editId);
+    assert.ok((await readSwarm(page)).cursors > 0);
+    assert.equal(
+      await page.locator('#box').evaluate((el) => (el as HTMLElement).style.width),
+      '200px',
+    );
+    await swarmDone(page);
+    const noop = await bridge<EditResult>(page, 'previewStyles', {
+      ref,
+      styles: { width: '200px' },
+    });
+    await bridge(page, 'commitStyles', noop.editId);
+    assert.equal((await readSwarm(page)).nodes, 0);
+  },
+);
+
+test(
+  'native form commands show one cursor after typing, while identical values, failed actions and manual typing stay still',
+  { skip: !executable },
+  async (t) => {
+    const { page, find } = await fixture(t);
+    await captureOverlayRoot(page);
+    await page.locator('#box').evaluate((el) => {
+      el.innerHTML =
+        '<input id="city" value="old"><select id="pick"><option>one</option><option>two</option></select>';
+    });
+    const city = page.locator('#city'),
+      pick = await find('#pick'),
+      cityRef = await find('#city');
+    await city.fill('manual');
+    assert.equal((await readSwarm(page)).cursors, 0);
+    await bridge(page, 'setSource', 'agent');
+    await bridge(page, 'watchScript', 'fields');
+    await city.pressSequentially('abc');
+    assert.equal(
+      (await readSwarm(page)).cursors,
+      0,
+      'typing is batched, with no drawing between keys',
+    );
+    assert.equal(await bridge(page, 'replayScript', true, true), 'targets');
+    assert.equal((await readSwarm(page)).cursors, 1);
+    assert.equal(await city.inputValue(), 'manualabc');
+    await swarmDone(page);
+    await bridge(page, 'watchScript', 'fields');
+    await city.fill('manualabc');
+    assert.equal(await bridge(page, 'replayScript', true, true), false);
+    await bridge(page, 'watchScript', 'fields');
+    await city.fill('interrupted');
+    assert.equal(await bridge(page, 'replayScript', false, true), false);
+    assert.equal((await readSwarm(page)).nodes, 0);
+    await bridge(page, 'select', pick.ref, 'two');
+    assert.equal((await readSwarm(page)).cursors, 1);
+    await swarmDone(page);
+    await bridge(page, 'select', pick.ref, 'two');
+    assert.equal((await readSwarm(page)).nodes, 0);
+    await bridge(page, 'focus', cityRef.ref);
+    await page.keyboard.insertText('completed');
+    await bridge(page, 'replayScript');
+    assert.equal((await readSwarm(page)).cursors, 1);
+    await swarmDone(page);
+    await bridge(page, 'watchScript', 'fields');
+    await bridge(page, 'setSource', 'human');
+    await city.fill('takeover');
+    assert.equal(await bridge(page, 'replayScript', true, true), false);
+    assert.equal((await readSwarm(page)).nodes, 0);
+  },
+);
+
+test(
+  'stylesheet changes use a local pointer when there is no snapshot and skipped declarations have no motion',
+  { skip: !executable },
+  async (t) => {
+    const { page } = await fixture(t);
+    await captureOverlayRoot(page);
+    const first = await bridge<EditResult>(page, 'restyle', { css: '#box{width:280px}' });
+    assert.ok((await readSwarm(page)).cursors > 0, 'manual stylesheet change');
+    assert.equal(await page.locator('#box').evaluate((el) => getComputedStyle(el).width), '280px');
+    await swarmDone(page);
+    const duplicate = await bridge<EditResult>(page, 'restyle', { css: '#box{width:280px}' });
+    assert.equal((await readSwarm(page)).cursors, 0);
+    await bridge(page, 'undo', first.editId);
+    assert.equal(
+      (await readSwarm(page)).cursors,
+      0,
+      'the newer sheet still provides the same width',
+    );
+    await bridge(page, 'undo', duplicate.editId);
+    assert.equal(await page.locator('#box').evaluate((el) => getComputedStyle(el).width), '300px');
+    assert.ok(
+      (await readSwarm(page)).cursors > 0,
+      'removing the last matching rule changed the layout',
+    );
+  },
+);
 
 test('agent edits out of view are scrolled to and played, and changes without a box play on their container', async (t) => {
   if (!browser) return t.skip('Browser binary unavailable');
@@ -1557,8 +1716,9 @@ test('agent page scripts are uncovered part by part: the view keeps its look whi
   assert.equal(
     await page.evaluate(() => (globalThis as any).__replayed),
     true,
-    'the replay answers once the show is over',
+    'the replay reports that it started',
   );
+  await swarmDone(page);
   assert.equal((await readSwarm(page)).nodes, 0);
   assert.deepEqual(await readCover(page), { kept: 0, sheets: 0, named: 'none' });
   assert.notEqual(await shot(), before, 'the view ends on what the script made');
@@ -1767,6 +1927,7 @@ test('what an agent script changes down the page is held back and drawn from the
   const middle = await begin();
   assert.deepEqual([middle.scroll, middle.cursors > 4], [from + 240, true]);
   assert.equal(await page.evaluate(() => (globalThis as any).__replayed), true);
+  await swarmDone(page);
   assert.deepEqual(
     await page.evaluate(() => {
       const seen = (globalThis as any).__seen as number[];
@@ -1782,6 +1943,37 @@ test('what an agent script changes down the page is held back and drawn from the
   );
   assert.equal(await page.evaluate(() => scrollY), middle.scroll);
   await swarmDone(page);
+});
+
+test('lightweight script feedback follows CSSOM changes and ignores reads and writes with no visual effect', async (t) => {
+  if (!browser) return t.skip('Browser binary unavailable');
+  const { page } = await fixture(t);
+  await captureOverlayRoot(page);
+  await bridge(page, 'setSource', 'agent');
+  assert.equal(await bridge(page, 'watchScript', true), true);
+  await page.evaluate(() => {
+    document.styleSheets[0].insertRule('#heading{background-color:rgb(119, 140, 167)}');
+  });
+  assert.equal(await bridge(page, 'replayScript', true, true), 'targets');
+  assert.equal(await page.locator('h1').evaluate((el) => getComputedStyle(el).backgroundColor), 'rgb(119, 140, 167)');
+  assert.ok((await readSwarm(page)).cursors > 0);
+  await bridge(page, 'stopPresentation');
+  assert.equal((await readSwarm(page)).nodes, 0);
+
+  await bridge(page, 'watchScript', true);
+  await page.evaluate(() => {
+    document.body.dataset.audit = 'read';
+    document.querySelector('h1')!.firstChild!.nodeValue = '普通标题';
+  });
+  assert.equal(await bridge(page, 'replayScript'), false);
+  assert.equal((await readSwarm(page)).nodes, 0);
+
+  await bridge(page, 'watchScript', true);
+  await page.evaluate(() => { document.querySelector('h1')!.textContent = 'Committed'; });
+  assert.equal(await bridge(page, 'replayScript'), true);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await swarmDone(page);
+  assert.equal(await page.locator('h1').textContent(), 'Committed');
 });
 
 test('scripts that change nothing in view, reduced motion, captures and someone using the page leave it as the script made it', async (t) => {
@@ -2353,5 +2545,165 @@ test(
     assert.ok(tight.length <= 1502, String(tight.length));
     assert.match(tight, /… \d+ children|… \+\d+ more/);
     assert.match(tight, /^viewport 1200x1000/);
+  },
+);
+
+test(
+  'two named siblings move together on the real start page; the form retains its row, the exact sheet can be undone, and replaced nodes lose it',
+  { skip: !executable },
+  async (t) => {
+    const { page } = await fixture(t);
+    const { readFile } = await import('node:fs/promises');
+    const html = await readFile('resources/demo.html', 'utf8');
+    await page.goto('data:text/html;charset=utf-8,' + encodeURIComponent(html));
+    const heading = (await bridge<QueryResult>(page, 'query', { selector: '#headline' }))
+      .elements[0];
+    const subtitle = (await bridge<QueryResult>(page, 'query', { selector: '.intro' })).elements[0];
+    const positions = () =>
+      page.evaluate(() =>
+        ['#headline', '.intro', '.try'].map((s) => {
+          const r = document.querySelector(s)!.getBoundingClientRect();
+          return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width };
+        }),
+      );
+    const before = await positions();
+    const start = performance.now();
+    const result = await bridge<{ applied: boolean; editId: string; reason?: string }>(
+      page,
+      'layoutPair',
+      { ref: heading.ref, direction: 'row' },
+    );
+    console.log('verified local layout round trip ms:', Math.round(performance.now() - start));
+    assert.equal(result.applied, true, result.reason ?? 'layout was not applied');
+    assert.equal(await bridge(page, 'layoutPairActive', result.editId), true);
+    assert.deepEqual(await bridge(page, 'layoutPair', { ref: heading.ref, direction: 'row' }), {
+      applied: false,
+      already: true,
+      direction: 'row',
+    });
+    const [h, p, form] = await positions();
+    assert(h.right <= p.left + 1 && Math.min(h.bottom, p.bottom) > Math.max(h.top, p.top));
+    assert(
+      form.top >= Math.max(h.bottom, p.bottom) - 1 && Math.abs(form.width - before[2].width) <= 1,
+    );
+    const vertical = await bridge<EditResult>(page, 'layoutPair', {
+      ref: subtitle.ref,
+      otherRef: heading.ref,
+      direction: 'column',
+    });
+    assert(vertical.editId, JSON.stringify(vertical));
+    assert((await positions())[0].bottom <= (await positions())[1].top + 1);
+    await bridge(page, 'undo', vertical.editId);
+    assert.equal((await positions())[0].right, h.right);
+    await bridge(page, 'undo', result.editId);
+    assert.deepEqual(await positions(), before);
+    const again = await bridge<EditResult>(page, 'layoutPair', {
+      ref: heading.ref,
+      direction: 'row',
+    });
+    assert(again.editId);
+    await page.evaluate(() => {
+      const s = document.querySelector('.intro')!;
+      s.replaceWith(s.cloneNode(true));
+    });
+    assert.equal(await bridge(page, 'layoutPairActive', again.editId), false);
+    assert.deepEqual(await positions(), before);
+    await assert.rejects(bridge(page, 'undo', again.editId), /No active edit/);
+    for (const width of [360, 620]) {
+      await page.setViewportSize({ width, height: 780 });
+      const original = await positions();
+      const fitted = await bridge<EditResult>(page, 'layoutPair', {
+        ref: heading.ref,
+        direction: 'row',
+      });
+      assert.ok(fitted.editId, `width ${width}: ${JSON.stringify(fitted)}`);
+      const [title, sub, form] = await positions();
+      assert(
+        title.right <= sub.left + 1 &&
+          Math.min(title.bottom, sub.bottom) > Math.max(title.top, sub.top),
+      );
+      assert(
+        form.top >= Math.max(title.bottom, sub.bottom) - 1 &&
+          Math.abs(form.width - original[2].width) <= 1,
+      );
+      await bridge(page, 'undo', fitted.editId);
+    }
+  },
+);
+
+test(
+  'ambiguous, private, nonadjacent and overflowing layout pairs are refused without changing the DOM or keeping a sheet',
+  { skip: !executable },
+  async (t) => {
+    const { page } = await fixture(t);
+    const show = async (body: string) => {
+      await page.goto(
+        'data:text/html;charset=utf-8,' +
+          encodeURIComponent('<main style="width:320px"><h2>标题</h2>' + body + '</main>'),
+      );
+      return (await bridge<QueryResult>(page, 'query', { selector: 'h2' })).elements[0];
+    };
+    for (const body of [
+      '<p>甲</p><p>乙</p>',
+      '<p class="intro" data-private>私有</p>',
+      '<button>其它</button><p class="intro">副标题</p>',
+      '<p class="intro" style="width:500px;white-space:nowrap">超出父容器宽度的固定尺寸副标题</p>',
+    ]) {
+      const heading = await show(body);
+      const before = await page.locator('main').innerHTML();
+      assert.equal(
+        (
+          await bridge<{ applied: boolean }>(page, 'layoutPair', {
+            ref: heading.ref,
+            direction: 'row',
+          })
+        ).applied,
+        false,
+      );
+      assert.equal(await page.locator('main').innerHTML(), before);
+      assert.equal(await page.evaluate(() => document.adoptedStyleSheets.length), 0);
+    }
+  },
+);
+
+test(
+  'a local row preview refuses newly clipped text in either the parent or a target',
+  { skip: !executable },
+  async (t) => {
+    const { page } = await fixture(t);
+    for (const [owner, overflow] of [
+      ['main', 'hidden'],
+      ['h2', 'clip'],
+    ]) {
+      const css =
+        'main{width:400px} h2,p{font:16px/20px Arial;margin:0} ' +
+        owner +
+        '{height:' +
+        (owner === 'main' ? 60 : 40) +
+        'px;overflow-y:' +
+        overflow +
+        '}';
+      await page.goto(
+        'data:text/html;charset=utf-8,' +
+          encodeURIComponent(
+            '<style>' +
+              css +
+              '</style><main><h2>' +
+              'word '.repeat(20) +
+              '</h2><p class="intro">Subtitle</p></main>',
+          ),
+      );
+      const heading = (await bridge<QueryResult>(page, 'query', { selector: 'h2' })).elements[0];
+      const clipped = () => page.locator(owner).evaluate((el) => el.scrollHeight - el.clientHeight);
+      assert.equal(await clipped(), 0);
+      const result = await bridge<{ applied: boolean; reason?: string }>(page, 'layoutPair', {
+        ref: heading.ref,
+        direction: 'row',
+      });
+      assert.equal(result.applied, false, owner + ' unexpectedly applied');
+      assert.equal(result.reason, 'geometry_not_verified');
+      assert.equal(await clipped(), 0);
+      assert.equal(await page.evaluate(() => document.adoptedStyleSheets.length), 0);
+    }
   },
 );

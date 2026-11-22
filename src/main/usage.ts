@@ -142,7 +142,7 @@ export class UsageStore {
     const known = new Set(this.data.records.map((record) => record.id));
     for (const conversation of conversations)
       for (const message of conversation.messages) {
-        if (message.role !== 'assistant' || known.has(message.id)) continue;
+        if (message.role !== 'assistant' || message.localPreview || known.has(message.id)) continue;
         this.data.records.push({
           id: message.id,
           agent: 'unknown',

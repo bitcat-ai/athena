@@ -9,11 +9,13 @@ export function SharedSurface({
   connection,
   frameSource,
   enabled,
+  onReady,
   onError,
 }: {
   connection: ShareConnection;
   frameSource: { subscribe(callback: (frame: BrowserFrame) => void): () => void };
   enabled: boolean;
+  onReady(ready: boolean): void;
   onError(message: string): void;
 }) {
   const image = useRef<HTMLImageElement>(null);
@@ -28,19 +30,16 @@ export function SharedSurface({
   const duplicate = useRef({ text: '', at: 0 });
   const current = useRef({ enabled, onError });
   current.current = { enabled, onError };
-  const matchesViewport = (value: BrowserFrame | undefined) => {
-    const expected = connection.browser?.viewport;
-    return Boolean(
-      value &&
-      (!expected ||
-        (expected.epoch === value.epoch &&
-          expected.width === value.width &&
-          expected.height === value.height)),
-    );
-  };
+  const matchesViewport = (value: BrowserFrame | undefined) =>
+    !!value && connection.frameIsCurrent(value);
+  useEffect(() => () => onReady(false), [onReady]);
   useEffect(() => {
-    setFrameReady(matchesViewport(displayed.current));
+    const ready = matchesViewport(displayed.current);
+    setFrameReady(ready);
+    onReady(ready);
   }, [
+    onReady,
+    connection.browser?.loading,
     connection.browser?.viewport?.epoch,
     connection.browser?.viewport?.width,
     connection.browser?.viewport?.height,
@@ -149,13 +148,18 @@ export function SharedSurface({
                 return;
               if (Math.abs(node.naturalWidth - (node.naturalHeight * next.width) / next.height) > 2)
                 return;
+              if (!connection.acknowledge(next)) return;
               displayed.current = next;
-              setFrameReady(matchesViewport(next));
+              const ready = matchesViewport(next);
+              setFrameReady(ready);
+              onReady(ready);
               node.dataset.sequence = String(next.sequence);
               node.dataset.epoch = String(next.epoch);
-              connection.acknowledge(next);
             })
-            .catch(() => onError('画面解码失败，请重新连接'));
+            .catch(() => {
+              if (node === image.current && connection.receivedFrame === next)
+                onError('画面解码失败，请重新连接');
+            });
         }}
       />
       {!frameReady && (

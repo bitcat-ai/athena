@@ -31,6 +31,9 @@ async function fixture(t: any) {
       canGoForward: false,
     }),
     async setSharedTab() {},
+    sharedNavigation(url: string) {
+      if (new URL(url).origin !== 'https://example.test') throw new Error('共享仅限当前站点');
+    },
     getSurfaceEpoch: () => browser.epoch,
     getSurfaceViewport: () => ({ width: 800, height: 600, tabId: 'shared', loading: false }),
     withActor(a: any, guard: any, run: any) {
@@ -207,6 +210,14 @@ test('each slow guest holds at most one frame in flight and only the newest pend
   const w = await c.until((m) => m.type === 'welcome');
   await f.runtime.approve(w.participantId, 'editor');
   await f.runtime.changeControl(w.participantId);
+  assert.match(
+    (await c.command('browser:navigate', { url: 'https://other.example/' })).error,
+    /共享仅限当前站点/,
+  );
+  assert.match(
+    (await c.command('browser:navigate', { url: 'https://example.test/page' })).error,
+    /过期/,
+  );
   for (let i = 1; i <= 100; i++) f.runtime.onFrame(f.frame(i));
   await c.until((m) => m.type === 'frame');
   assert.equal(c.messages.filter((m) => m.type === 'frame').length, 1);

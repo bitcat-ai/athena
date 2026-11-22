@@ -57,6 +57,7 @@ require('node:readline').createInterface({input:process.stdin}).on('line', line 
  const reply = data => out({type:'response',id:r.id,command:r.type,success:true,data});
  if(r.type==='get_state') {
   out({type:'extension_ui_request',id:'gate',method:'notify',message:'athena-permissions-v1'});
+  out({type:'extension_ui_request',id:'tools',method:'notify',message:'athena-browser-tools-v1'});
   return reply({sessionId:sid,isStreaming:false,pendingMessageCount:0,model:{id:'model',provider:'fixture'}});
  }
  if(r.type==='get_available_models')return reply({models:[{id:'model',provider:'fixture'}]});
@@ -141,7 +142,7 @@ require('node:readline').createInterface({input:process.stdin}).on('line', line 
   const prompts = async () => (await calls()).filter((item) => item.type === 'prompt');
   const composer = page.getByRole('textbox', { name: '发送给 Agent 的任务', exact: true });
   await expect(page.locator('#composer-agent-name')).toHaveText('Pi');
-  const option = page.getByRole('menuitem', { name: /review/ });
+  const option = page.locator('[role=menuitem][data-key="provider:review"]');
   // A slash inside a URL or a path is not a Skill reference.
   for (const text of ['https://example.com/re', '/tmp/file']) {
     await composer.fill(text);
@@ -158,7 +159,8 @@ require('node:readline').createInterface({input:process.stdin}).on('line', line 
   await expect(composer.locator('.composer-skill-reference')).toHaveText('/review');
   await expect(option).toHaveCount(0);
   assert.equal((await prompts()).length, 0, 'choosing a Skill must not send the task');
-  await composer.fill('/');
+  await composer.fill('/review');
+  await expect(option).toBeVisible();
   await composer.press('Enter');
   await expect(composer.locator('.composer-skill-reference')).toHaveText('/review');
   await page.keyboard.insertText('Inspect changes');
@@ -166,7 +168,10 @@ require('node:readline').createInterface({input:process.stdin}).on('line', line 
   await expect.poll(async () => (await prompts()).length).toBe(1);
   await expect.poll(async () => (await conversation()).messages.at(-1)?.status).toBe('done');
   await expect(composer).toHaveText('');
-  assert.equal((await prompts())[0].message, '/skill:review\n\nInspect changes');
+  assert.equal(
+    (await prompts())[0].message?.split('\n\n<task_context>')[0],
+    '/skill:review\n\nInspect changes',
+  );
   const completed = await conversation();
   await expect(page.locator('.user-message-text').first()).toHaveText('/review Inspect changes');
   assert.equal(completed.messages[0].text, 'Inspect changes');
@@ -212,16 +217,18 @@ require('node:readline').createInterface({input:process.stdin}).on('line', line 
     await expect(composer).toContainText(draft);
   }
 
-  // A workspace Skill is picked in the toolbar. It is sent by name, without provider metadata.
+  // A workspace Skill opens from the same attachment menu and is visible in the draft.
   assert.ok((await snapshot()).skills?.some((item) => item.name === 'athena-fixture-notes'));
   await composer.fill('');
-  await page.getByRole('button', { name: '选择任务 Skill', exact: true }).click();
-  await page.getByRole('menuitemcheckbox', { name: /^athena-fixture-notes/ }).click();
-  await page.keyboard.press('Escape');
-  await expect(
-    page.getByRole('button', { name: '任务 Skill：athena-fixture-notes', exact: true }),
-  ).toBeVisible();
-  await composer.fill('Draft the notes');
+  await page.getByRole('button', { name: '添加附件与网页上下文' }).click();
+  await page.getByRole('menuitem', { name: '选择任务 Skill' }).click();
+  await expect(composer).toBeFocused();
+  await expect(composer).toHaveText('$');
+  await page.keyboard.insertText('athena-fixture');
+  await expect(composer).toHaveText('$athena-fixture');
+  await page.locator('[role=menuitem][data-key="local:athena-fixture-notes"]').click();
+  await expect(composer.locator('.composer-skill-reference')).toHaveText('$athena-fixture-notes');
+  await page.keyboard.insertText('Draft the notes');
   await composer.press('Enter');
   await expect.poll(async () => (await prompts()).length).toBe(2);
   await expect.poll(async () => (await conversation()).messages.at(-1)?.status).toBe('done');
@@ -259,8 +266,81 @@ require('node:readline').createInterface({input:process.stdin}).on('line', line 
   assert.deepEqual((await prompts()).at(-1)!.images, [
     { type: 'image', data: testImage.data, mimeType: testImage.mimeType },
   ]);
+  const fileName = 'client brief.md';
+  const filePath = path.join(workspace, fileName);
+  await writeFile(filePath, 'ATHENA-FILE-SNAPSHOT-17');
+  await composer.fill('@client');
+  const suggestion = page.getByRole('menuitem', { name: /client brief\.md/ });
+  await expect(suggestion).toBeVisible();
+  await composer.press('Enter');
+  await expect(page.getByRole('button', { name: '移除文件 ' + fileName })).toBeVisible();
+  await expect(composer).toHaveText('');
+  await page.getByRole('button', { name: '移除文件 ' + fileName }).click();
+  await application.evaluate(({ dialog }, filePath) => {
+    // The native dialog selection is mocked; the production host resolves and reads that file.
+    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [filePath] });
+  }, filePath);
+  await page.getByRole('button', { name: '添加附件与网页上下文' }).click();
+  await page.getByRole('menuitem', { name: '添加工作区文件' }).click();
+  await expect(page.getByRole('button', { name: '移除文件 ' + fileName })).toBeVisible();
+  await page.getByRole('button', { name: '移除文件 ' + fileName }).click();
+  // Playwright sets the real disk file on a native input. It keeps its Electron file identity during drop.
+  const dropInput = await page.evaluateHandle(() => {
+    const el = document.createElement('input');
+    el.type = 'file';
+    el.hidden = true;
+    document.body.append(el);
+    return el;
+  });
+  await dropInput.setInputFiles(filePath);
+  await dropInput.evaluate((el) => {
+    const data = new DataTransfer();
+    data.items.add(el.files![0]);
+    document
+      .querySelector('.composer')!
+      .dispatchEvent(
+        new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: data }),
+      );
+    el.remove();
+  });
+  await expect(page.getByRole('button', { name: '移除文件 ' + fileName })).toBeVisible();
+  await page.getByRole('button', { name: '添加附件与网页上下文' }).click();
+  const chooser = page.waitForEvent('filechooser');
+  await page.getByRole('menuitem', { name: '添加图片' }).click();
+  await (
+    await chooser
+  ).setFiles({
+    name: 'example.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from(testImage.data, 'base64'),
+  });
+  await expect(page.getByRole('button', { name: '移除图片 example.png' })).toBeVisible();
+  await composer.fill('$rev');
+  await expect(option).toBeVisible();
+  await composer.press('Enter');
+  await expect(composer.locator('.composer-skill-reference')).toHaveText('$review');
+  await page.keyboard.insertText('Check attached files');
+  const evidence = path.join(root, 'test-results', 'composer-attachments');
+  await mkdir(evidence, { recursive: true });
+  await page.setViewportSize({ width: 760, height: 730 });
+  const shell = page.locator('.composer [data-slot="prompt-input-shell"]');
+  await expect(shell).toBeVisible();
+  assert(await shell.evaluate((el) => el.scrollWidth <= el.clientWidth + 1));
+  await page.screenshot({ path: path.join(evidence, 'narrow.png'), animations: 'disabled' });
+  await shell.screenshot({path:path.join(evidence,'composer.png'),animations:'disabled'});
+  await composer.press('Enter');
+  await expect.poll(async () => (await prompts()).length).toBe(4);
+  const combined = (await prompts()).at(-1)!;
+  assert.match(combined.message!, /ATHENA-FILE-SNAPSHOT-17/);
+  assert.match(combined.message!, /client brief\.md/);
+  assert.deepEqual(combined.images, [
+    { type: 'image', data: testImage.data, mimeType: testImage.mimeType },
+  ]);
+  const attached = (await conversation()).messages.find((m) => m.files?.includes(fileName));
+  assert.ok(attached);
+  await expect(page.getByLabel('工作区文件', { exact: true })).toContainText(fileName);
   console.log(
-    'PASS: actual renderer skill selection/send (CLI reference and workspace pick) -> preload IPC -> production Pi adapter -> scripted CLI; native prompt, degraded usage, stale provider/path rejection before acknowledgement, image and Skill draft preservation, and combined submission. No model calls. Pi RPC provides no content hash; no content-change validation claimed.',
+    'PASS: slash and dollar Skills, @ search, file dialog, native file drop, image chooser, draft removal, and width-760 layout. The production Pi adapter delivered the selected Skill, file contents and image bytes to the scripted RPC server. No model calls.',
   );
 } finally {
   await application?.close();

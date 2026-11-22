@@ -12,14 +12,19 @@ Athena（仓库名 `athena`）的仓库公开可见，项目代码保持 `UNLICE
 | Google Chrome    | 用户自行安装，Athena 不下载、不分发、不修改；以独立进程和 Athena 专用 profile 启动，页面帧流嵌入 Athena 同窗口的右侧面板                                                        | [Google Chrome 服务条款](https://www.google.com/chrome/terms/)；[Chromium LICENSE](https://chromium.googlesource.com/chromium/src/+/main/LICENSE)                             |
 | OpenAI Codex CLI | 用户自行安装并登录，本应用通过其 `app-server` 接口交互                                                                                                                          | [Codex LICENSE：Apache-2.0](https://github.com/openai/codex/blob/main/LICENSE)；[NOTICE](https://github.com/openai/codex/blob/main/NOTICE)                                    |
 
+Kimi Code CLI 由用户自行安装，Athena 通过 ACP stdio 使用。许可见 [Kimi Code MIT 许可证](https://github.com/MoonshotAI/kimi-code/blob/f67e639/LICENSE)。
+
 Electron 包含 Chromium 及其他第三方组件，各组件可能采用不同许可证。保留官方运行时分发随附的完整 LICENSE、NOTICE 和 Chromium 第三方声明；Chromium 本身的许可见 [Chromium LICENSE](https://chromium.googlesource.com/chromium/src/+/main/LICENSE)。
 
 本项目未修改 agent-browser，也没有改变其许可证。若今后把该二进制随安装包分发，需同时附带上游 LICENSE 与 NOTICE；独立进程架构不应被解读为对任何重分发、修改或组合分发义务的豁免，对外分发前需按采用的具体版本和分发形式核对上游条款。
 
 ## 直接运行依赖
 
+原生会话窗口使用 xterm.js 6.0.0、FitAddon 0.11.0 与 node-pty 1.1.0。macOS 发行包含对应架构的 PTY 绑定、启动辅助程序及上游许可。[xterm.js 许可](resources/licenses/xterm-LICENSE.txt) · [FitAddon 许可](resources/licenses/xterm-addon-fit-LICENSE.txt) · [node-pty 许可](resources/licenses/node-pty-LICENSE.txt)
+
 | 组件                                 | 核查版本 | 许可与来源                                                                                                              |
 | ------------------------------------ | -------- | ----------------------------------------------------------------------------------------------------------------------- |
+| smol-toml | 1.9.1 | [BSD-3-Clause](resources/licenses/smol-toml-LICENSE.txt)，用于读取和写入 Kimi 的结构化会话配置 |
 | Electron                             | 45.1.0   | [MIT](https://github.com/electron/electron/blob/main/LICENSE)；其内含 Chromium/Node.js 的声明另行保留                   |
 | `@larksuiteoapi/node-sdk`            | 1.76.0   | [MIT](https://github.com/larksuite/node-sdk/blob/main/LICENSE)                                                          |
 | `@a2ui/react`、`@a2ui/web_core`      | 0.14.0   | [Apache-2.0](https://github.com/a2ui-project/a2ui/blob/main/LICENSE)；采用 v0.9.1 协议，Athena 自定义受信任控件 catalog |

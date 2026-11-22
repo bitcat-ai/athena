@@ -98,6 +98,9 @@ export class SharingRuntime {
   get active(): boolean {
     return this.state.active;
   }
+  get managesPage(): boolean {
+    return this.active || this.starting || Boolean(this.stopping);
+  }
   getState(): ShareState {
     return structuredClone({
       ...this.state,
@@ -373,7 +376,7 @@ export class SharingRuntime {
     this.inviteSecret = token();
     this.inviteExpires = Date.now() + 10 * 60_000;
     this.state.invite = {
-      url: `${this.address}/#invite=${this.inviteSecret}`,
+      url: `${this.address}/#invite=${this.inviteSecret}&fingerprint=${this.state.fingerprint!.replace(/:/g, '')}`,
       expiresAt: this.inviteExpires,
     };
     this.changed();
@@ -588,6 +591,9 @@ export class SharingRuntime {
     if (!SHARED_PAGE_ACTIONS.has(message.action)) throw new Error('此操作不在共享页面权限内');
     const guard = this.guard(peer.participant.id);
     guard();
+    if (message.generation !== this.state.generation) throw new Error('控制权已变化');
+    if (message.action === 'browser:navigate')
+      this.options.browser.sharedNavigation(normalizeBrowserUrl(message.payload?.url), peer.participant.id);
     const frame = peer.acknowledged;
     const viewport = this.options.browser.getSurfaceViewport();
     if (
@@ -602,7 +608,6 @@ export class SharingRuntime {
       viewport.loading
     )
       throw new Error('画面已过期，请等待新画面后重试');
-    if (message.generation !== this.state.generation) throw new Error('控制权已变化');
     if (message.action === 'browser:input' && message.payload?.type === 'resize')
       throw new Error('页面尺寸由主持人设置');
     const epoch = frame.epoch;

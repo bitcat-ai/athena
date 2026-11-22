@@ -19,6 +19,7 @@ export const browserGuideCss = [
   '.gd-head{display:flex;align-items:center;gap:6px;margin:0 0 6px;font-size:12px;line-height:18px;color:#6b7080;white-space:nowrap}',
   '.gd-head b{font-weight:600;color:#7e8dfa}.gd-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}.gd-count{font-style:normal;font-variant-numeric:tabular-nums}',
   '.gd-note{margin:0;font-size:14px;line-height:21px;color:#16181d;overflow-wrap:anywhere;white-space:pre-line}',
+  '.gd[data-practice] .gd-note{max-height:36vh;overflow:auto}',
   '.gd-hint{margin:4px 0 0;font-size:12px;line-height:18px;color:#6b7080}.gd-hint:empty{display:none}',
   '.gd-row{display:flex;flex-wrap:nowrap;align-items:center;gap:6px;margin:12px 0 0}.gd-gap{flex:1}',
   '.gd-row button{all:unset;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;height:30px;padding:0 12px;border-radius:15px;background:#f1f2f5;color:#16181d;font:500 12px/1 system-ui,-apple-system,"PingFang SC",sans-serif;white-space:nowrap;cursor:pointer}',
@@ -78,7 +79,29 @@ export const browserGuideSource = String.raw`
       }
       return found;
     }
+    function locatePractice(step) {
+      const p=step.practice;
+      if(location.origin!==p.origin) return {reason:'wrong_origin'};
+      if(location.pathname!==p.pathname) return {reason:'wrong_page'};
+      if(!step.text && !step.selector) return {none:true};
+      const needle=norm(step.text), scan=env.scan();
+      if(scan.truncated) return {reason:'ambiguous_target'};
+      const candidates=scan.found.filter(el=>{
+        if(el.localName!==p.tag || env.sensitive(el)) return false;
+        if(needle && match(el,needle)!==2) return false;
+        if(!needle && (!step.selector || !el.matches(step.selector))) return false;
+        if(!env.visible(el)) return false;
+        const row=el.closest('tr,[role=row],li');
+        if(!row) return !p.inRow;
+        const key=norm(p.object);
+        const heading=norm(env.scopeText(el));
+        return heading===key || heading.split(/[^\p{L}\p{N}_-]+/u).includes(key);
+      });
+      if(candidates.length===1) return {el:candidates[0]};
+      return {reason:candidates.length ? 'ambiguous_target' : 'not_found'};
+    }
     function locate(step) {
+      if(step.practice) return locatePractice(step);
       if(step.ref) {
         try { const el=env.resolve(step.ref); return env.visible(el) ? {el} : {reason:'hidden'}; }
         catch { return {reason:'stale_ref'}; }
@@ -146,6 +169,7 @@ export const browserGuideSource = String.raw`
     }
     function fill() {
       layer.dataset.action=state.action;
+      layer.toggleAttribute('data-practice',!!state.practice);
       delete layer.dataset.busy;delete layer.dataset.bye;
       parts.title.textContent=state.title;
       parts.count.textContent=state.total>1 ? (state.index+1)+' / '+state.total : '';
@@ -177,6 +201,10 @@ export const browserGuideSource = String.raw`
       const root=env.root();
       if(layer.getRootNode()!==root) root.appendChild(layer);
       if(target && !target.isConnected) {target=null;fill();}
+      if(target && state.practice && performance.now()-seekAt>400) {
+        seekAt=performance.now();
+        if(locate(state).el!==target) {target=null;fill();}
+      }
       if(!target && state.wanted && !state.busy && performance.now()-seekAt>300) {
         seekAt=performance.now();
         const hit=locate(state);
@@ -217,6 +245,11 @@ export const browserGuideSource = String.raw`
       hold();
     }
     function act(name) {
+      if(name==='next' && state.practice && state.wanted && (!target || locate(state).el!==target)) return;
+      if(name==='next' && state.practice?.checked!==undefined && target?.checked!==state.practice.checked) {
+        parts.hint.textContent=state.practice.checked ? '请先勾选这个选项' : '请先取消勾选这个选项';
+        return;
+      }
       if(name==='next') advance(state.action==='click' ? 'skip' : 'button');
       else if(name==='back' || name==='handover') {emit(name);hold();}
       else if(name==='end') {emit('end');clear();}
@@ -235,10 +268,11 @@ export const browserGuideSource = String.raw`
         return;
       }
       if(!target || state.busy || state.action!=='click' || !event.isTrusted) return;
+      if(state.practice && locate(state).el!==target) {press=null;return;}
       const inside=path.includes(target);
       if(type==='click' && inside) {press=null;advance('click');return;}
       if(type==='pointerdown') press=inside ? target.getBoundingClientRect() : null;
-      if(type==='pointerup' && press) {
+      if(type==='pointerup' && press && !state.practice) {
         // Pages that redraw the element while it is pressed never deliver the click to it.
         const rect=press, token=state.token;press=null;
         if(event.clientX<rect.left || event.clientX>rect.right || event.clientY<rect.top || event.clientY>rect.bottom) return;
@@ -247,15 +281,15 @@ export const browserGuideSource = String.raw`
     },true);
     window.addEventListener('change',event=>{
       if(!state || state.busy || !target || state.action!=='input' || !event.isTrusted) return;
-      if(event.composedPath().includes(target)) advance('input');
+      if(event.composedPath().includes(target) && (!state.practice || locate(state).el===target)) advance('input');
     },true);
     function show(step) {
       if(!step || typeof step!=='object' || typeof step.token!=='string') throw new Error('Invalid guide step');
       const hit=locate(step);
       if(hit.reason && step.require!==false) return {shown:false,reason:hit.reason};
       clearTimeout(busyTimer);clearTimeout(byeTimer);
-      state={token:step.token,index:step.index|0,total:step.total|0,title:String(step.title || '').slice(0,80),note:String(step.note || '').slice(0,280),
-        action:step.action==='click' || step.action==='input' ? step.action : 'look',selector:step.selector,text:step.text,ref:step.ref,
+      state={token:step.token,index:step.index|0,total:step.total|0,title:String(step.title || '').slice(0,80),note:String(step.note || '').slice(0,step.practice ? 1600 : 280),
+        action:step.action==='click' || step.action==='input' ? step.action : 'look',selector:step.selector,text:step.text,ref:step.ref,practice:step.practice,
         back:!!step.back,handover:!!step.handover,wanted:!hit.none,busy:false};
       target=hit.el ? aim(hit.el,state.action) : null;
       press=null;seekAt=performance.now();

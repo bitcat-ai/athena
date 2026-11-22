@@ -17,6 +17,7 @@ export default function SharedPage() {
   const [state, setState] = useState<ShareState>();
   const [browser, setBrowser] = useState<BrowserState>();
   const [status, setStatus] = useState('');
+  const [frameReady, setFrameReady] = useState(false);
   const [error, setError] = useState('');
   const [url, setUrl] = useState('');
   const [steps, setSteps] = useState<RecordedStep[]>([]);
@@ -46,6 +47,8 @@ export default function SharedPage() {
   }, [browser?.url]);
   const join = () => {
     connectionRef.current?.close();
+    latest.current = undefined;
+    setFrameReady(false);
     setError('');
     setEnded(false);
     const next = new ShareConnection(
@@ -75,7 +78,13 @@ export default function SharedPage() {
           if (message.recording) setSteps(message.recording.steps);
         }
       },
-      setStatus,
+      (value) => {
+        if (value !== '已连接') {
+          latest.current = undefined;
+          setFrameReady(false);
+        }
+        setStatus(value);
+      },
     );
     connectionRef.current = next;
     setConnection(next);
@@ -95,13 +104,14 @@ export default function SharedPage() {
   const controller = state?.participants.find((p) => p.id === state.controllerId);
   const host = state?.participants.find((p) => p.role === 'host');
   const approved = me?.status === 'connected';
-  const controlling = Boolean(
+  const hasControl = Boolean(
     approved &&
     status === '已连接' &&
     !ended &&
     !state?.changingControl &&
     state?.controllerId === me?.id,
   );
+  const controlling = hasControl && frameReady && Boolean(connection?.frameIsCurrent());
   return (
     <main className="shared-app" data-role={me?.role || 'pending'}>
       <header className="shared-header">
@@ -182,7 +192,7 @@ export default function SharedPage() {
         <>
           <section className="shared-page-heading">
             <h1>{browser?.title || state?.title || '共享页面'}</h1>
-            <p>{ended ? '本次共享已结束' : `${host?.name || '主持人'} 正在共享此页面`}</p>
+            {!ended && <p>{host?.name || '主持人'} 正在共享此页面</p>}
           </section>
           <div className="shared-toolbar">
             <div className="shared-presence">
@@ -201,17 +211,21 @@ export default function SharedPage() {
                   ? '正在交接控制权'
                   : controlling
                     ? '你正在操作'
-                    : `${controller?.name || '主持人'}正在操作`}
+                    : hasControl
+                      ? history
+                        ? '你持有控制权'
+                        : '正在同步页面…'
+                      : `${controller?.name || '主持人'}正在操作`}
             </span>
             {!ended && me?.role === 'editor' && (
               <ActionButton
                 className="primary-button shared-control-action"
                 isDisabled={state?.changingControl || me.requestedControl}
                 onPress={() =>
-                  void action(controlling ? 'share:release-control' : 'share:request-control')
+                  void action(hasControl ? 'share:release-control' : 'share:request-control')
                 }
               >
-                {controlling ? '交回控制权' : me.requestedControl ? '已请求操作' : '请求操作'}
+                {hasControl ? '交回控制权' : me.requestedControl ? '已请求操作' : '请求操作'}
               </ActionButton>
             )}
             <ActionButton onPress={() => setHistory((v) => !v)}>
@@ -320,13 +334,15 @@ export default function SharedPage() {
               <div className="shared-page-content">
                 <div className="shared-workspace">
                   <SharedSurface
+                    key={status === '已连接' ? 'connected' : 'offline'}
                     connection={connection}
                     frameSource={frameSource}
                     enabled={controlling}
+                    onReady={setFrameReady}
                     onError={setError}
                   />
-                  {inspector && controlling && (
-                    <aside className="shared-inspector">
+                  {inspector && hasControl && (
+                    <aside className="shared-inspector" inert={!controlling} aria-busy={!controlling}>
                       <ElementInspector
                         actorId={me?.id}
                         selected={browser?.selectedElement}

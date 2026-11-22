@@ -15,6 +15,8 @@ import {
 import { runWebScript } from './web-script';
 import type { WebSessionDetail } from '../shared/types';
 
+type ScriptCalls = { evaluatedPage: boolean };
+
 const REF = /^ab[a-f0-9]{8}:e\d+$/;
 const SAFE_KEY =
   /^(?:(?:Control|Meta|Alt|Shift)\+)*(?:Enter|Tab|Escape|ArrowUp|ArrowDown|ArrowLeft|ArrowRight|Home|End|PageUp|PageDown|Backspace|Delete|Space)$|^(?:Control|Meta)\+[acvxz]$/;
@@ -120,8 +122,6 @@ export class AgentBrowserSession {
   private halt!: (error: Error) => void;
   private halted = new Promise<never>((_, reject) => (this.halt = reject));
   private script?: AbortController;
-  /** Time a running script may still spend waiting for the shows of its own page edits. */
-  private showTime = 0;
   // Element references are scoped to this task and die with the daemon that issued them.
   private token = randomUUID().slice(0, 8);
   private refs = new Map<string, { raw: string; target: string; role?: string; name?: string }>();
@@ -393,8 +393,11 @@ export class AgentBrowserSession {
   private async dispatch(
     name: string,
     input: Record<string, unknown>,
-    scripted = false,
+    script?: ScriptCalls,
   ): Promise<WebToolResult> {
+    const scripted = Boolean(script);
+    await this.guard(this.browser.finishScriptPresentation(name !== 'screenshot' && name !== 'pdf'));
+    this.check();
     // Optional fields arrive as null from clients that always send every key.
     const args = Object.fromEntries(
       Object.entries(input).filter(([, value]) => value !== null && value !== undefined),
@@ -446,8 +449,42 @@ export class AgentBrowserSession {
           { text: diff.text, added: diff.added, removed: diff.removed, changed: diff.changed },
         );
       }
-      case 'act':
-        return this.act(page, args, scripted);
+      case 'act': {
+        const editsFields = [
+          'type',
+          'type_at',
+          'insert_text',
+          'fill',
+          'press',
+          'check',
+          'uncheck',
+          'select',
+        ].includes(String(args.kind));
+        if (!editsFields || args.sensitive === true) return this.act(page, args, scripted);
+        const watching = await this.guard(
+          this.browser.nativeScriptEdits(
+            target,
+            'watch',
+            true,
+            args.kind === 'select' ? 'select' : 'fields',
+          ),
+        );
+        let verified = false;
+        try {
+          const result = await this.act(page, args, scripted);
+          const state = result.structuredContent;
+          verified =
+            !result.isError &&
+            !state?.mismatch &&
+            !state?.closed &&
+            !state?.dialogOpen &&
+            !state?.navigated;
+          return result;
+        } finally {
+          if (watching)
+            await this.guard(this.browser.nativeScriptEdits(target, 'replay', verified));
+        }
+      }
       case 'download': {
         this.assertNoDialog(target);
         const selector = await this.reference(args.ref, target);
@@ -523,7 +560,7 @@ export class AgentBrowserSession {
       case 'wait':
         return this.wait(page, args);
       case 'evaluate_in_page':
-        return this.evaluate(page, args, scripted);
+        return this.evaluate(page, args, script);
       case 'request_human_help': {
         if (scripted) break;
         text(args.reason, 'reason');
@@ -1159,7 +1196,7 @@ export class AgentBrowserSession {
   private async evaluate(
     page: WebPage,
     args: Record<string, unknown>,
-    scripted: boolean,
+    script?: ScriptCalls,
   ): Promise<WebToolResult> {
     const target = page.targetId;
     if ((args.code === undefined) === (args.func === undefined))
@@ -1167,13 +1204,16 @@ export class AgentBrowserSession {
     const body =
       args.code !== undefined
         ? `(async () => {\n${text(args.code, 'code')}\n})()`
-        : `(${text(args.func, 'func')})(${scripted && args.arg !== undefined ? JSON.stringify(args.arg) : ''})`;
+        : `(${text(args.func, 'func')})(${script && args.arg !== undefined ? JSON.stringify(args.arg) : ''})`;
     const timeout = within(args.timeout, 30_000, 1, 30_000, 'timeout');
     const limit = within(args.maxChars, 5000, 1, 200_000, 'maxChars');
     this.assertNoDialog(target);
-    // A script is shown its first page edits only; it has its own time limit.
-    const shown = !scripted || this.showTime > 0;
-    if (shown) await this.browser.nativeScriptEdits(target, 'watch');
+    // Show the first evaluation in full, including changes down the page. Subsequent
+    // evaluations mark their live targets without repeatedly freezing the viewport.
+    const targetsOnly = script?.evaluatedPage === true;
+    if (script) script.evaluatedPage = true;
+    await this.guard(this.browser.nativeScriptEdits(target, 'watch', true, targetsOnly));
+    this.check();
     const result = await this.guard(
       this.browser.nativeEvaluate(
         target,
@@ -1182,12 +1222,6 @@ export class AgentBrowserSession {
       ),
     );
     this.check();
-    if (shown && !result.dialog) {
-      // Code that failed is not shown; the page is only uncovered.
-      const started = Date.now();
-      await this.guard(this.browser.nativeScriptEdits(target, 'replay', !result.error));
-      if (scripted) this.showTime -= Date.now() - started;
-    }
     const settle = () => this.guard(this.browser.nativeSettle(target, 3000));
     if (result.dialog) {
       const dialog = this.dialog(target);
@@ -1198,6 +1232,7 @@ export class AgentBrowserSession {
       });
     }
     if (result.error) {
+      await this.guard(this.browser.nativeScriptEdits(target, 'replay', false));
       if (
         !/context was destroyed|cannot find context|target navigated|target closed/i.test(
           result.error,
@@ -1213,12 +1248,18 @@ export class AgentBrowserSession {
       });
     }
     const output = result.value as { json?: string; changed: boolean };
+    const waitForPage = args.settle !== false && (output.changed || args.settle === true);
+    // The code has returned. Observe page readiness while its cursor presentation starts.
+    const [, settled] = await Promise.all([
+      this.guard(this.browser.nativeScriptEdits(target, 'replay')),
+      waitForPage ? settle() : undefined,
+    ]);
     const data: Record<string, any> = { ok: true, changed: output.changed };
     if (output.json !== undefined) data.value = JSON.parse(output.json);
     const notes: string[] = [];
-    if (args.settle !== false && (output.changed || args.settle === true)) {
-      data.settled = await settle();
-      if (!data.settled) notes.push('页面仍在加载或持续变化。');
+    if (settled !== undefined) {
+      data.settled = settled;
+      if (!settled) notes.push('页面仍在加载或持续变化。');
     }
     if (output.changed) notes.push('脚本改动了页面，之前的快照和元素引用可能已过期。');
     const dialog = this.dialog(target);
@@ -1237,13 +1278,13 @@ export class AgentBrowserSession {
     const timeout = args.timeout === undefined ? undefined : numeric(args.timeout, 'timeout');
     const files: WebFile[] = [];
     const abort = new AbortController();
+    const calls: ScriptCalls = { evaluatedPage: false };
     this.script = abort;
-    this.showTime = 6000;
     try {
       const result = await runWebScript(code, {
         timeout,
         signal: abort.signal,
-        call: (method, params) => this.bridge(method, params ?? {}, files, code),
+        call: (method, params) => this.bridge(method, params ?? {}, files, code, calls),
       });
       this.check();
       const output = [
@@ -1268,10 +1309,11 @@ export class AgentBrowserSession {
     params: Record<string, any>,
     files: WebFile[],
     code: string,
+    script: ScriptCalls,
   ): Promise<unknown> {
     this.check();
     const tool = async (name: string, args: Record<string, unknown>) => {
-      const result = await this.dispatch(name, args, true);
+      const result = await this.dispatch(name, args, script);
       this.check();
       if (result.isError)
         throw new Error(result.content.find((item) => item.type === 'text')?.text || '操作失败');
@@ -1319,7 +1361,7 @@ export class AgentBrowserSession {
         return { ...data, value: data.value };
       }
       case 'screenshot': {
-        const result = await this.dispatch('screenshot', params, true);
+        const result = await this.dispatch('screenshot', params, script);
         return {
           ...result.structuredContent,
           data: result.content.find((item) => item.type === 'image')?.data,

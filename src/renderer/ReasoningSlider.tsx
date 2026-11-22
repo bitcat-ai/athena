@@ -22,11 +22,13 @@ export function ReasoningSlider({
   model,
   effort = model.defaultEffort,
   disabled,
+  saving,
   onSelect,
 }: {
   model: ModelOption;
   effort?: string;
   disabled: boolean;
+  saving: boolean;
   onSelect: (effort: string) => Promise<void>;
 }) {
   const [draft, setDraft] = useState<number | null>(null);
@@ -54,7 +56,7 @@ export function ReasoningSlider({
           <Button
             size="sm"
             variant={option ? 'ghost' : 'secondary'}
-            isDisabled={disabled}
+            isDisabled={disabled || saving}
             aria-disabled={!!option || undefined}
             excludeFromTabOrder={!!option}
             onPress={() => {
@@ -70,7 +72,7 @@ export function ReasoningSlider({
   const commit = async (value: number | number[]) => {
     const next = typeof value === 'number' && efforts[value];
     try {
-      if (!disabled && next && next.id !== effort) await onSelect(next.id);
+      if (!disabled && !saving && next && next.id !== effort) await onSelect(next.id);
     } finally {
       setDraft(null);
     }
@@ -87,8 +89,9 @@ export function ReasoningSlider({
       step={1}
       value={Math.max(0, index)}
       isDisabled={disabled}
+      aria-busy={saving || undefined}
       onChange={(value) => {
-        if (typeof value === 'number') {
+        if (!saving && typeof value === 'number') {
           setDraft(value);
           setCrest(value === last);
         }
@@ -104,7 +107,7 @@ export function ReasoningSlider({
           isIconOnly
           className="reasoning-reset"
           aria-label="恢复默认推理强度"
-          isDisabled={disabled || !defaultEffort}
+          isDisabled={disabled || saving || !defaultEffort}
           onPress={() => {
             if (defaultEffort && defaultEffort !== effort) void onSelect(defaultEffort);
           }}

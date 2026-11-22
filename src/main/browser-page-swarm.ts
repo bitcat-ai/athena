@@ -42,7 +42,8 @@ export const browserSwarmSource = String.raw`
     const canVeil=typeof Highlight==='function' && !!globalThis.CSS?.highlights && typeof CSSStyleSheet==='function';
     const coverName='athena-swarm-page';
     const canCover=typeof document.startViewTransition==='function' && typeof CSSStyleSheet==='function' && 'adoptedStyleSheets' in document;
-    let stage, sheet, tints=0, suspended=false, mutedUntil=0, unmuteTimer, armed=null, stalledUntil=0;
+    let stage, sheet, tints=0, suspended=false, mutedUntil=0, unmuteTimer, armed=null, stalledUntil=0, nextMotionSignal=0;
+    let targetWatch=null, frameId=0;
     // Looks a page script may change, read as longhands so they can be compared.
     const looks=['color','background-color','background-image','font-family','font-size','font-weight','font-style','letter-spacing','line-height','text-transform','text-align','text-decoration-line','opacity','box-shadow','backdrop-filter',
       'border-top-left-radius','border-top-right-radius','border-bottom-right-radius','border-bottom-left-radius','border-top-width','border-right-width','border-bottom-width','border-left-width',
@@ -114,16 +115,19 @@ export const browserSwarmSource = String.raw`
       return stage;
     }
     function add(show,node) { mount().appendChild(node); show.nodes.push(node); return node; }
-    // Every motion is driven by one frame loop per show, so a show that is settled simply stops.
-    function loop(show) {
-      if (show.over) return;
-      if (!stage?.isConnected) return settle(show);
-      // What moves the page goes first, so everything that follows the page reads where it is.
-      for (const frame of [...show.first,...show.live]) {
-        try { frame(); } catch { return settle(show); }
-        if (show.over) return;
+    // One frame clock also keeps the host's preview stream awake while compositor animations run.
+    function loop() {
+      if (!shows.size || frameId) return;
+      frameId=requestAnimationFrame(()=>{ frameId=0; loop(); });
+      const now=performance.now();
+      if(now>=nextMotionSignal){nextMotionSignal=now+200;env.motion();}
+      for (const show of shows) {
+        if (!stage?.isConnected || (show.light && !show.el.isConnected)) { settle(show); continue; }
+        try {
+          for (const frame of show.first) frame();
+          for (const frame of show.live) frame();
+        } catch { settle(show); }
       }
-      show.frame=requestAnimationFrame(()=>loop(show));
     }
     function tween(show,ms,frame,easing=ease,frames=show.live) {
       return new Promise(resolve=> {
@@ -641,8 +645,9 @@ export const browserSwarmSource = String.raw`
       const types=['pointerdown','keydown','wheel','scroll'];
       const used=event=> {
         if (!event.isTrusted) return;
-        if (event.type!=='scroll') drop(watch);
-        else if (event.target===document && (watch.show ? scrollX!==watch.scroll[0] || scrollY!==watch.scroll[1] : carried(watch))) drop(watch);
+        if (event.type!=='scroll' || (event.target===document && (watch.show ? scrollX!==watch.scroll[0] || scrollY!==watch.scroll[1] : carried(watch)))) {
+          discardTargets(); drop(watch);
+        }
       };
       for (const type of types) addEventListener(type,used,{capture:true,passive:true});
       watch.undo.push(()=> { for (const type of types) removeEventListener(type,used,{capture:true}); });
@@ -664,9 +669,10 @@ export const browserSwarmSource = String.raw`
       if (watch.show) settle(watch.show); else { if (armed===watch) armed=null; release(watch); }
     }
     // Ends what a script is shown with: the watch on one that runs and the show of one that returned.
-    function quit() {
+    function quit(keepTargetCursor=false) {
       if (armed) drop(armed);
-      for (const show of [...shows]) if (show.script) settle(show);
+      discardTargets();
+      for (const show of shows) if (show.script || (show.scriptCue && !keepTargetCursor)) settle(show);
     }
     // A change by script: cursors drag the new look open part by part, then the rest follows.
     // What changed out of view is held back first and drawn once the view travels there.
@@ -801,15 +807,153 @@ export const browserSwarmSource = String.raw`
     function settle(show) {
       if (!shows.delete(show)) return;
       show.over=true; show.first.clear(); show.live.clear();
-      cancelAnimationFrame(show.frame); clearTimeout(show.guard); clearTimeout(show.fade);
+      clearTimeout(show.guard); clearTimeout(show.fade);
       for (const player of show.players) player.cancel();
       for (const undo of show.undo.splice(0)) { try { undo(); } catch {} }
       for (const node of show.nodes) node.remove();
       if (shows.size) return;
+      cancelAnimationFrame(frameId); frameId=0;
       // The success wash of the same edit must not replay once the cursors leave.
       clearTimeout(unmuteTimer);
       unmuteTimer=setTimeout(()=> { if (!shows.size) env.mute(false); },Math.max(0,mutedUntil-performance.now()));
     }
+    const canShow=()=>!env.reduced.matches && document.visibilityState==='visible';
+    function newShow(el) {
+      while (shows.size>=4) settle(shows.values().next().value);
+      if (!shows.size) tints=0;
+      const show={el,speed:1,over:false,first:new Set(),live:new Set(),players:new Set(),roots:new Set(),nodes:[],cursors:[],undo:[]};
+      shows.add(show);
+      return show;
+    }
+    // A committed change with known targets only reads those boxes. The page itself never animates.
+    function markTargets(spec) {
+      if (!canShow()) return 0;
+      const marks=[];
+      for (const [i,el] of spec.targets.entries()) {
+        if (!el?.isConnected || env.ours(el)) continue;
+        const rect=spec.gone || el.getBoundingClientRect();
+        if (!rect.width || !rect.height || (!spec.gone && !el.checkVisibility({checkVisibilityCSS:true}))) continue;
+        marks.push({el,rect,from:spec.from?.[i]});
+        if (marks.length===4) break;
+      }
+      if (!marks.length) return 0;
+      if (spec.actor!=='human') {
+        mount(); env.mute(true); mutedUntil=performance.now()+900;
+      }
+      for (const [index,{el,rect,from}] of marks.entries()) {
+        const corner=r=>within(r.left+Math.min(24,r.width/2),r.top+Math.min(18,r.height/2));
+        const end=corner(rect);
+        let start=from && corner(from);
+        for (const other of shows) if (other.light && other.el===el) {
+          const at=other.cursors[0].node.getBoundingClientRect();
+          start=[at.x,at.y]; settle(other);
+        }
+        if (!start || Math.hypot(start[0]-end[0],start[1]-end[1])<4)
+          start=within(end[0]+(end[0]>innerWidth/2 ? -32 : 32),end[1]+(end[1]>innerHeight/2 ? -24 : 24));
+        const show=newShow(el), color=tint();
+        show.light=true; show.scriptCue=!!spec.script;
+        const pointer=cursor(show,color,end,spec.actor!=='human' && index===0,false);
+        const timing={duration:460,fill:'both'};
+        const transform=point=>'translate3d('+point[0]+'px,'+point[1]+'px,0)';
+        pointer.node.animate([
+          {transform:transform(start),opacity:0.65,easing:'cubic-bezier(.2,.8,.2,1)'},
+          {transform:transform(end),opacity:1,offset:0.54},{opacity:1,offset:0.78},{transform:transform(end),opacity:0}
+        ],timing);
+        if (onscreen(rect)) {
+          const frame=add(show,make('div','sw-sel'));
+          frame.style.setProperty('--c',color);
+          Object.assign(frame.style,{transform:'translate('+rect.x+'px,'+rect.y+'px)',width:rect.width+'px',height:rect.height+'px'});
+          frame.animate([{opacity:0},{opacity:0.9,offset:0.3},{opacity:0.7,offset:0.78},{opacity:0}],timing);
+        }
+        show.guard=setTimeout(()=>settle(show),timing.duration);
+      }
+      loop();
+      return marks.length;
+    }
+    function discardTargets() {
+      if (!targetWatch) return;
+      targetWatch.observer.disconnect();
+      clearTimeout(targetWatch.timer); targetWatch=null;
+    }
+    // A small viewport sample also sees CSSOM and form-property writes, which produce no mutation records.
+    function sampleLook(el) {
+      const s=getComputedStyle(el),r=el.getBoundingClientRect();
+      const value=el.matches('input,textarea,select') && !env.sensitive(el) ? [el.value,el.checked,el.selectedIndex] : [];
+      return [r.x+scrollX,r.y+scrollY,r.width,r.height,s.color,s.background,s.border,s.borderRadius,s.boxShadow,s.font,s.padding,s.opacity,s.transform,...value];
+    }
+    function watchTargets() {
+      discardTargets();
+      if (!canShow() || !document.body) return false;
+      const samples=new Set([document.documentElement,document.body,document.activeElement,document.querySelector('h1'),document.querySelector('input,textarea,select')]);
+      for (const y of [0.08,0.36,0.68,0.92]) for (const x of [0.12,0.5,0.88]) samples.add(document.elementFromPoint(innerWidth*x,innerHeight*y));
+      const before=new Map();
+      for (const el of samples) if (el && !env.ours(el) && !moving(el)) before.set(el,sampleLook(el));
+      const targets=new Set(), originals=new Map();
+      function remember(el) {
+        if (!el || env.ours(el) || /^(HEAD|META|TITLE|LINK|STYLE|SCRIPT)$/.test(el.tagName)) return;
+        if (targets.size>=32) targets.delete(targets.values().next().value);
+        targets.add(el);
+      }
+      function collect(records) {
+        for (let i=Math.max(0,records.length-128);i<records.length;i++) {
+          const r=records[i];
+          if (env.ours(r.target)) continue;
+          if (r.type==='childList') {
+            const parent=r.target.nodeType===1 ? r.target : r.target.host;
+            if (r.addedNodes.length===1 && r.removedNodes.length===1 && r.addedNodes[0].nodeType===3 &&
+                r.removedNodes[0].nodeType===3 && r.addedNodes[0].nodeValue===r.removedNodes[0].nodeValue) continue;
+            let changed=false;
+            for (let i=0;i<Math.min(32,r.addedNodes.length);i++) {
+              const node=r.addedNodes[i]; if (env.ours(node)) continue;
+              if (node.nodeType===1) remember(node);
+              else if (node.nodeType===3) remember(parent);
+              changed=true;
+            }
+            if (!changed && r.removedNodes.length && !env.ours(r.removedNodes[0])) remember(parent);
+          } else {
+            let attrs=originals.get(r.target);
+            if (!attrs) {
+              if (originals.size>=64) originals.delete(originals.keys().next().value);
+              originals.set(r.target,attrs=new Map());
+            }
+            if (!attrs.has(r.attributeName) && attrs.size<32) attrs.set(r.attributeName,r.oldValue);
+          }
+        }
+      }
+      const observer=new MutationObserver(collect);
+      for (const root of env.roots()) observer.observe(root,{subtree:true,childList:true,attributes:true,attributeOldValue:true,characterData:true,characterDataOldValue:true});
+      targetWatch={observer,collect,before,targets,originals,remember,timer:setTimeout(discardTargets,60000)};
+      return true;
+    }
+    function replayTargets(play=true,sampleOnly=false) {
+      const watch=targetWatch;
+      if (!watch) return 0;
+      if (play && !sampleOnly) watch.collect(watch.observer.takeRecords());
+      discardTargets();
+      if (!play || !canShow()) return 0;
+      if (sampleOnly) watch.targets.clear();
+      else for (const [node,attrs] of watch.originals) for (const [name,old] of attrs) {
+        if (name!==null && (name.startsWith('data-') || name.startsWith('aria-'))) continue;
+        if ((name===null ? node.nodeValue : node.getAttribute(name))!==old) watch.remember(name===null ? node.parentElement : node);
+      }
+      for (const [el,was] of watch.before) {
+        if (el.isConnected && !moving(el) && sampleLook(el).some((value,i)=>value!==was[i])) watch.remember(el);
+      }
+      return markTargets({targets:[...watch.targets],script:true});
+    }
+    function taken(event) {
+      if (event && !event.isTrusted) return;
+      env.interrupted();
+      for (const show of shows) show.taken=true;
+      quit();
+      for (const show of shows) settle(show);
+    }
+    for (const type of ['pointerdown','keydown','wheel']) addEventListener(type,taken,{capture:true,passive:true});
+    const cancelMarks=()=>{ for (const show of shows) if (show.light) settle(show); };
+    addEventListener('scroll',cancelMarks,{capture:true,passive:true});
+    addEventListener('resize',cancelMarks,{passive:true});
+    env.reduced.addEventListener('change',()=>{ if (env.reduced.matches) taken(); });
+    document.addEventListener('visibilitychange',()=>{ if (!canShow()) taken(); });
     return {
       /** The displayed state before a change: geometry, the named styles and where the agent cursor is. */
       capture(el,names) {
@@ -826,9 +970,10 @@ export const browserSwarmSource = String.raw`
         return [...new Set([...el.style,...probe.style])];
       },
       /** Plays a change that has already been applied. Returns false when nothing is shown. */
-      play(spec) {
+      present(spec) {
         try {
-          quit();
+          if (spec.targets) return markTargets(spec)>0;
+          quit(true);
           if (spec.el) this.settle(spec.el);
           if (env.reduced.matches || document.visibilityState!=='visible') return false;
           if (!onscreen(spec.gone ? vacated(spec) : spec.el.getBoundingClientRect())) {
@@ -839,23 +984,20 @@ export const browserSwarmSource = String.raw`
             spec=el===spec.el ? {...spec,before:spec.before && {...spec.before,rect}} : {el,before:{rect,styles:{},origin:spec.before?.origin}};
             this.settle(el);
           }
-          while (shows.size>=4) settle(shows.values().next().value);
-          if (!shows.size) tints=0;
           mount();
-          const show={el:spec.el,speed:1,over:false,first:new Set(),live:new Set(),players:new Set(),roots:new Set(),nodes:[],cursors:[],undo:[]};
-          shows.add(show);
+          const show=newShow(spec.el);
           mutedUntil=performance.now()+950; clearTimeout(unmuteTimer); env.mute(true);
           // Frames may never come, for instance in a hidden tab; the page must not stay withheld.
           show.guard=setTimeout(()=>settle(show),8000);
           if (spec.el) show.live.add(()=> { if (!spec.el.isConnected) settle(show); });
           (spec.gone ? erase : spec.inserted ? construct : revise)(show,spec).then(()=>finish(show),()=>settle(show));
-          loop(show);
+          loop();
           return true;
         } catch { return false; }
       },
       /** Ends the shows touching an element, or all of them, leaving the page as edited. */
       settle(el) {
-        quit();
+        quit(!!el);
         for (const show of [...shows]) if (!el || (show.el && (show.el.contains(el) || el.contains(show.el)))) settle(show);
       },
       /** Runs an observation against the page as edited, not a frame of a running show. */
@@ -878,8 +1020,10 @@ export const browserSwarmSource = String.raw`
        * Resolves true once the page is covered by its own snapshot.
        */
       watch() {
-        quit();
-        if (!canCover || shows.size || env.reduced.matches || document.visibilityState!=='visible' || !document.body || document.activeViewTransition || performance.now()<stalledUntil) return false;
+        quit(true);
+        if (!canCover || !canShow() || !document.body || document.activeViewTransition || performance.now()<stalledUntil) return false;
+        for (const show of shows) if (show.light) settle(show);
+        if (shows.size) return false;
         const watch={seen:census(),scroll:[scrollX,scrollY],origin:env.origin(),fresh:new Set(),undo:[],held:false,done:false,show:null};
         if (!watch.seen.size) return false;
         watch.observer=new MutationObserver(records=> { for (const record of records) for (const node of record.addedNodes) if (node.nodeType===1) watch.fresh.add(node); });
@@ -907,7 +1051,10 @@ export const browserSwarmSource = String.raw`
         watch.observer.disconnect();
         let plan={parts:[],stops:[]};
         try {
-          if (play && watch.held && !env.reduced.matches && document.visibilityState==='visible' && !carried(watch)) plan=changes(watch);
+          if (play && watch.held && canShow()) {
+            if (carried(watch)) discardTargets();
+            else plan=changes(watch);
+          }
         } catch {}
         if (!plan.parts.length && !plan.stops.length) { release(watch); return 0; }
         watch.scroll=[scrollX,scrollY];
@@ -918,17 +1065,13 @@ export const browserSwarmSource = String.raw`
         mutedUntil=performance.now()+950; clearTimeout(unmuteTimer); env.mute(true);
         show.guard=setTimeout(()=>settle(show),plan.stops.length ? 15000 : 8000);
         uncover(show,watch,plan).then(()=>finish(show),()=>settle(show));
-        loop(show);
+        loop();
         return 1;
       },
-      /** Resolves once every show is over, or after the limit. */
-      rest(limit) {
-        return new Promise(resolve=> {
-          const until=performance.now()+limit;
-          const check=()=>!shows.size || performance.now()>=until ? resolve() : setTimeout(check,50);
-          check();
-        });
-      },
+      finishScript: quit,
+      interrupt: ()=>taken(),
+      watchTargets,replayTargets,
+      get hasScriptCover() { return !!armed?.held; },
       get active() { return shows.size; },
     };
   }

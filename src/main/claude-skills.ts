@@ -98,6 +98,23 @@ export async function discoverClaudeSkills(workspace: string): Promise<ProviderS
   };
   await scan(path.join(configDirectory, 'skills'));
   await scan(path.join(workspace, '.claude/skills'));
+  // Legacy Markdown commands share the native Skill namespace, with ':' between subdirectories.
+  for (const root of [path.join(configDirectory,'commands'),path.join(workspace,'.claude/commands')]) {
+    const folders=[''];
+    for (const folder of folders) {
+      if (entriesLeft<=0 || bytesLeft<=0) break;
+      let entries;
+      try { entries=await readdir(path.join(root,folder),{withFileTypes:true}); }
+      catch(error) { if(!missing(error)) warn('unreadable-entry','部分 Claude 命令无法读取');continue; }
+      for (const file of entries) {
+        if (entriesLeft--<=0 || bytesLeft<=0) break;
+        const relative=path.join(folder,file.name);
+        if(file.isDirectory() && /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(file.name)) folders.push(relative);
+        else if(file.isFile() && file.name.endsWith('.md'))
+          await addSkill(path.join(root,relative),relative.slice(0,-3).split(path.sep).join(':'));
+      }
+    }
+  }
   const pluginDirectory = process.env.CLAUDE_CODE_PLUGIN_CACHE_DIR?.trim();
   const pluginsRoot = pluginDirectory ? path.resolve(workspace, pluginDirectory) : path.join(configDirectory, 'plugins');
   try {

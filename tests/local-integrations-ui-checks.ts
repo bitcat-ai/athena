@@ -43,7 +43,7 @@ export async function checkLocalIntegrations(page: Page, checks: string[], outpu
   await page.getByRole('textbox', { name: '搜索 Skills' }).fill('layout');
   await page.screenshot({ path: path.join(output, 'settings-skills.png') });
   await skills.getByRole('button', { name: '用于任务', exact: true }).click();
-  await expect(composer.locator('.composer-skill-reference')).toHaveText('/layout');
+  await expect(composer.locator('.composer-skill-reference')).toHaveText('$layout');
   await expect(composer).toBeFocused();
   await composer.fill('/help');
   await composer.press('Enter');

@@ -16,6 +16,15 @@
   padding: 0;
   overflow-y: auto;
 }
+.share-dialog.share-setup-dialog {
+  width: min(460px, calc(100vw - 32px));
+}
+.share-dialog [role='tabpanel'] {
+  padding-top: 16px;
+}
+.share-start-form label {
+  margin-bottom: -8px;
+}
 .share-dialog .modal__header {
   padding: 0 32px 18px 0;
 }

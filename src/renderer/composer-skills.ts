@@ -34,12 +34,12 @@ export function slashSkillOptions(
 ) {
   if (discovery?.status !== 'ready' || !/^[a-zA-Z0-9:._-]*$/.test(query)) return [];
   const prefix = query.toLowerCase();
-  return skills.filter(
-    (skill, index) =>
-      skill.userInvocable &&
-      skill.name.toLowerCase().startsWith(prefix) &&
-      skills.findIndex((other) => other.name === skill.name) === index,
-  );
+  const seen = new Set<string>();
+  return skills.filter((skill) => {
+    if (seen.has(skill.name)) return false;
+    seen.add(skill.name);
+    return skill.userInvocable && skill.name.toLowerCase().startsWith(prefix);
+  });
 }
 
 export function slashAllSkills(
@@ -55,6 +55,7 @@ export function slashAllSkills(
     key: `provider:${skill.name}`,
     tokenName: reserved.has(skill.name) ? `skill:${skill.name}` : skill.name,
   }));
+  const ownedNames = new Set(owned.map((skill) => skill.name));
   const shared = local
     .filter((skill) => skill.availability === 'usable')
     .map((skill) => ({
@@ -62,9 +63,7 @@ export function slashAllSkills(
       source: 'local' as const,
       key: `local:${skill.name}`,
       tokenName:
-        reserved.has(skill.name) || owned.some((item) => item.name === skill.name)
-          ? `local:${skill.name}`
-          : skill.name,
+        reserved.has(skill.name) || ownedNames.has(skill.name) ? `local:${skill.name}` : skill.name,
     }));
   return [...owned, ...shared].filter((skill) =>
     skill.tokenName.toLowerCase().startsWith(query.toLowerCase()),

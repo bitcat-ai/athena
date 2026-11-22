@@ -7,6 +7,7 @@ import { OutcomeCard } from './OutcomeCard';
 import { RequestCard } from './RequestCard';
 import { IntegrationActivity } from './IntegrationActivity';
 import { PrdArtifact } from './PrdArtifact';
+import { GeneratedImage } from './GeneratedImage';
 import { isPrdArtifact } from '../shared/activity';
 
 /**
@@ -120,6 +121,17 @@ export function AssistantTurn({
           />
         ))}
       <IntegrationActivity message={message} />
+      {message.execution
+        ?.filter((e) => e.kind === 'artifact' && e.artifact?.mimeType?.startsWith('image/'))
+        .map((e) => (
+          <GeneratedImage
+            key={e.id}
+            conversationId={conversationId}
+            messageId={message.id}
+            eventId={e.id}
+            onAction={onAction}
+          />
+        ))}
       {message.execution
         ?.filter(
           (event) =>

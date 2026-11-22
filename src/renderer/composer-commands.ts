@@ -22,7 +22,7 @@ export const composerCommands = [
   {
     name: 'settings',
     label: '设置',
-    description: '打开设置，可指定 agent、browser、skills、mcp、sandbox、feishu、learning',
+    description: '打开设置，可指定 agent、browser、voice、skills、mcp、sandbox、feishu、learning',
     icon: 'settings',
   },
   { name: 'usage', label: '查看用量', description: '查看本机任务的用量与估算费用', icon: 'usage' },

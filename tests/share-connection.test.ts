@@ -32,6 +32,10 @@ function fixture(t: TestContext) {
     tabId: 'page',
   });
   connection.frame = frame(1, 1);
+  const decode = (current: BrowserFrame) => {
+    connection.receivedFrame = current;
+    return connection.acknowledge(current);
+  };
   const reject = (message: string) => {
     const command = messages.filter((m) => m.type === 'command').at(-1);
     const pending = connection.pending.get(command.id);
@@ -51,8 +55,23 @@ function fixture(t: TestContext) {
     if (storage) Object.defineProperty(globalThis, 'sessionStorage', storage);
     else delete (globalThis as any).sessionStorage;
   });
-  return { connection, messages, frame, reject, resolve };
+  return { connection, messages, frame, reject, resolve, decode };
 }
+
+test('an old decode cannot acknowledge a new socket’s copy of the very same frame', (t) => {
+  const f = fixture(t);
+  const old = f.frame(2, 2),
+    resumed = { ...old };
+  f.connection.frame = undefined;
+  f.connection.receivedFrame = resumed;
+  assert.equal(f.connection.acknowledge(old), false);
+  assert.equal(f.messages.length, 0);
+  assert.equal(f.connection.frameIsCurrent(), false);
+  assert.equal(f.connection.acknowledge(resumed), true);
+  assert.equal(f.connection.frameIsCurrent(), true);
+  f.connection.browser.loading = true;
+  assert.equal(f.connection.frameIsCurrent(), false);
+});
 
 test('automatic element details wait for a matching fresh frame and retry once after its ACK', async (t) => {
   const f = fixture(t);
@@ -60,14 +79,14 @@ test('automatic element details wait for a matching fresh frame and retry once a
   f.reject('画面已过期，请等待新画面后重试');
   await Promise.resolve();
   assert.equal(f.messages.length, 1);
-  f.connection.acknowledge(f.frame(2, 1));
+  f.decode(f.frame(2, 1));
   await Promise.resolve();
   assert.equal(
     f.messages.filter((m) => m.type === 'command').length,
     1,
     'An old-epoch frame cannot release the read',
   );
-  f.connection.acknowledge(f.frame(3, 2));
+  f.decode(f.frame(3, 2));
   await Promise.resolve();
   assert.deepEqual(
     f.messages.map((m) => m.type),
@@ -88,7 +107,7 @@ test('mutations and unrelated detail errors are never retried', async (t) => {
     const result = f.connection.invoke(action, { ref: 'selected' });
     f.reject(error);
     await assert.rejects(result, new RegExp(error));
-    f.connection.acknowledge(f.frame(f.messages.length + 1, 2));
+    f.decode(f.frame(f.messages.length + 1, 2));
     await Promise.resolve();
     assert.equal(f.messages.filter((m) => m.type === 'command').length, before + 1);
   }
@@ -99,7 +118,7 @@ test('a second stale result is returned instead of replaying a read indefinitely
   const result = f.connection.invoke('browser:element-details', { ref: 'selected' });
   f.reject('画面已过期，请等待新画面后重试');
   await Promise.resolve();
-  f.connection.acknowledge(f.frame(2, 2));
+  f.decode(f.frame(2, 2));
   await Promise.resolve();
   f.reject('画面已过期，请等待新画面后重试');
   await assert.rejects(result, /画面已过期/);
@@ -112,7 +131,7 @@ test('control changes and disconnects revoke pending frame reads', async (t) => 
   f.reject('画面已过期，请等待新画面后重试');
   await Promise.resolve();
   f.connection.state.generation++;
-  f.connection.acknowledge(f.frame(2, 2));
+  f.decode(f.frame(2, 2));
   await assert.rejects(result, /控制权已变化/);
   result = f.connection.invoke('browser:element-details', { ref: 'selected' });
   f.reject('画面已过期，请等待新画面后重试');

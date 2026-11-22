@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { access, mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { BrowserRuntime, discoverChrome } from '../src/main/browser';
@@ -48,3 +48,35 @@ test(
     }
   },
 );
+
+test('disposing during browser discovery prevents a late Chrome launch', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'athena-browser-quit-'));
+  const binary = path.join(directory, 'probe');
+  const runtime = new BrowserRuntime({
+    storageDir: directory,
+    onState() {},
+    onFrame() {},
+    onStep() {},
+    onSelected() {},
+    onHumanTakeover() {},
+  });
+  let finishDiscovery!: (binary: string) => void;
+  runtime.detectInstallation = () =>
+    new Promise((resolve) => {
+      finishDiscovery = resolve;
+    });
+  try {
+    await writeFile(binary, '#!/bin/sh\nprintf started > "$0.started"\nexit 3\n', { mode: 0o700 });
+    const starting = runtime.start();
+    const stopping = runtime.dispose();
+    finishDiscovery(binary);
+    const [start, stop] = await Promise.allSettled([starting, stopping]);
+    assert.equal(stop.status, 'fulfilled');
+    assert.equal(start.status, 'rejected');
+    await assert.rejects(access(binary + '.started'), { code: 'ENOENT' });
+    assert.equal(runtime.getState().status, 'stopped');
+  } finally {
+    await runtime.dispose();
+    await rm(directory, { recursive: true, force: true });
+  }
+});

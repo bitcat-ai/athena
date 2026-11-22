@@ -203,7 +203,8 @@ export function ModelPicker({
               key={current.model}
               model={current}
               effort={selection?.effort}
-              disabled={disabled}
+              disabled={busy || catalogStatus !== 'ready'}
+              saving={saving}
               onSelect={(effort) => select({ model: current.model, effort })}
             />
           )}

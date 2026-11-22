@@ -147,7 +147,10 @@ export class LocalMcp {
         client.close();
       }
     }
+    const kimiHome = (!this.options.home && process.env.KIMI_CODE_HOME) || path.join(home, '.kimi-code');
     const files = [
+      ['Kimi',path.join(kimiHome,'mcp.json')],
+      ['Kimi · 项目',path.join(this.options.workspace,'.kimi-code/mcp.json')],
       ['Claude', path.join(home, '.claude.json')],
       ['Claude · 项目', path.join(this.options.workspace, '.mcp.json')],
       ['Cursor', path.join(home, '.cursor/mcp.json')],

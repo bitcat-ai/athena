@@ -3,7 +3,7 @@ import { Input, Tabs } from '@heroui/react';
 import { Segment } from '@heroui-pro/react';
 import { ChoiceSelect } from './ChoiceSelect';
 import { ActionButton, Icon } from './ui';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ArrowUpRight01Icon,
   CircleIcon,
@@ -15,7 +15,6 @@ import {
   RefreshCwIcon,
   SlidersHorizontalIcon,
   StopIcon,
-  Tick02Icon,
   XIcon,
 } from '@hugeicons-pro/core-stroke-rounded';
 import type {
@@ -28,13 +27,18 @@ import type {
   Recording,
 } from '../shared/types';
 import type { GlyphKind } from '../shared/phase';
+import { pagePointer } from './page-pointer';
+import { PAGE_REMIXES } from '../shared/page-remix';
 import { WebHistory } from './WebHistory';
+import { RecordingWorkflowPanel, type RecordingDraft } from './RecordingWorkflowPanel';
 import { PhaseGlyph } from './PhaseGlyph';
 import { SharePanel } from './SharePanel';
 import type { ShareState } from '../shared/share';
 import './sharing.css';
 
 interface Props {
+  immersiveVoice?: boolean;
+  voiceAnchor?: (node: HTMLDivElement | null) => void;
   state: BrowserState;
   recordings: Recording[];
   liveSteps: RecordedStep[];
@@ -49,6 +53,7 @@ interface Props {
   agentStatus?: { text: string; glyph: GlyphKind };
   web?: WebExecutorState;
   nativeRecordId?: string;
+  taskBusy?: boolean;
 }
 function modifiers(event: {
   altKey: boolean;
@@ -64,6 +69,8 @@ function modifiers(event: {
   );
 }
 export function BrowserPane({
+  immersiveVoice = false,
+  voiceAnchor,
   state,
   recordings,
   liveSteps,
@@ -77,6 +84,7 @@ export function BrowserPane({
   agentStatus,
   web,
   nativeRecordId,
+  taskBusy = false,
 }: Props) {
   const [share, setShare] = useState<ShareState>();
   const shareRef = useRef<ShareState | undefined>(undefined);
@@ -101,7 +109,23 @@ export function BrowserPane({
   }, []);
   const [url, setUrl] = useState(state.url);
   const [mode, setMode] = useState<'page' | 'recordings' | 'tasks'>('page');
+  const [showVoiceTools, setShowVoiceTools] = useState(false);
+  // A look is one of the page's preview edits; undoing that edit anywhere ends it here too.
+  const [remix, setRemix] = useState<{ tabId: string; preset: string; editId: string }>();
+  const [remixBusy, setRemixBusy] = useState(false);
+  const remixed =
+    remix &&
+    remix.tabId === state.activeTabId &&
+    state.previewEdits?.some((edit) => edit.editId === remix.editId)
+      ? remix.preset
+      : 'original';
+  const toolsPinned = Boolean(
+    share?.active || state.recording || state.inspecting || mode !== 'page',
+  );
+  const toolsCollapsed = immersiveVoice && !toolsPinned && !showVoiceTools;
   const [recordingId, setRecordingId] = useState<string>();
+  const [practiceId, setPracticeId] = useState<string>();
+  const workflowDrafts = useRef(new Map<string, RecordingDraft>());
   const [frameLoading, setFrameLoading] = useState(!initialFrame?.data);
   const [viewportPending, setViewportPending] = useState(false);
   const [tabBusy, setTabBusy] = useState(false);
@@ -113,6 +137,10 @@ export function BrowserPane({
   const zoomMode = zoomModes[state.activeTabId ?? ''] ?? 'fit';
   const image = useRef<HTMLImageElement>(null);
   const lastFrame = useRef(initialFrame?.data || '');
+  const attachFrame = useCallback((node: HTMLImageElement | null) => {
+    image.current = node;
+    if (node && lastFrame.current) node.src = lastFrame.current;
+  }, []);
   const receivedEpoch = useRef(initialFrame?.epoch);
   const decodedEpoch = useRef<number | undefined>(undefined);
   const expectedEpoch = useRef(state.viewport?.epoch);
@@ -160,6 +188,13 @@ export function BrowserPane({
   const busy = state.status === 'starting' || state.loading;
   const ready = state.status === 'ready';
   const recording = recordings.find((item) => item.id === recordingId) || recordings[0];
+  const practiceRecord =
+    recordings.find((item) => item.practice?.status === 'guiding') ??
+    recordings.find((item) => item.id === practiceId && item.practice);
+  const stopPractice = (item: Recording) => {
+    if (item.workflow)
+      void onAction('recording:practice-stop', { id: item.id, revision: item.workflow.revision });
+  };
   const alignedViewport = () => {
     const bounds = surface.current?.getBoundingClientRect();
     const expected = expectedViewport.current;
@@ -394,6 +429,10 @@ export function BrowserPane({
   const pointer = (event: React.MouseEvent<HTMLDivElement>, action: 'move' | 'down' | 'up') => {
     if (!ready || frameLoading || viewportPending || event.target === keyboard.current) return;
     if (!alignedViewport()) return;
+    {
+      const at = point(event);
+      Object.assign(pagePointer, { ...at, at: Date.now(), inside: true, tabId: activeTab.current });
+    }
     if (action === 'down') {
       event.preventDefault();
       keyboard.current?.focus({ preventScroll: true });
@@ -488,8 +527,12 @@ export function BrowserPane({
   const webStatus =
     web?.status === 'ready' ? '已连接' : web?.status === 'starting' ? '连接中' : '未连接';
   return (
-    <section className="browser-pane" aria-label="浏览器">
-      <header className="browser-heading">
+    <section
+      className="browser-pane"
+      aria-label="浏览器"
+      data-voice-focus={toolsCollapsed || undefined}
+    >
+      <header className="browser-heading" hidden={toolsCollapsed}>
         <span
           className="engine-label"
           title={
@@ -634,8 +677,18 @@ export function BrowserPane({
             <Icon icon={ArrowUpRight01Icon} size={14} />
           </ActionButton>
         </form>
+        {immersiveVoice && !toolsPinned && (
+          <ActionButton
+            className="live-browser-tools"
+            aria-label="网页工具"
+            aria-expanded={!toolsCollapsed}
+            onPress={() => setShowVoiceTools((value) => !value)}
+          >
+            <Icon icon={SlidersHorizontalIcon} size={15} /> 网页工具
+          </ActionButton>
+        )}
       </div>
-      <div className="browser-tools">
+      <div className="browser-tools" hidden={toolsCollapsed}>
         <Segment
           className="browser-modes"
           aria-label="浏览器视图"
@@ -651,6 +704,33 @@ export function BrowserPane({
           <Segment.Item id="tasks">网页任务</Segment.Item>
         </Segment>
         <div className="tool-buttons">
+          <ChoiceSelect
+            className="remix-select"
+            triggerClassName="remix-trigger"
+            label="页面风格"
+            title="换一种方式看这个页面，随时可恢复原样"
+            value={remixed}
+            isDisabled={!ready || state.loading || remixBusy}
+            onChange={(value) => {
+              setMode('page');
+              setRemixBusy(true);
+              void onAction<{ preset: string | null; editId?: string }>('browser:remix', {
+                preset: value === 'original' ? null : value,
+              })
+                .then((result) =>
+                  setRemix(
+                    result?.preset && result.editId && state.activeTabId
+                      ? { tabId: state.activeTabId, preset: result.preset, editId: result.editId }
+                      : undefined,
+                  ),
+                )
+                .finally(() => setRemixBusy(false));
+            }}
+            options={[
+              { value: 'original', label: '原样' },
+              ...PAGE_REMIXES.map((item) => ({ value: item.id, label: item.label })),
+            ]}
+          />
           <ActionButton
             className={`icon-button ${inspectorOpen ? 'is-on' : ''}`}
             title="元素检查器"
@@ -682,7 +762,7 @@ export function BrowserPane({
           </ActionButton>
           <ActionButton
             className={`subtle-button ${state.recording ? 'recording' : ''}`}
-            isDisabled={!ready}
+            isDisabled={!ready || practiceRecord?.practice?.status === 'guiding'}
             onPress={() => void toggleRecord()}
           >
             {state.recording ? (
@@ -716,16 +796,14 @@ export function BrowserPane({
             onMouseUp={(event) => pointer(event, 'up')}
             onMouseMove={(event) => pointer(event, 'move')}
             onMouseLeave={() => {
+              pagePointer.inside = false;
               cancelAnimationFrame(pointerFrame.current);
               if (state.inspecting) sendInput({ type: 'mouse', action: 'leave', x: 0, y: 0 });
             }}
             onContextMenu={(event) => event.preventDefault()}
           >
             <img
-              ref={(node) => {
-                image.current = node;
-                if (node && lastFrame.current) node.src = lastFrame.current;
-              }}
+              ref={attachFrame}
               className="browser-frame"
               alt={state.title ? `${state.title}，可交互网页` : '网页页面'}
               draggable={false}
@@ -837,14 +915,21 @@ export function BrowserPane({
                       ? '需要 Chrome'
                       : '浏览器尚未就绪'}
                 </h3>
-                <p>{state.error || '安装或选择本机的 Chrome，即可在这里浏览和操作网页。'}</p>
+                {state.error ? (
+                  <p>{state.error}</p>
+                ) : state.status === 'missing' ? (
+                  <p>安装或选择本机的 Chrome，即可在这里浏览和操作网页。</p>
+                ) : null}
                 {state.status !== 'starting' && (
                   <div className="button-row">
-                    <ActionButton className="primary-button" onPress={onOpenSettings}>
+                    <ActionButton
+                      className={state.binaryPath ? 'secondary-button' : 'primary-button'}
+                      onPress={onOpenSettings}
+                    >
                       浏览器设置
                     </ActionButton>
                     <ActionButton
-                      className="secondary-button"
+                      className={state.binaryPath ? 'primary-button' : 'secondary-button'}
                       onPress={() => void onAction('browser:start')}
                     >
                       重新连接
@@ -854,7 +939,35 @@ export function BrowserPane({
               </div>
             )}
           </div>
-          {state.recording && (
+          {practiceRecord?.practice && (
+            <div className="recording-strip practice-strip">
+              <span role="status">
+                {practiceRecord.practice.status === 'guiding'
+                  ? `正在带做 · ${practiceRecord.practice.target}`
+                  : practiceRecord.practice.status === 'stopped'
+                    ? '带做已停止'
+                    : '带做已结束'}
+              </span>
+              {practiceRecord.practice.status === 'guiding' && (
+                <ActionButton onPress={() => stopPractice(practiceRecord)}>停止带做</ActionButton>
+              )}
+              <ActionButton
+                onPress={() => {
+                  setRecordingId(practiceRecord.id);
+                  setMode('recordings');
+                  if (practiceRecord.practice?.status !== 'guiding') setPracticeId(undefined);
+                  requestAnimationFrame(() => {
+                    const result = document.getElementById('recording-practice-result');
+                    result?.focus({ preventScroll: true });
+                    result?.scrollIntoView({ block: 'nearest' });
+                  });
+                }}
+              >
+                {practiceRecord.practice.status === 'guiding' ? '查看进度' : '查看带做结果'}
+              </ActionButton>
+            </div>
+          )}
+          {state.recording && practiceRecord?.practice?.status !== 'guiding' && (
             <div className="recording-strip">
               <span className="record-dot" />
               <span>正在记录操作</span>
@@ -864,7 +977,7 @@ export function BrowserPane({
               </ActionButton>
             </div>
           )}
-          <div className="browser-status">
+          <div className="browser-status" hidden={toolsCollapsed}>
             <span className={`status-dot ${ready ? 'online' : ''}`} />
             <span>
               {ready
@@ -959,24 +1072,84 @@ export function BrowserPane({
                   }))}
                 />
               )}
+              {recording.workflow ? (
+                <RecordingWorkflowPanel
+                  key={JSON.stringify([recording.id, recording.workflow.revision])}
+                  recording={recording}
+                  workflow={recording.workflow}
+                  available={
+                    ready &&
+                    !state.recording &&
+                    !share?.active &&
+                    !taskBusy &&
+                    practiceRecord?.practice?.status !== 'guiding'
+                  }
+                  drafts={workflowDrafts.current}
+                  onAction={onAction}
+                  onStarted={() => {
+                    setPracticeId(recording.id);
+                    setMode('page');
+                  }}
+                  onStop={() => stopPractice(recording)}
+                />
+              ) : recording.summary ? (
+                <section className="recording-summary" aria-label="录制分析">
+                  <h4>录制分析</h4>
+                  <p>{recording.summary}</p>
+                </section>
+              ) : null}
+              {recording.truncated && (
+                <p className="empty-detail">这段录制已达步骤上限，部分操作未保存。</p>
+              )}
+              {recording.workflow && <h4 className="recording-steps-heading">原始操作</h4>}
               <ol className="step-list">
                 {recording.steps.map((step, index) => (
-                  <li key={step.id}>
+                  <li key={step.id} id={`recorded-step-${step.id}`} tabIndex={-1}>
                     <span className="step-index">{index + 1}</span>
                     <div>
                       <strong>{step.description}</strong>
                       {step.target?.name && <span className="step-target">{step.target.name}</span>}
+                      {step.scopeText && (
+                        <span className="step-target">所在行 · {step.scopeText}</span>
+                      )}
+                      {typeof step.checked === 'boolean' && (
+                        <span className="step-target">
+                          {step.checked ? '已勾选' : '已取消勾选'}
+                        </span>
+                      )}
+                      {step.feedback && !step.description.includes(step.feedback.text) && (
+                        <span className="step-target">
+                          {step.feedback.role === 'alert' ? '网页警告' : '网页提示'} ·{' '}
+                          {step.feedback.text}
+                        </span>
+                      )}
                       {step.value && <code>{step.value}</code>}
+                      {step.outcome?.kind === 'download' ? (
+                        <span className="step-target">
+                          {step.outcome.origin === 'page' ? '该页面' : ''}
+                          {
+                            {
+                              started: '已开始下载',
+                              completed: '下载完成',
+                              canceled: '下载已取消',
+                              unknown: '下载结果待核实',
+                            }[step.outcome.status]
+                          }
+                        </span>
+                      ) : step.kind === 'click' && recording.workflow ? (
+                        <span className="step-target">未记录操作结果</span>
+                      ) : null}
                       <span className="step-meta">
                         {Math.max(0, (step.timestamp - recording.startedAt) / 1000).toFixed(1)}s
                         {step.actor?.name
                           ? ` · ${step.actor.name}`
                           : step.source === 'agent'
                             ? ' · Agent'
-                            : ''}
+                            : step.source === 'page'
+                              ? ' · 网页'
+                              : ''}
                       </span>
                     </div>
-                    <Icon icon={Tick02Icon} size={13} className="step-check" />
                   </li>
                 ))}
               </ol>
@@ -986,7 +1159,9 @@ export function BrowserPane({
               <div className="recording-footer">
                 <ActionButton
                   className="primary-button"
-                  isDisabled={!recording.steps.length}
+                  isDisabled={
+                    !recording.steps.length || taskBusy || recording.practice?.status === 'guiding'
+                  }
                   onPress={() => onAnalyze(recording.id)}
                 >
                   <Icon icon={PlayIcon} size={14} />让 Agent 理解这段操作
@@ -1001,6 +1176,7 @@ export function BrowserPane({
           )}
         </div>
       )}
+      <div ref={voiceAnchor} className="live-bar-anchor" />
     </section>
   );
 }

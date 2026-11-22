@@ -47,6 +47,7 @@ export interface GuideResult {
 }
 
 export interface GuideShownStep extends GuideStep {
+  practice?: PracticeTarget;
   token: string;
   index: number;
   total: number;
@@ -55,6 +56,15 @@ export interface GuideShownStep extends GuideStep {
   handover: boolean;
   /** When false the step is shown even though its element is not on the page yet. */
   require: boolean;
+}
+/** A recording is practised on the same page, with a newly chosen business object. */
+export interface PracticeTarget {
+  origin: string;
+  pathname: string;
+  object: string;
+  inRow: boolean;
+  tag?: string;
+  checked?: boolean;
 }
 export type GuideShown = { shown: true; located: boolean } | { shown: false; reason: string };
 export type GuideSignal =
@@ -75,12 +85,13 @@ export interface GuideHost {
   /** The tab the user is looking at. */
   where(): string | undefined;
   show(step: GuideShownStep): Promise<GuideShown | undefined>;
-  shown(): Promise<{ token?: string } | undefined>;
+  shown(): Promise<{ token?: string; located?: boolean } | undefined>;
   clear(tabId?: string, farewell?: string): Promise<void>;
   settle(timeout: number): Promise<void>;
   page(): Promise<{ url: string; title: string; outline?: string }>;
 }
 export interface GuideOptions {
+  practice?: { tabId: string; targets: PracticeTarget[] };
   /** Whether the user may hand the remaining steps to the agent. */
   handover?: boolean;
   /** Ends the guide. Aborted with the reason `ended_by_user` it ends as the user's own decision. */
@@ -127,7 +138,7 @@ function only(value: object, allowed: string[], name: string): void {
   const extra = Object.keys(value).find((key) => !allowed.includes(key));
   if (extra) throw new Error(`${name} 不支持 ${extra}`);
 }
-export function parseGuide(args: unknown): GuidePlan {
+export function parseGuide(args: unknown, noteLimit = 280): GuidePlan {
   if (!args || typeof args !== 'object' || Array.isArray(args))
     throw new Error('带做需要 steps 列表');
   only(args, ['title', 'steps'], '带做');
@@ -143,7 +154,7 @@ export function parseGuide(args: unknown): GuidePlan {
     const action = step.action === undefined ? 'look' : (step.action as GuideAction);
     if (!ACTIONS.includes(action)) throw new Error(`${name}的 action 只能是 look、click 或 input`);
     const parsed: GuideStep = {
-      note: text(step.note, `${name}的 note`, 280, true)!,
+      note: text(step.note, `${name}的 note`, noteLimit, true)!,
       action,
       selector: text(step.selector, `${name}的 selector`, 1000),
       text: text(step.text, `${name}的 text`, 200),
@@ -212,6 +223,7 @@ export class Guide {
     this.token = randomUUID().slice(0, 12);
     const step: GuideShownStep = {
       ...this.plan.steps[this.index],
+      practice: this.options.practice?.targets[this.index],
       token: this.token,
       index: this.index,
       total: this.plan.steps.length,
@@ -224,6 +236,8 @@ export class Guide {
     let answered = 0,
       reason = 'no_answer';
     while (!this.stopped && this.host.alive()) {
+      if (this.options.practice && this.host.where() !== this.options.practice.tabId)
+        return { shown: false, reason: '带做标签页已改变' };
       const answer = await this.host.show(step);
       if (answer?.shown) return answer;
       const now = Date.now();
@@ -231,12 +245,19 @@ export class Guide {
         reason = answer.reason;
         answered ||= now;
         // Nothing that appears later makes these two right.
-        if (reason === 'invalid_selector' || reason === 'stale_ref') break;
+        if (
+          reason === 'invalid_selector' ||
+          reason === 'stale_ref' ||
+          reason === 'ambiguous_target' ||
+          reason === 'wrong_origin'
+        )
+          break;
         if (now - answered >= (first ? this.pace.first : this.pace.later)) break;
       } else if (now - began >= this.pace.silent) break;
       await sleep(this.pace.retry);
     }
-    if (first || this.stopped || !this.host.alive()) return { shown: false, reason };
+    if (first || this.options.practice || this.stopped || !this.host.alive())
+      return { shown: false, reason };
     return (await this.host.show({ ...step, require: false })) ?? { shown: false, reason };
   }
   async run(): Promise<GuideResult> {
@@ -265,30 +286,48 @@ export class Guide {
     }
     this.progress(true);
     let checked = Date.now(),
-      ended: GuideEnd | undefined;
+      ended: GuideEnd | undefined,
+      reason: string | undefined;
+    const present = async () => {
+      const result = await this.present();
+      if (!result.shown && this.options.practice) {
+        ended = 'stopped';
+        reason = result.reason;
+      }
+    };
     while (!ended) {
       const signal = await this.next();
       if (this.stopped)
         ended = this.options.signal?.reason === 'ended_by_user' ? 'ended_by_user' : 'stopped';
       else if (!host.alive()) ended = 'page_closed';
-      else if (Date.now() - began > pace.limit) ended = 'timed_out';
+      else if (this.options.practice && host.where() !== this.options.practice.tabId) {
+        await host.clear(this.options.practice.tabId);
+        ended = 'stopped';
+        reason = 'wrong_tab';
+      } else if (Date.now() - began > pace.limit) ended = 'timed_out';
       else if (!signal) {
         // The guide stays with the tab the user is looking at.
         const where = host.where();
         if (where !== tab) {
           await host.clear(tab);
           tab = where;
-          await this.present();
+          await present();
           checked = Date.now();
         } else if (Date.now() - checked >= pace.check) {
           const shown = await host.shown();
-          if (shown && shown.token !== this.token) await this.present();
+          const step = this.plan.steps[this.index];
+          if (
+            shown &&
+            (shown.token !== this.token ||
+              (this.options.practice && shown.located === false && (step.text || step.selector)))
+          )
+            await present();
           checked = Date.now();
         }
       } else if (signal.kind === 'navigated') {
         // A new document starts empty: the step is put on it again.
         const shown = await host.shown();
-        if (!shown || shown.token !== this.token) await this.present();
+        if (!shown || shown.token !== this.token) await present();
         checked = Date.now();
       } else if (signal.token === this.token && signal.index === this.index) {
         const step = this.steps[this.index];
@@ -302,7 +341,7 @@ export class Guide {
             this.steps[this.index] = { note: this.steps[this.index].note, status: 'pending' };
           }
           this.progress(true);
-          await this.present();
+          await present();
         } else {
           const by = signal.by === 'click' || signal.by === 'input' ? signal.by : 'button';
           step.status = signal.by === 'skip' ? 'skipped' : 'done';
@@ -318,24 +357,34 @@ export class Guide {
             this.progress(true);
             // What the click set in motion comes first; the next step goes onto what follows.
             if (by === 'click' && step.status === 'done') await host.settle(pace.settle);
-            await this.present();
+            await present();
           }
         }
         checked = Date.now();
       }
     }
-    return this.finish(ended);
+    const result = await this.finish(ended);
+    if (reason) result.reason = reason;
+    return result;
   }
   private async finish(ended: GuideEnd): Promise<GuideResult> {
     const farewell =
-      ended === 'completed' ? '完成了' : ended === 'handed_over' ? '好，接下来交给我' : undefined;
+      ended === 'completed' && this.options.practice
+        ? '带做结束'
+        : ended === 'completed'
+          ? '完成了'
+          : ended === 'handed_over'
+            ? '好，接下来交给我'
+            : undefined;
     await this.host.clear(undefined, farewell).catch(() => {});
     this.progress(false);
+    const open = this.steps.findIndex((step) => step.status !== 'done');
+    const next = ended === 'completed' || open < 0 ? undefined : open + 1;
+    if (this.options.practice)
+      return { started: true, ended, steps: this.steps, next, message: '录制带做已结束' };
     const page = await this.host
       .page()
       .catch(() => ({ url: '', title: '', outline: undefined as string | undefined }));
-    const open = this.steps.findIndex((step) => step.status !== 'done');
-    const next = ended === 'completed' || open < 0 ? undefined : open + 1;
     const done = this.steps.filter((step) => step.status === 'done').length;
     const tally = `用户亲手完成了 ${done}/${this.steps.length} 步`;
     const reread = '页面已经变化，继续前先用 web_snapshot 重新读取页面。';

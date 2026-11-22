@@ -44,11 +44,16 @@ export function MessageQueue({
           <PromptInput.Queue.Item key={item.id}>
             <PromptInput.Queue.Item.Body>
               <PromptInput.Queue.Item.Content>
-                {item.text.trim() || `${item.images} 张图片`}
+                {item.text.trim() || item.files?.join('、') || `${item.images} 张图片`}
               </PromptInput.Queue.Item.Content>
-              {item.images > 0 && item.text.trim() && (
+              {(item.images > 0 || Boolean(item.files?.length)) && item.text.trim() && (
                 <PromptInput.Queue.Item.Description>
-                  {item.images} 张图片
+                  {[
+                    item.images > 0 && `${item.images} 张图片`,
+                    item.files?.length && `${item.files.length} 个文件`,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
                 </PromptInput.Queue.Item.Description>
               )}
             </PromptInput.Queue.Item.Body>

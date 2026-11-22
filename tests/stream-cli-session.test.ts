@@ -14,6 +14,7 @@ async function fixture(
   sessionId?: string,
   approveWorkspace = true,
   tools: BrowserTool[] = [],
+  evidenceOnly = false,
 ) {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'athena-stream-cli-test-'));
   const script = path.join(directory, 'fixture.cjs');
@@ -125,6 +126,7 @@ process.stdin.setEncoding('utf8'); process.stdin.on('data',s=>input+=s); process
     workspace: directory,
     executablePath,
     sessionId,
+    evidenceOnly,
     tools,
     callTool: async () => {
       hostCalls++;
@@ -219,6 +221,9 @@ test('Claude discovers native config skills with user precedence, settings overr
       await mkdir(path.join(root, name), { recursive: true });
       await writeFile(path.join(root, name, 'SKILL.md'), body);
     }
+    await mkdir(path.join(f.directory,'.claude','commands','qa'),{recursive:true});
+    await writeFile(path.join(f.directory,'.claude','commands','qa','release.md'),'---\nname: overridden\ndescription: Release QA\n---\nReview this change');
+    await writeFile(path.join(f.directory,'.claude','commands','review.md'),'shadowed by the Skill');
     await writeFile(
       path.join(config, 'settings.json'),
       '{ /* native JSONC */ skillOverrides: { off: "off", }, }',
@@ -227,12 +232,13 @@ test('Claude discovers native config skills with user precedence, settings overr
     assert.equal(discovery.status, 'ready');
     assert.deepEqual(
       discovery.skills.map((skill) => skill.name),
-      ['manual', 'review'],
+      ['manual', 'qa:release','review'],
     );
     const review = discovery.skills.find((skill) => skill.name === 'review')!;
     assert.equal(review.providerPath, path.join(config, 'skills/review/SKILL.md'));
     assert.match(review.contentHash!, /^[a-f0-9]{64}$/);
     assert.equal(discovery.skills[0].userInvocable, false);
+    assert.equal(discovery.skills.find(s=>s.name==='qa:release')?.description,'Release QA');
     await assert.rejects(readFile(path.join(f.directory, 'args.jsonl')));
   } finally {
     await f.cleanup();
@@ -1096,4 +1102,18 @@ test('Claude native MCP configuration routes browser calls and is revoked after 
   );
   assert.equal(f.session.matchesConfiguration(f.directory, f.executablePath, [tool]), true);
   assert.equal(f.session.matchesConfiguration(f.directory, f.executablePath, []), false);
+});
+
+
+test('Claude evidence analysis disables workspace instructions, native tools, MCP and skills', async (t) => {
+  const f = await fixture('claude', 'normal', undefined, false, [], true);
+  t.after(f.cleanup);
+  await f.session.send('Analyze only the evidence');
+  const [{args}] = await f.logs();
+  assert.ok(args.includes('--safe-mode'));
+  assert.ok(args.includes('--strict-mcp-config'));
+  assert.ok(args.includes('--disable-slash-commands'));
+  assert.equal(args[args.indexOf('--tools')+1], '');
+  assert.equal(args[args.indexOf('--allowedTools')+1], '');
+  assert.deepEqual(JSON.parse(args[args.indexOf('--mcp-config')+1]), {mcpServers:{}});
 });

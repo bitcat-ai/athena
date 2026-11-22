@@ -29,9 +29,16 @@ export class MessageQueue<T> {
     return this.entries.length >= QUEUE_LIMIT;
   }
 
-  add(conversationId: string, text: string, images: number, payload: T) {
+  add(conversationId: string, text: string, images: number, payload: T, files?: string[]) {
     if (this.full) throw new Error(`最多排队 ${QUEUE_LIMIT} 条消息，请等前面的任务完成后再发送`);
-    const item = { id: randomUUID(), conversationId, text, images, createdAt: Date.now() };
+    const item = {
+      id: randomUUID(),
+      conversationId,
+      text,
+      images,
+      ...(files?.length ? { files } : {}),
+      createdAt: Date.now(),
+    };
     this.entries.push({ item, payload });
     this.changed();
     return item;

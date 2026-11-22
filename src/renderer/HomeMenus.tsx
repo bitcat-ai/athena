@@ -6,6 +6,8 @@ import {
   Cursor01Icon,
   Folder01Icon,
   InternetIcon,
+  Image01Icon,
+  MagicWand01Icon,
   MonitorIcon,
   MoonIcon,
   Settings02Icon,
@@ -154,41 +156,69 @@ export function WebContextMenu({
   onPage,
   onSelect,
   onRecord,
+  onImages,
+  onFiles,
+  onSkills,
+  imagesEnabled,
 }: {
   ready: boolean;
   recording: boolean;
   onPage: () => void;
   onSelect: () => void;
   onRecord: () => void;
+  onImages: () => void;
+  onFiles: () => void;
+  onSkills: () => void;
+  imagesEnabled: boolean;
 }) {
   const [hovered, setHovered] = useState(false);
   return (
     <Dropdown>
-      <PromptInput.Action aria-label="添加网页上下文" onHoverChange={setHovered}>
+      <PromptInput.Action aria-label="添加附件与网页上下文" onHoverChange={setHovered}>
         <TurnIcon kind="plus" hovered={hovered} size={18} />
       </PromptInput.Action>
       <Dropdown.Popover placement="top start" offset={12} className="web-context-menu">
-        <p className="web-context-heading">添加网页上下文</p>
         <Dropdown.Menu
-          aria-label="网页上下文"
+          aria-label="添加上下文"
           onAction={(key) => {
             if (key === 'page') onPage();
             if (key === 'element') onSelect();
             if (key === 'record') onRecord();
+            if (key === 'images') onImages();
+            if (key === 'files') onFiles();
+            if (key === 'skills') onSkills();
           }}
         >
-          <Dropdown.Item id="page" textValue="当前页面">
-            <Icon icon={InternetIcon} size={16} />
-            <Label>当前页面</Label>
-          </Dropdown.Item>
-          <Dropdown.Item id="element" textValue="选取页面元素" isDisabled={!ready}>
-            <Icon icon={Cursor01Icon} size={16} />
-            <Label>选取页面元素</Label>
-          </Dropdown.Item>
-          <Dropdown.Item id="record" textValue="录制网页操作" isDisabled={!ready || recording}>
-            <Icon icon={CircleDotIcon} size={16} />
-            <Label>{recording ? '正在录制网页操作' : '录制网页操作'}</Label>
-          </Dropdown.Item>
+          <Dropdown.Section aria-label="附件">
+            <Dropdown.Item id="images" textValue="添加图片" isDisabled={!imagesEnabled}>
+              <Icon icon={Image01Icon} size={16} />
+              <Label>添加图片</Label>
+            </Dropdown.Item>
+            <Dropdown.Item id="files" textValue="添加工作区文件">
+              <Icon icon={Folder01Icon} size={16} />
+              <Label>添加工作区文件</Label>
+              <kbd aria-hidden>@</kbd>
+            </Dropdown.Item>
+            <Dropdown.Item id="skills" textValue="选择任务 Skill">
+              <Icon icon={MagicWand01Icon} size={16} />
+              <Label>选择任务 Skill</Label>
+              <kbd aria-hidden>$</kbd>
+            </Dropdown.Item>
+          </Dropdown.Section>
+          <Dropdown.Section aria-label="网页">
+            <Dropdown.Item id="page" textValue="当前页面">
+              <Icon icon={InternetIcon} size={16} />
+              <Label>当前页面</Label>
+            </Dropdown.Item>
+            <Dropdown.Item id="element" textValue="选取页面元素" isDisabled={!ready}>
+              <Icon icon={Cursor01Icon} size={16} />
+              <Label>选取页面元素</Label>
+            </Dropdown.Item>
+            <Dropdown.Item id="record" textValue="录制网页操作" isDisabled={!ready || recording}>
+              <Icon icon={CircleDotIcon} size={16} />
+              <Label>{recording ? '正在录制网页操作' : '录制网页操作'}</Label>
+            </Dropdown.Item>
+          </Dropdown.Section>
         </Dropdown.Menu>
         {!ready && <p className="web-context-note">浏览器就绪后，可选取元素或录制操作。</p>}
       </Dropdown.Popover>

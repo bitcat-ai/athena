@@ -59,6 +59,27 @@ const question: PendingAgentRequest = {
 };
 const idle = { connected: true, stopping: false, requests: [], tools: [] };
 
+test('Codex progress distinguishes submission, a confirmed wait, output and native retries', () => {
+  const titles = {
+    submitting: '正在发送给 Codex',
+    awaiting: '等待 Codex 输出',
+    responding: '正在回复',
+    retrying: 'Codex 正在重试连接',
+  } as const;
+  for (const state of Object.keys(titles) as Array<keyof typeof titles>) {
+    assert.equal(phaseTitle(runningPhase({ ...idle, delivery: { state } })), titles[state]);
+  }
+  assert.equal(
+    runningPhase({ ...idle, delivery: { state: 'awaiting' }, tools: [tool({ name: 'web_act' })] })
+      .kind,
+    'acting',
+  );
+  assert.equal(
+    runningPhase({ ...idle, delivery: { state: 'retrying' }, requests: [question] }).kind,
+    'waiting',
+  );
+});
+
 test('a running turn has exactly one phase, in priority order', () => {
   assert.deepEqual(runningPhase({ ...idle, connected: false }), { kind: 'preparing' });
   assert.deepEqual(runningPhase(idle), { kind: 'thinking' });

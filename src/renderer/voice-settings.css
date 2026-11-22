@@ -1,0 +1,39 @@
+.voice-settings form {
+  display: grid;
+  gap: 12px;
+  max-width: 520px;
+}
+
+.voice-settings label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.voice-settings .settings-note {
+  margin: 0;
+  padding: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.voice-settings > .settings-note {
+  margin-top: 16px;
+}
+
+.voice-settings .voice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.voice-settings .voice-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.voice-settings .voice-error:empty {
+  display: none;
+}

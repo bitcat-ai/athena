@@ -178,17 +178,27 @@ export class PiSession implements AgentSession {
       ...isolation,
       '--extension',
       this.options.permissionsExtensionPath!,
-      '--tools',
-      [
-        'read',
-        'bash',
-        'write',
-        'edit',
-        'grep',
-        'find',
-        'ls',
-        ...this.options.tools.map((tool) => tool.name),
-      ].join(','),
+      ...(this.options.evidenceOnly
+        ? [
+            '--no-tools',
+            '--no-skills',
+            '--no-context-files',
+            '--system-prompt',
+            'Analyze only the supplied recording without tools.',
+          ]
+        : [
+            '--tools',
+            [
+              'read',
+              'bash',
+              'write',
+              'edit',
+              'grep',
+              'find',
+              'ls',
+              ...this.options.tools.map((tool) => tool.name),
+            ].join(','),
+          ]),
       ...(this.options.sessionDirectory ? ['--session-dir', this.options.sessionDirectory] : []),
       ...(this.id ? ['--session', this.id] : ['--session-id', id]),
     ];

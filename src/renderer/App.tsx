@@ -5,6 +5,7 @@ import {
   Card,
   Dropdown,
   Label,
+  Header,
   Description,
   Input,
   Menu,
@@ -23,8 +24,9 @@ import {
   usePromptInputTokens,
 } from '@heroui-pro/react';
 import athenaLogo from './assets/brand/athena-profile.png';
-import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
+import { Fragment, memo, useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { createPortal, flushSync } from 'react-dom';
+import { motion } from 'motion/react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
@@ -45,6 +47,7 @@ import {
   Link02Icon,
   Loading02Icon,
   MessageSquareIcon,
+  Mic01Icon,
   MagicWand01Icon,
   PanelLeftCloseIcon,
   PanelLeftOpenIcon,
@@ -61,6 +64,8 @@ import {
   XIcon,
 } from '@hugeicons-pro/core-stroke-rounded';
 import { BrowserPane } from './BrowserPane';
+import { LiveVoiceSurface } from './LiveVoiceSurface';
+import { VoiceSettings } from './VoiceSettings';
 import { SandboxPip } from './SandboxPip';
 import type { SandboxPipState } from '../shared/sandbox';
 import { ElementInspector } from './ElementInspector';
@@ -69,7 +74,6 @@ import { PhaseGlyph } from './PhaseGlyph';
 import { ModelPicker } from './ModelPicker';
 import { ChoiceSelect } from './ChoiceSelect';
 import { effortName } from './ReasoningSlider';
-import { SkillPicker } from './SkillPicker';
 import { LearningPanel } from './LearningPanel';
 import { McpSettings, SkillsSettings } from './LocalIntegrations';
 import { SandboxSettings } from './SandboxSettings';
@@ -84,6 +88,7 @@ import { MessageQueue } from './MessageQueue';
 import { emptyQueue, type MessageQueueState, type QueuedMessage } from '../shared/queue';
 import { UsagePanel } from './UsagePanel';
 import { AgentIcon } from './AgentIcon';
+import { NativeCliMenu } from './NativeCliMenu';
 import { WorkbenchNotices, useCodexUpdate } from './WorkbenchNotices';
 import { AppToast, type AppToastMessage } from './AppToast';
 import { ConversationSearch } from './ConversationSearch';
@@ -116,7 +121,8 @@ import {
   parseImages,
   type ImageAttachment,
 } from '../shared/images';
-import { ImageAttachments } from './ImageAttachments';
+import { ImageAttachments, WorkspaceFileAttachments } from './ImageAttachments';
+import { workspaceFilePaths } from '../shared/workspace-files';
 import type { ProviderSkill } from '../shared/skills';
 import {
   MAX_SKILLS,
@@ -160,8 +166,14 @@ const emptyBrowser: BrowserState = {
   recording: false,
   inspecting: false,
 };
+const observeVoiceMotion = (onChange: () => void) => {
+  const media = matchMedia('(prefers-reduced-motion: reduce)');
+  media.addEventListener('change', onChange);
+  return () => media.removeEventListener('change', onChange);
+};
+const voiceMotionReduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 const emptyFeishu: FeishuState = { status: 'disconnected', paired: false };
-type SettingsTab = 'agent' | 'browser' | 'feishu' | 'learning' | 'skills' | 'mcp' | 'sandbox';
+type SettingsTab = 'agent' | 'browser' | 'feishu' | 'learning' | 'skills' | 'mcp' | 'sandbox' | 'voice';
 const commandIcons = {
   new: PlusIcon,
   model: CommandIcon,
@@ -212,9 +224,9 @@ interface DraftImage extends ImageAttachment {
   error?: string;
 }
 
-async function readPastedImage(file: File, image: DraftImage): Promise<DraftImage> {
+async function readImageAttachment(file: File, image: DraftImage): Promise<DraftImage> {
   const bitmap = await createImageBitmap(file).catch(() => {
-    throw new Error('图片无法读取，请重新复制图片');
+    throw new Error('图片无法读取，请重新添加图片');
   });
   const pixels = bitmap.width * bitmap.height;
   let normalized: string | undefined;
@@ -226,7 +238,7 @@ async function readPastedImage(file: File, image: DraftImage): Promise<DraftImag
       canvas.width = bitmap.width;
       canvas.height = bitmap.height;
       const context = canvas.getContext('2d');
-      if (!context) throw new Error('图片无法读取，请重新复制图片');
+      if (!context) throw new Error('图片无法读取，请重新添加图片');
       context.drawImage(bitmap, 0, 0);
       normalized = canvas.toDataURL('image/png');
     }
@@ -238,8 +250,8 @@ async function readPastedImage(file: File, image: DraftImage): Promise<DraftImag
     (await new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(String(reader.result));
-      reader.onerror = () => reject(new Error('图片读取失败，请重新粘贴'));
-      reader.onabort = () => reject(new Error('图片读取已取消，请重新粘贴'));
+      reader.onerror = () => reject(new Error('图片读取失败，请重新添加'));
+      reader.onabort = () => reject(new Error('图片读取已取消，请重新添加'));
       reader.readAsDataURL(file);
     }));
   const data = url.slice(url.indexOf(',') + 1);
@@ -262,6 +274,7 @@ interface DraftEntry {
   text: string;
   field?: TokenFieldValue<ComposerToken>;
   images?: DraftImage[];
+  files?: string[];
 }
 const EMPTY_FIELD = new TokenFieldValue<ComposerToken>([]);
 const TOKEN_PATTERN = /^\[ele(\d+)\]$/;
@@ -304,6 +317,36 @@ function MentionText({ text, mentions }: { text: string; mentions?: ElementMenti
   );
 }
 
+const ReplyMarkdown = memo(function ReplyMarkdown({
+  text,
+  onOpenLink,
+}: {
+  text: string;
+  onOpenLink: (url: string) => void;
+}) {
+  return (
+    <Markdown
+      remarkPlugins={[remarkGfm]}
+      components={{
+        img: () => null,
+        a: ({ href, children }) => (
+          <a
+            href={href}
+            onClick={(event) => {
+              event.preventDefault();
+              if (href) onOpenLink(href);
+            }}
+          >
+            {children}
+          </a>
+        ),
+      }}
+    >
+      {text}
+    </Markdown>
+  );
+});
+
 export default function App() {
   const [appearance, setAppearance] = useAppearance();
   const [loaded, setLoaded] = useState(false);
@@ -326,7 +369,6 @@ export default function App() {
   const [pendingExternalConnections, setPendingExternalConnections] = useState<
     NonNullable<AppSnapshot['pendingExternalConnections']>
   >([]);
-  const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
   const workspaceLabel =
     settings.workspaceMode === 'personal' ? '不绑定文件夹' : basename(settings.workspace);
   const [agents, setAgents] = useState<AgentInfo[]>([]);
@@ -354,8 +396,25 @@ export default function App() {
   const [recordings, setRecordings] = useState<Recording[]>([]);
   const [liveSteps, setLiveSteps] = useState<RecordedStep[]>([]);
   const [drafts, setDrafts] = useState<Record<string, DraftEntry>>({});
+  const unsentDevDraft =
+    import.meta.env.DEV &&
+    Object.values(drafts).some(
+      (draft) => draft.text.length || draft.images?.length || draft.files?.length,
+    );
+  useEffect(() => {
+    if (import.meta.env.DEV)
+      void window.workbench.invoke('dev:unsent-drafts', unsentDevDraft).catch(() => {});
+  }, [unsentDevDraft]);
   const [sidebar, setSidebar] = useState(true);
   const [browserVisible, setBrowserVisible] = useState(false);
+  const [voiceConversationId, setVoiceConversationId] = useState<string>();
+  const [voiceInCall, setVoiceInCall] = useState(false);
+  const [voiceReview, setVoiceReview] = useState(false);
+  const reduceVoiceMotion = useSyncExternalStore(observeVoiceMotion, voiceMotionReduced, () => true);
+  const [browserVoiceAnchor, setBrowserVoiceAnchor] = useState<HTMLDivElement | null>(null);
+  const [composerVoiceAnchor, setComposerVoiceAnchor] = useState<HTMLDivElement | null>(null);
+  const homeVoiceTop = useRef<number | undefined>(undefined);
+  const openingVoice = useRef(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const editingElement = inspectorOpen && browserVisible;
   const [browserWidth, setBrowserWidth] = useState<number>();
@@ -371,11 +430,14 @@ export default function App() {
   const [savingDefaultAgent, setSavingDefaultAgent] = useState(false);
   const [switchingAgent, setSwitchingAgent] = useState(false);
   const [connecting, setConnecting] = useState(false);
+  const [retryingBrowser, setRetryingBrowser] = useState(false);
   const [manualAppId, setManualAppId] = useState('');
   const [manualSecret, setManualSecret] = useState('');
   const [knowledgeRoot, setKnowledgeRoot] = useState('');
   useEffect(() => setKnowledgeRoot(settings.knowledgeRoot ?? ''), [settings.knowledgeRoot]);
   const composer = useRef<HTMLDivElement>(null);
+  const imagePicker = useRef<HTMLInputElement>(null);
+  const pickerDraftKey = useRef<string>(undefined);
   const panels = useRef<HTMLDivElement>(null);
   const resizeStart = useRef<{ x: number; width: number } | undefined>(undefined);
   const revealBrowserOnTool = useRef(true);
@@ -400,11 +462,13 @@ export default function App() {
   const draftEntry = drafts[draftKey];
   const draft = draftEntry?.text ?? '';
   const images = draftEntry?.images ?? [];
+  const files = draftEntry?.files ?? [];
   // Before the first send there is no host ID. Keep that draft reachable after navigation.
   const sidebarConversations = showArchived
     ? archivedConversations
     : drafts[JSON.stringify([settings.workspace, null])]?.text ||
-        drafts[JSON.stringify([settings.workspace, null])]?.images?.length
+        drafts[JSON.stringify([settings.workspace, null])]?.images?.length ||
+        drafts[JSON.stringify([settings.workspace, null])]?.files?.length
       ? [{ id: undefined, title: '未发送草稿', messages: [] }, ...openConversations]
       : openConversations;
   const field = draftEntry?.field ?? EMPTY_FIELD;
@@ -416,29 +480,60 @@ export default function App() {
   // Page elements live in the draft as inline [eleN] tokens and need no trigger character.
   // A slash at the start of a word opens the Skills of the current CLI.
   const tokens = usePromptInputTokens<ComposerToken>({
-    triggers: ['/'],
+    triggers: ['/', '$', '@'],
     value: field,
     onChange: storeField,
   });
-  const skillMenuOpen = tokens.isOpen && tokens.trigger === '/';
-  const skillOptions = slashAllSkills(
-    skills ?? [],
-    providerSkills,
-    providerSkillDiscovery,
-    tokens.query,
-  );
+  const skillMenuOpen = tokens.isOpen && (tokens.trigger === '/' || tokens.trigger === '$');
+  const fileMenuOpen = tokens.isOpen && tokens.trigger === '@';
+  const [fileResults, setFileResults] = useState<{
+    key: string;
+    paths: string[];
+    error?: string;
+  }>();
+  const fileQueryKey = JSON.stringify([draftKey, tokens.query]);
+  const fileOptions = fileResults?.key === fileQueryKey ? fileResults.paths : [];
+  useEffect(() => {
+    if (!fileMenuOpen) return;
+    let current = true;
+    const timer = setTimeout(() => {
+      window.workbench
+        .invoke<string[]>('workspace:find-files', {
+          workspace: settings.workspace,
+          query: tokens.query,
+        })
+        .then((paths) => {
+          if (current) setFileResults({ key: fileQueryKey, paths });
+        })
+        .catch((error) => {
+          if (current) setFileResults({ key: fileQueryKey, paths: [], error: errorText(error) });
+        });
+    }, 100);
+    return () => {
+      current = false;
+      clearTimeout(timer);
+    };
+  }, [fileMenuOpen, fileQueryKey, settings.workspace, tokens.query]);
+  const skillOptions = skillMenuOpen
+    ? slashAllSkills(skills ?? [], providerSkills, providerSkillDiscovery, tokens.query).slice(
+        0,
+        32,
+      )
+    : [];
   const commandOptions = slashCommands(
     tokens.query,
     !images.length &&
+      !files.length &&
+      tokens.trigger === '/' &&
       field.segments.every((item) => item.type === 'text') &&
       /^\/[^\s]*$/.test(draft),
   );
-  const chosenSkills = new Set([...selectedSkills, ...referencedSkills(field.segments)]);
+  const chosenSkills = new Set(referencedSkills(field.segments));
   const skillMenuVisible = skillMenuOpen && (skillOptions.length > 0 || commandOptions.length > 0);
   const skillUnavailable = (name: string) =>
     chosenSkills.has(name) || chosenSkills.size >= MAX_SKILLS;
   const insertSkill = (skill: (typeof skillOptions)[number]) =>
-    tokens.insertToken(`/${skill.tokenName}`, {
+    tokens.insertToken(`${tokens.trigger === '$' ? '$' : '/'}${skill.tokenName}`, {
       value: { skill: skill.name, source: skill.source === 'provider' ? 'provider' : 'local' },
     });
   const focusComposer = () => tokens.inputRef.current?.focus();
@@ -469,8 +564,12 @@ export default function App() {
       event.preventDefault();
       event.stopPropagation();
     }
+    addImages(files);
+  };
+  const addImages = (files: File[]) => {
+    if (!files.length || archived) return;
     if (files.some((file) => !IMAGE_TYPES.includes(file.type as DraftImage['mimeType']))) {
-      showToast('请粘贴 PNG、JPEG 或 WebP 图片', true);
+      showToast('支持 PNG、JPEG 或 WebP 图片', true);
       return;
     }
     if (files.some((file) => file.size > MAX_IMAGE_BYTES)) {
@@ -504,7 +603,7 @@ export default function App() {
       })),
     );
     added.forEach((image, index) => {
-      void readPastedImage(files[index], image)
+      void readImageAttachment(files[index], image)
         .catch((error) => ({ ...image, error: errorText(error) }))
         .then((result) => {
           setDrafts((previous) => {
@@ -597,12 +696,73 @@ export default function App() {
     agent: conversation ? conversationAgent(conversation) : settings.agent,
     workspace: settings.workspace,
     draftKey,
-    hasDraft: !!draft || !!images.length,
+    hasDraft: !!draft || !!images.length || !!files.length,
+    files,
   };
   const viewedConversation = useRef(currentView);
   viewedConversation.current = currentView;
+  const addFiles = (selected: string[], fromMention = false) => {
+    if (!selected.length || viewedConversation.current.draftKey !== draftKey) return;
+    const unique = [...new Set([...viewedConversation.current.files, ...selected])];
+    try {
+      workspaceFilePaths(unique);
+    } catch (error) {
+      showToast(errorText(error), true);
+      return;
+    }
+    const nextField =
+      fromMention && tokens.anchor
+        ? field.replaceRangeWithSegments(tokens.anchor, field.caretPosition, [], true)
+        : undefined;
+    setDrafts((previous) => ({
+      ...previous,
+      [draftKey]: {
+        ...previous[draftKey],
+        text: previous[draftKey]?.text ?? '',
+        files: unique,
+        ...(nextField ? { field: nextField, text: nextField.toString() } : {}),
+      },
+    }));
+    if (fromMention) tokens.close();
+    requestAnimationFrame(focusComposer);
+  };
+  const removeFile = (file: string) => {
+    setDrafts((previous) => ({
+      ...previous,
+      [draftKey]: {
+        ...previous[draftKey],
+        files: previous[draftKey]?.files?.filter((item) => item !== file),
+      },
+    }));
+    focusComposer();
+  };
   const messages = conversation?.messages || [];
-  const isHome = !messages.length && !browserVisible && !editingElement;
+  const voiceElsewhere = Boolean(settingsTab || showUsage);
+  const voiceVisible = Boolean(voiceConversationId && voiceConversationId === conversationId &&
+    !archived && !onboardingVisible && (!voiceElsewhere || voiceInCall));
+  const voiceMode = !voiceVisible ? undefined : voiceElsewhere || voiceReview || conversationRequests.length ? 'compact'
+    : browserVisible ? 'browser' : 'chat';
+  const sidebarShown = sidebar && voiceMode !== 'browser';
+  useEffect(() => {
+    if (voiceConversationId && (voiceConversationId !== conversationId || archived ||
+      onboardingVisible || (!voiceInCall && (showUsage || (settingsTab && settingsTab !== 'voice'))))) {
+      setVoiceConversationId(undefined);
+      setVoiceInCall(false);
+    }
+  }, [voiceConversationId, conversationId, archived, voiceInCall, showUsage, onboardingVisible, settingsTab]);
+  useEffect(() => {
+    if (voiceVisible && conversationRequests.length) {
+      setInspectorOpen(false);
+      stickToBottom.current = true;
+    }
+  }, [voiceVisible, conversationRequests.length]);
+  const isHome = !messages.length && !browserVisible && !editingElement && (!voiceVisible || voiceMode === 'chat');
+  // Offers come from the page that is showing, and step aside as soon as there is a draft.
+  const pageOffers =
+    browserVisible && browser.status === 'ready' && !voiceVisible && !archived && !editingElement &&
+    !draft.trim() && !messages.some((message) => message.status === 'streaming')
+      ? (browser.tabs.find((tab) => tab.id === browser.activeTabId && !tab.loading)?.hints ?? [])
+      : [];
   const setupRequired = Boolean(
     onboardingState?.requiresSetup && onboardingState.workspace.status !== 'ready',
   );
@@ -654,7 +814,7 @@ export default function App() {
   const sendable =
     loaded &&
     !setupRequired &&
-    Boolean(draft.trim() || images.length) &&
+    Boolean(draft.trim() || images.length || files.length) &&
     images.every((image) => image.data) &&
     (!images.length || supportsImages(currentAgentId)) &&
     Boolean(currentAgent?.available && currentAgent.supported);
@@ -1055,15 +1215,19 @@ export default function App() {
     // 打开一段未归档的对话时，侧栏回到对话列表。
     if (conversationId && !archived) setShowArchived(false);
   }, [conversationId, archived]);
+  const discoveredSkillsFor = useRef('');
   useEffect(() => {
     if (!loaded || !workbenchMounted || onboardingVisible) return;
     // Match the existing effect cancellation pattern: old conversation responses
     // must never populate the new conversation's menu.
+    const key = JSON.stringify([conversationId, currentAgentId, settings.workspace]);
+    if (!skillMenuOpen && discoveredSkillsFor.current === key) return;
     let disposed = false;
     void window.workbench
       .invoke<AppSnapshot['providerSkillDiscovery']>('skills:list', { conversationId })
       .then((discovery) => {
         if (disposed) return;
+        discoveredSkillsFor.current = key;
         setProviderSkills(discovery?.skills ?? []);
         setProviderSkillDiscovery(discovery);
       })
@@ -1133,6 +1297,44 @@ export default function App() {
         : ['请在当前项目源码中定位 ', ' ，先说明对应组件和可修改的位置。'],
     );
   };
+  const enterLive = async () => {
+    if (openingVoice.current || archived || setupRequired) return;
+    const input = composer.current;
+    const panel = isHome && input?.closest('.chat-panel')?.getBoundingClientRect();
+    homeVoiceTop.current = panel && panel.height && input
+      ? (input.getBoundingClientRect().top - panel.top) / panel.height * 100
+      : undefined;
+    if (conversationId) {
+      setVoiceReview(false);
+      setVoiceConversationId(conversationId);
+      return;
+    }
+    openingVoice.current = true;
+    try {
+      const item = await action<Conversation>('conversation:new');
+      if (!item) return;
+      upsert(item);
+      if (viewedConversation.current.draftKey !== draftKey) return;
+      const key = JSON.stringify([settings.workspace, item.id]);
+      setDrafts(previous => {
+        if (!previous[draftKey]) return previous;
+        const next = {...previous, [key]: previous[draftKey]};
+        delete next[draftKey];
+        return next;
+      });
+      setConversationId(item.id);
+      setVoiceReview(false);
+      setVoiceConversationId(item.id);
+    } finally {
+      openingVoice.current = false;
+    }
+  };
+  const leaveLive = useCallback(() => {
+    setVoiceConversationId(undefined);
+    setVoiceInCall(false);
+    setVoiceReview(false);
+    requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('[data-live-entry]')?.focus());
+  }, []);
   const newConversation = useCallback(async () => {
     setShowUsage(false);
     setSettingsTab(null);
@@ -1185,7 +1387,7 @@ export default function App() {
       }
       if (event.key === 'b') {
         event.preventDefault();
-        setSidebar((value) => !value);
+        if (voiceMode !== 'browser') setSidebar((value) => !value);
       }
       if (event.key === 'l') {
         event.preventDefault();
@@ -1203,6 +1405,7 @@ export default function App() {
   }, [
     newConversation,
     action,
+    voiceMode,
     browserVisible,
     browser.activeTabId,
     workbenchMounted,
@@ -1213,12 +1416,12 @@ export default function App() {
     const command = field.segments.every((item) => item.type === 'text')
       ? parseComposerCommand(draft)
       : undefined;
-    if (command && !images.length) {
+    if (command && !images.length && !files.length) {
       await executeCommand(command.command, command.argument);
       return;
     }
     if (
-      (!draft.trim() && !images.length) ||
+      (!draft.trim() && !images.length && !files.length) ||
       images.some((image) => !image.data) ||
       sending.current ||
       !loaded ||
@@ -1228,14 +1431,14 @@ export default function App() {
     )
       return;
     if (images.length && !supportsImages(currentAgentId)) {
-      showToast('当前 Agent 不支持图片，请选择 Codex、Claude、Pi 或 OpenCode', true);
+      showToast('当前运行时不支持图片，请更换运行时或移除图片', true);
       return;
     }
     setInspectorOpen(false);
     // Skills picked in the toolbar belong to the workspace and inline references to the CLI.
     const submission = buildSkillSubmission({
       segments: field.segments,
-      picked: selectedSkills,
+      picked: [],
       localSkills: skills ?? [],
       providerSkills,
       discovery: providerSkillDiscovery,
@@ -1251,6 +1454,7 @@ export default function App() {
       id: conversationId,
       ...submission,
       images: images.length ? parseImages(images) : undefined,
+      ...(files.length ? { files, workspace: settings.workspace } : {}),
       context: mentions.length ? `当前页面：${pageSource(browser.url)}` : undefined,
       mentions: mentions.length
         ? mentions.map(({ token, ref, edit }) => ({ token, ref, ...(edit ? { edit } : {}) }))
@@ -1280,7 +1484,7 @@ export default function App() {
   };
   /** Takes a queued message back into the field it came from. */
   const editQueued = async (item: QueuedMessage) => {
-    if (draft.trim() || images.length) {
+    if (draft.trim() || images.length || files.length) {
       showToast('输入框里还有内容，发送或清空后再取回这条消息', true);
       return;
     }
@@ -1296,6 +1500,7 @@ export default function App() {
       [JSON.stringify([settings.workspace, item.conversationId])]: saved ?? {
         text: item.text,
         field: fieldFromText(item.text),
+        files: item.files,
       },
     }));
     // After a reload only the words are left.
@@ -1323,7 +1528,6 @@ export default function App() {
     if (result) {
       if (result.workspace !== settings.workspace) {
         clearDraft();
-        setSelectedSkills([]);
         const snapshot = await action<AppSnapshot>('app:snapshot');
         if (snapshot) setSkills(snapshot.skills ?? []);
       }
@@ -1340,6 +1544,18 @@ export default function App() {
   const selectBrowser = async () => {
     const result = await action<Settings>('settings:browser');
     if (result) setSettings(result);
+  };
+  const browserConnected = browser.status === 'ready' && web.status === 'ready';
+  const browserConnecting =
+    retryingBrowser || browser.status === 'starting' || web.status === 'starting';
+  const retryBrowser = async () => {
+    if (busy || browserConnecting || browserConnected) return;
+    setRetryingBrowser(true);
+    try {
+      await action('web:connect');
+    } finally {
+      setRetryingBrowser(false);
+    }
   };
   const selectAgent = async (id: string) => {
     if (busy || switchingAgent) return;
@@ -1358,7 +1574,6 @@ export default function App() {
     if (result) {
       upsert(result);
       setConversationId(result.id);
-      setSelectedSkills([]);
       setProviderSkillDiscovery(undefined);
       setInspectorOpen(false);
     }
@@ -1484,7 +1699,7 @@ export default function App() {
     if (command.name === 'skills' || command.name === 'mcp') openSettings(command.name);
     if (command.name === 'settings') {
       const tab = argument || 'agent';
-      if (!['agent', 'browser', 'feishu', 'learning', 'skills', 'mcp', 'sandbox'].includes(tab)) {
+      if (!['agent', 'browser', 'feishu', 'learning', 'skills', 'mcp', 'sandbox', 'voice'].includes(tab)) {
         showToast('没有这个设置分类，请使用 /help 查看', true);
         return;
       }
@@ -1521,7 +1736,11 @@ export default function App() {
         at,
         at,
         [
-          { type: 'token', text: `/${item.tokenName}`, value: { skill: name, source } },
+          {
+            type: 'token',
+            text: `${currentAgentId === 'codex' ? '$' : '/'}${item.tokenName}`,
+            value: { skill: name, source },
+          },
           { type: 'text', text: ' ' },
         ],
         true,
@@ -1628,22 +1847,25 @@ export default function App() {
     void action('recording:start');
   };
   const openLink = (url: string) => void action('shell:openExternal', { url });
-  const openConversationLink = async (url: string) => {
-    try {
-      const target = new URL(url);
-      if (!['http:', 'https:'].includes(target.protocol) || target.username || target.password)
-        throw new Error('请使用不含凭据的 HTTP 或 HTTPS 链接');
-    } catch {
-      showToast('这不是可打开的网页链接', true);
-      return;
-    }
-    setBrowserVisible(true);
-    if (browser.status !== 'ready') {
-      const started = await action<BrowserState>('browser:start');
-      if (started?.status !== 'ready') return;
-    }
-    await action('browser:new-tab', { url });
-  };
+  const openConversationLink = useCallback(
+    async (url: string) => {
+      try {
+        const target = new URL(url);
+        if (!['http:', 'https:'].includes(target.protocol) || target.username || target.password)
+          throw new Error('请使用不含凭据的 HTTP 或 HTTPS 链接');
+      } catch {
+        showToast('这不是可打开的网页链接', true);
+        return;
+      }
+      setBrowserVisible(true);
+      if (browser.status !== 'ready') {
+        const started = await action<BrowserState>('browser:start');
+        if (started?.status !== 'ready') return;
+      }
+      await action('browser:new-tab', { url });
+    },
+    [action, browser.status, showToast],
+  );
 
   const settingsWorkspace = settingsTab ? (
     <section className="settings-workspace" aria-label="设置">
@@ -1663,6 +1885,10 @@ export default function App() {
           <Tabs.Tab id="browser">
             <Icon icon={EarthIcon} size={15} />
             浏览器
+          </Tabs.Tab>
+          <Tabs.Tab id="voice">
+            <Icon icon={Mic01Icon} size={15} />
+            语音
           </Tabs.Tab>
           <Tabs.Tab id="skills">
             <Icon icon={MagicWand01Icon} size={15} />
@@ -1686,6 +1912,9 @@ export default function App() {
           </Tabs.Tab>
         </Tabs.List>
         <div className="settings-body">
+          {settingsTab === 'voice' && (
+              <Tabs.Panel id="voice"><VoiceSettings managedCall={voiceInCall} /></Tabs.Panel>
+          )}
           {settingsTab === 'skills' && (
             <Tabs.Panel id="skills">
               <SkillsSettings
@@ -1734,6 +1963,16 @@ export default function App() {
                     <AgentIcon agent={currentAgentId} size={28} />
                     <h4>{currentAgent?.name || currentAgentId}</h4>
                     <span className="small-badge">{agentStatus}</span>
+                    {currentAgent?.available && (
+                      <ActionButton
+                        size="sm"
+                        variant="secondary"
+                        onPress={() => void action('runtime:open-native', { conversationId })}
+                      >
+                        <Icon icon={TerminalIcon} size={14} />
+                        打开原生会话
+                      </ActionButton>
+                    )}
                     <Dropdown>
                       <Button
                         size="sm"
@@ -1940,6 +2179,7 @@ export default function App() {
                   ))}
                 </div>
                 <p className="settings-note">安装或更新 CLI 后点击刷新，重新检测本机运行时。</p>
+                <NativeCliMenu onAction={action} />
               </details>
               <Card className="settings-workspace-card">
                 <Card.Content>
@@ -2030,11 +2270,12 @@ export default function App() {
                   <p>在当前工作区中浏览、操作和记录网页。</p>
                 </div>
                 <span
-                  className={`small-badge ${browser.status === 'ready' && web.status === 'ready' ? 'success' : ''}`}
+                  role="status"
+                  className={`small-badge ${browserConnected ? 'success' : ''}`}
                 >
-                  {browser.status === 'ready' && web.status === 'ready'
+                  {browserConnected
                     ? '已连接'
-                    : browser.status === 'starting' || web.status === 'starting'
+                    : browserConnecting
                       ? '连接中'
                       : browser.status === 'ready'
                         ? '网页工具未连接'
@@ -2048,10 +2289,26 @@ export default function App() {
                 <p className="file-path">
                   {browser.binaryPath || settings.browserPath || '尚未找到 Chrome'}
                 </p>
-                <ActionButton className="secondary-button" onPress={() => void selectBrowser()}>
-                  <Icon icon={FolderOpenIcon} size={14} />
-                  选择 Chrome
-                </ActionButton>
+                <div className="button-row">
+                  {!browserConnected && (browser.binaryPath || browser.status === 'ready') && (
+                    <ActionButton
+                      className="primary-button"
+                      isDisabled={browserConnecting || busy}
+                      onPress={() => void retryBrowser()}
+                    >
+                      <Icon icon={RefreshCwIcon} size={14} />
+                      重新连接
+                    </ActionButton>
+                  )}
+                  <ActionButton
+                    className="secondary-button"
+                    isDisabled={browserConnecting || busy}
+                    onPress={() => void selectBrowser()}
+                  >
+                    <Icon icon={FolderOpenIcon} size={14} />
+                    选择 Chrome
+                  </ActionButton>
+                </div>
               </div>
               {browser.error && <div className="inline-error">{browser.error}</div>}
               {web.error && <div className="inline-error">{web.error}</div>}
@@ -2365,17 +2622,17 @@ export default function App() {
           aria-hidden={onboardingVisible || undefined}
         >
           <Sidebar.Provider
-            open={sidebar}
+            open={sidebarShown}
             onOpenChange={setSidebar}
             collapsible="offcanvas"
             toggleShortcut={false}
-            className={`app-shell ${sidebar ? '' : 'sidebar-collapsed'} ${browserVisible ? '' : 'browser-collapsed'}`}
+            className={`app-shell ${sidebarShown ? '' : 'sidebar-collapsed'} ${browserVisible ? '' : 'browser-collapsed'}`}
           >
             <Sidebar
               className="athena-sidebar"
               aria-label="主导航"
-              aria-hidden={!sidebar}
-              inert={!sidebar}
+              aria-hidden={!sidebarShown}
+              inert={!sidebarShown}
             >
               <div className="window-drag sidebar-top">
                 <ActionButton
@@ -2502,7 +2759,8 @@ export default function App() {
             <main
               ref={panels}
               className={`workspace-panels ${resizingBrowser ? 'is-resizing' : ''}`}
-              style={{ '--browser-drawer-width': `${drawerWidth}px` } as React.CSSProperties}
+              data-live-layout={voiceMode}
+              style={{ '--browser-drawer-width': voiceMode === 'browser' ? '100%' : `${drawerWidth}px` } as React.CSSProperties}
             >
               {sandboxPips
                 .filter((pip) => pip.conversationId === conversation?.id)
@@ -2533,7 +2791,7 @@ export default function App() {
                     }}
                   />
                 ))}
-              <div className="work-area">
+              <div className="work-area" hidden={voiceMode === 'browser'} inert={voiceMode === 'browser'}>
                 <header className="topbar window-drag">
                   <div className={`topbar-title ${sidebar ? '' : 'with-traffic-lights'}`}>
                     {!sidebar && (
@@ -2614,6 +2872,9 @@ export default function App() {
                 <div className="conversation-column" hidden={showUsage || Boolean(settingsTab)}>
                   <div
                     className={`chat-panel ${editingElement ? 'is-editing' : ''} ${isHome ? 'is-home' : ''}`}
+                    style={isHome && voiceMode === 'chat' && homeVoiceTop.current !== undefined
+                      ? { '--live-home-input-top': `${homeVoiceTop.current}%` } as React.CSSProperties
+                      : undefined}
                   >
                     {/* Tabs renders its children a second time to collect its tabs. The composer
                         stays outside it, so its Skill menu is not collected as well. */}
@@ -2655,7 +2916,7 @@ export default function App() {
                         }}
                       >
                         {!messages.length ? (
-                          <div className="welcome">
+                          <div className="welcome" hidden={voiceVisible}>
                             <img className="welcome-symbol" src={athenaLogo} alt="Athena" />
                             <h1>今天想完成什么？</h1>
                             <p>打开网页、调整界面，或把任务交给 Athena。</p>
@@ -2672,7 +2933,10 @@ export default function App() {
                                     {message.images?.length ? (
                                       <ImageAttachments images={message.images} />
                                     ) : null}
-                                    {(message.text || message.displayText) && (
+                                    {Boolean(message.files?.length) && (
+                                      <WorkspaceFileAttachments files={message.files!} />
+                                    )}
+                                    {(message.displayText ?? message.text) && (
                                       <div className="user-message-row">
                                         {message.text && (
                                           <ChatMessageActions>
@@ -2703,6 +2967,7 @@ export default function App() {
                                       </div>
                                     )}
                                     {message.context &&
+                                      !message.files?.length &&
                                       !message.mentions?.length &&
                                       message.source !== 'feishu' && (
                                         <div className="message-context">
@@ -2764,25 +3029,10 @@ export default function App() {
                                       >
                                         {replyText(message) && (
                                           <ProChatMessage.Content className="markdown">
-                                            <Markdown
-                                              remarkPlugins={[remarkGfm]}
-                                              components={{
-                                                img: () => null,
-                                                a: ({ href, children }) => (
-                                                  <a
-                                                    href={href}
-                                                    onClick={(event) => {
-                                                      event.preventDefault();
-                                                      if (href) void openConversationLink(href);
-                                                    }}
-                                                  >
-                                                    {children}
-                                                  </a>
-                                                ),
-                                              }}
-                                            >
-                                              {replyText(message)}
-                                            </Markdown>
+                                            <ReplyMarkdown
+                                              text={replyText(message)}
+                                              onOpenLink={openConversationLink}
+                                            />
                                           </ProChatMessage.Content>
                                         )}
                                       </AssistantTurn>
@@ -2815,7 +3065,7 @@ export default function App() {
                         />
                       </Tabs.Panel>
                     </Tabs>
-                    <div className="composer-area">
+                    <div className="composer-area" hidden={voiceVisible && voiceMode !== 'chat'}>
                       {archived && conversation && (
                         <div className="archived-notice">
                           <Icon icon={Archive01Icon} size={16} />
@@ -2828,6 +3078,44 @@ export default function App() {
                           </ActionButton>
                         </div>
                       )}
+                      {/* What the open page offers, known from the moment it loaded. */}
+                      {pageOffers.length > 0 && (
+                        <div className="page-hints" role="group" aria-label="这个页面可以做的事">
+                          <span className="page-hints-lead">
+                            <Icon icon={EarthIcon} size={13} />
+                            已读完这一页
+                          </span>
+                          {pageOffers.map((hint) => (
+                            <ActionButton
+                              key={hint.id}
+                              className="page-hint"
+                              title={hint.detail}
+                              onPress={() => {
+                                setDraft(hint.prompt);
+                                focusComposer();
+                              }}
+                            >
+                              {hint.label}
+                            </ActionButton>
+                          ))}
+                        </div>
+                      )}
+                      <motion.div className="composer-surface"
+                        hidden={archived}
+                        layout={!reduceVoiceMotion}
+                        initial={false}
+                        style={{ borderRadius: 24 }}
+                        transition={{ layout: { duration: reduceVoiceMotion ? 0 : 0.28, ease: [0.22, 1, 0.36, 1] } }}
+                        data-input-mode={voiceMode === 'chat' ? 'voice' : 'text'}
+                      >
+                        <motion.div className="composer-text-layer"
+                          data-active={voiceMode !== 'chat'}
+                          aria-hidden={voiceMode === 'chat' || undefined}
+                          inert={voiceMode === 'chat'}
+                          initial={false}
+                          animate={{ opacity: voiceMode === 'chat' ? 0 : 1, y: voiceMode === 'chat' ? -5 : 0 }}
+                          transition={{ duration: reduceVoiceMotion ? 0 : 0.18, ease: 'easeOut' }}
+                        >
                       <PromptInput
                         ref={composer}
                         hidden={archived}
@@ -2837,6 +3125,11 @@ export default function App() {
                         allowSubmitWhileRunning={queueable}
                         maxHeight={160}
                         onSubmit={() => {
+                          if (fileMenuOpen) {
+                            const first = fileOptions.find((item) => !files.includes(item));
+                            if (first) addFiles([first], true);
+                            return;
+                          }
                           // Skills can arrive after the slash was typed, so the menu shows with
                           // nothing highlighted. Enter then takes its first Skill, not the query.
                           const first = skillMenuVisible
@@ -2849,7 +3142,45 @@ export default function App() {
                         }}
                         onStop={() => void action('conversation:stop')}
                         onPasteCapture={pasteImages}
+                        onDragOver={(event) => {
+                          if (event.dataTransfer.types.includes('Files')) event.preventDefault();
+                        }}
+                        onDrop={async (event) => {
+                          if (!event.dataTransfer.types.includes('Files')) return;
+                          event.preventDefault();
+                          const dropped = Array.from(event.dataTransfer.files);
+                          const workspaceFiles = dropped.filter(
+                            (file) => !file.type.startsWith('image/'),
+                          );
+                          try {
+                            if (workspaceFiles.length) {
+                              const selected = await window.workbench.droppedWorkspaceFiles(
+                                settings.workspace,
+                                workspaceFiles,
+                              );
+                              if (viewedConversation.current.draftKey !== draftKey) return;
+                              addFiles(selected);
+                            }
+                            addImages(dropped.filter((file) => file.type.startsWith('image/')));
+                          } catch (error) {
+                            showToast(errorText(error), true);
+                          }
+                        }}
                       >
+                        <input
+                          type="file"
+                          hidden
+                          ref={imagePicker}
+                          accept={IMAGE_TYPES.join(',')}
+                          multiple
+                          aria-label="选择要添加的图片"
+                          onChange={(event) => {
+                            if (pickerDraftKey.current === draftKey)
+                              addImages(Array.from(event.target.files || []));
+                            event.target.value = '';
+                            focusComposer();
+                          }}
+                        />
                         <MessageQueue
                           items={queued}
                           paused={Boolean(conversationId && queue.paused.includes(conversationId))}
@@ -2862,9 +3193,14 @@ export default function App() {
                               inside it would join the suggestions. */}
                           <PromptInput.Tokens>
                             <PromptInput.Content>
-                              {images.length > 0 && (
+                              {(images.length > 0 || files.length > 0) && (
                                 <PromptInput.Attachments>
-                                  <ImageAttachments images={images} onRemove={removeImage} />
+                                  {images.length > 0 && (
+                                    <ImageAttachments images={images} onRemove={removeImage} />
+                                  )}
+                                  {files.length > 0 && (
+                                    <WorkspaceFileAttachments files={files} onRemove={removeFile} />
+                                  )}
                                 </PromptInput.Attachments>
                               )}
                               {images.length > 0 &&
@@ -2876,7 +3212,7 @@ export default function App() {
                                     role="alert"
                                   >
                                     {images.find((image) => image.error)?.error ||
-                                      '当前 Agent 不支持图片，请选择 Codex、Claude、Pi 或 OpenCode。'}
+                                      '当前运行时不支持图片，请更换运行时或移除图片。'}
                                   </p>
                                 )}
 
@@ -2892,7 +3228,7 @@ export default function App() {
                                 placeholder={
                                   mentions.length
                                     ? '想对这些元素做什么？'
-                                    : '描述任务，或在页面中选取元素…'
+                                    : '描述任务，@ 引用文件，/ 选择命令…'
                                 }
                               >
                                 {(segment) => {
@@ -2926,49 +3262,89 @@ export default function App() {
                             </PromptInput.Content>
                             <PromptInput.TokenSuggestions
                               tokens={tokens}
-                              isOpen={skillMenuVisible}
+                              isOpen={skillMenuVisible || fileMenuOpen}
                               placement="top start"
                               className="skill-slash-menu"
                               maxHeight={320}
                             >
-                              <Menu aria-label="命令与 Skills">
-                                {commandOptions.map((command) => (
-                                  <Menu.Item
-                                    key={`command:${command.name}`}
-                                    id={`command:${command.name}`}
-                                    textValue={command.name}
-                                    onAction={() => void executeCommand(command)}
-                                  >
-                                    <Icon icon={commandIcons[command.icon]} size={16} />
-                                    <div className="skill-option-copy">
-                                      <Label>
-                                        /{command.name}
-                                        <span className="integration-source">{command.label}</span>
-                                      </Label>
-                                      <Description>{command.description}</Description>
-                                    </div>
+                              <Menu aria-label={fileMenuOpen ? '工作区文件' : '命令与 Skills'}>
+                                {fileMenuOpen && !fileOptions.length && (
+                                  <Menu.Item id="file-empty" isDisabled textValue="工作区文件">
+                                    <Label>
+                                      {fileResults?.key !== fileQueryKey
+                                        ? '正在查找…'
+                                        : fileResults.error || '没有匹配的文件'}
+                                    </Label>
                                   </Menu.Item>
-                                ))}
-                                {skillOptions.map((skill) => (
-                                  <Menu.Item
-                                    key={skill.key}
-                                    id={skill.key}
-                                    textValue={skill.name}
-                                    isDisabled={skillUnavailable(skill.name)}
-                                    onAction={() => insertSkill(skill)}
-                                  >
-                                    <Icon icon={MagicWand01Icon} size={16} />
-                                    <div className="skill-option-copy">
-                                      <Label>
-                                        /{skill.tokenName}
-                                        <span className="integration-source">
-                                          {skill.source === 'provider' ? 'CLI Skill' : '本机 Skill'}
-                                        </span>
-                                      </Label>
-                                      <Description>{skill.description}</Description>
-                                    </div>
-                                  </Menu.Item>
-                                ))}
+                                )}
+                                {fileMenuOpen &&
+                                  fileOptions.map((file) => (
+                                    <Menu.Item
+                                      key={'file:' + file}
+                                      id={'file:' + file}
+                                      textValue={file}
+                                      isDisabled={files.includes(file)}
+                                      onAction={() => addFiles([file], true)}
+                                    >
+                                      <Icon icon={FolderOpenIcon} size={16} />
+                                      <div className="skill-option-copy">
+                                        <Label>{file.split('/').at(-1)}</Label>
+                                        <Description>{file}</Description>
+                                      </div>
+                                    </Menu.Item>
+                                  ))}
+                                {commandOptions.length > 0 && (
+                                  <Menu.Section aria-label="Athena 命令">
+                                    <Header>命令</Header>
+                                    {commandOptions.map((command) => (
+                                      <Menu.Item
+                                        key={`command:${command.name}`}
+                                        id={`command:${command.name}`}
+                                        textValue={command.name}
+                                        onAction={() => void executeCommand(command)}
+                                      >
+                                        <Icon icon={commandIcons[command.icon]} size={16} />
+                                        <div className="skill-option-copy">
+                                          <Label>
+                                            /{command.name}
+                                            <span className="integration-source">
+                                              {command.label}
+                                            </span>
+                                          </Label>
+                                          <Description>{command.description}</Description>
+                                        </div>
+                                      </Menu.Item>
+                                    ))}
+                                  </Menu.Section>
+                                )}
+                                {skillMenuOpen && skillOptions.length > 0 && (
+                                  <Menu.Section aria-label="可用 Skills">
+                                    <Header>Skills</Header>
+                                    {skillOptions.map((skill) => (
+                                      <Menu.Item
+                                        key={skill.key}
+                                        id={skill.key}
+                                        textValue={skill.name}
+                                        isDisabled={skillUnavailable(skill.name)}
+                                        onAction={() => insertSkill(skill)}
+                                      >
+                                        <Icon icon={MagicWand01Icon} size={16} />
+                                        <div className="skill-option-copy">
+                                          <Label>
+                                            {tokens.trigger === '$' ? '$' : '/'}
+                                            {skill.tokenName}
+                                            <span className="integration-source">
+                                              {skill.source === 'provider'
+                                                ? 'CLI Skill'
+                                                : '本机 Skill'}
+                                            </span>
+                                          </Label>
+                                          <Description>{skill.description}</Description>
+                                        </div>
+                                      </Menu.Item>
+                                    ))}
+                                  </Menu.Section>
+                                )}
                               </Menu>
                             </PromptInput.TokenSuggestions>
                           </PromptInput.Tokens>
@@ -2982,6 +3358,44 @@ export default function App() {
                                 onPage={showCurrentPage}
                                 onSelect={selectPageElement}
                                 onRecord={recordPage}
+                                onFiles={() =>
+                                  void action<string[]>('workspace:pick-files', {
+                                    workspace: settings.workspace,
+                                  }).then((paths) => {
+                                    if (paths) addFiles(paths);
+                                  })
+                                }
+                                onImages={() => {
+                                  pickerDraftKey.current = draftKey;
+                                  imagePicker.current?.click();
+                                }}
+                                onSkills={() => {
+                                  const at = field.caretPosition;
+                                  const segment = field.segments[at.index];
+                                  const prefix =
+                                    segment?.type === 'text' &&
+                                    at.offset > 0 &&
+                                    !/\s/.test(segment.text[at.offset - 1])
+                                      ? ' $'
+                                      : '$';
+                                  const next = field.replaceRangeWithSegments(
+                                    at,
+                                    at,
+                                    [{ type: 'text', text: prefix }],
+                                    true,
+                                  );
+                                  requestAnimationFrame(() => {
+                                    if (viewedConversation.current.draftKey !== draftKey) return;
+                                    focusComposer();
+                                    storeField(
+                                      next.withCaretPosition({
+                                        index: at.index,
+                                        offset: at.offset + prefix.length,
+                                      }),
+                                    );
+                                  });
+                                }}
+                                imagesEnabled={supportsImages(currentAgentId)}
                               />
                               <Dropdown isOpen={agentMenu} onOpenChange={setAgentMenu}>
                                 <ActionButton
@@ -3010,6 +3424,8 @@ export default function App() {
                                       if (key === 'manage') {
                                         setAgentMenu(false);
                                         openSettings('agent');
+                                      } else if (key === 'native') {
+                                        void action('runtime:open-native', { conversationId });
                                       } else void selectAgent(key as Settings['agent']);
                                     }}
                                   >
@@ -3047,6 +3463,14 @@ export default function App() {
                                         </Dropdown.Item>
                                       ))}
                                     </Dropdown.Section>
+                                    <Dropdown.Item
+                                      id="native"
+                                      textValue="打开原生会话"
+                                      isDisabled={!currentAgent?.available}
+                                    >
+                                      <Icon icon={TerminalIcon} size={15} />
+                                      <Label>打开原生会话</Label>
+                                    </Dropdown.Item>
                                     <Dropdown.Item id="manage" textValue="管理本机 Agent">
                                       <Icon icon={Settings02Icon} size={15} />
                                       <Label>管理本机 Agent</Label>
@@ -3054,13 +3478,6 @@ export default function App() {
                                   </Dropdown.Menu>
                                 </Dropdown.Popover>
                               </Dropdown>
-                              <SkillPicker
-                                skills={skills ?? []}
-                                selected={selectedSkills}
-                                full={chosenSkills.size >= MAX_SKILLS}
-                                disabled={busy}
-                                onChange={setSelectedSkills}
-                              />
                               <ModelPicker
                                 settings={conversationSettings}
                                 openRequest={modelMenuRequest}
@@ -3071,6 +3488,11 @@ export default function App() {
                               />
                             </PromptInput.ToolbarStart>
                             <PromptInput.ToolbarEnd className="composer-right">
+                              <ActionButton isIconOnly size="md" variant="ghost" className="live-entry" data-live-entry=""
+                                aria-label="语音通话" title="Live 语音通话" isDisabled={archived || setupRequired}
+                                onPress={() => void enterLive()}>
+                                <Icon icon={Mic01Icon} size={17} />
+                              </ActionButton>
                               {currentPhase?.kind === 'waiting' ? (
                                 <span className="composer-hint is-waiting">
                                   <PhaseGlyph kind="wait" still />
@@ -3107,6 +3529,17 @@ export default function App() {
                           </PromptInput.Toolbar>
                         </PromptInput.Shell>
                       </PromptInput>
+                        </motion.div>
+                        <motion.div ref={setComposerVoiceAnchor} className="live-composer-anchor"
+                          data-active={voiceMode === 'chat'}
+                          aria-hidden={voiceMode !== 'chat' || undefined}
+                          inert={voiceMode !== 'chat'}
+                          initial={false}
+                          animate={{ opacity: voiceMode === 'chat' ? 1 : 0, y: voiceMode === 'chat' ? 0 : 5 }}
+                          transition={{ duration: reduceVoiceMotion ? 0 : 0.18, ease: 'easeOut', delay: voiceMode === 'chat' && !reduceVoiceMotion ? 0.04 : 0 }}
+                        />
+                      </motion.div>
+                      <div hidden={voiceVisible}>
                       {archived ? null : !loaded ? (
                         <p className="composer-availability" role="status">
                           <Icon icon={Loading02Icon} size={14} className="spin" />
@@ -3153,7 +3586,7 @@ export default function App() {
                             </ActionButton>
                           </div>
                         )}
-                      {isHome && !archived && (
+                      {isHome && !voiceVisible && !archived && (
                         <PromptSuggestion className="mt-7">
                           <PromptSuggestion.Items className="welcome-suggestions">
                             <PromptSuggestion.Item onPress={showCurrentPage}>
@@ -3189,8 +3622,9 @@ export default function App() {
                           </PromptSuggestion.Items>
                         </PromptSuggestion>
                       )}
+                      </div>
                     </div>
-                    <div className="composer-footer">
+                    <div className="composer-footer" hidden={voiceVisible && voiceMode !== 'chat'}>
                       <Icon icon={Folder01Icon} size={14} />
                       <ActionButton
                         onPress={() => void workspace()}
@@ -3261,9 +3695,12 @@ export default function App() {
                   }}
                 />
                 <BrowserPane
+                  immersiveVoice={voiceMode === 'browser'}
+                  voiceAnchor={setBrowserVoiceAnchor}
                   state={browser}
                   web={web}
                   nativeRecordId={nativeRecordId}
+                  taskBusy={busy}
                   recordings={recordings}
                   liveSteps={liveSteps}
                   initialFrame={lastFrame.current}
@@ -3284,6 +3721,41 @@ export default function App() {
                   onToggleInspector={() => setInspectorOpen((value) => !value)}
                 />
               </aside>
+              {voiceMode && conversationId && (
+                <div className="live-session-slot" data-mode={voiceMode}>
+                  <LiveVoiceSurface
+                    key={conversationId}
+                    conversationId={conversationId}
+                    mode={voiceMode}
+                    composerOverlayRoot={composerVoiceAnchor}
+                    browserOverlayRoot={browserVoiceAnchor}
+                    awaitingInput={conversationRequests.length > 0}
+                    taskRunning={currentBusy}
+                    agentStatus={currentBusy && runningPhase && runningConversation?.id === conversationId
+                      ? { text: phaseText(runningPhase.phase, runningPhase.agent), glyph: phaseGlyph(runningPhase.phase, runningPhase.agent) }
+                      : null}
+                    onCallActiveChange={setVoiceInCall}
+                    onClose={leaveLive}
+                    onSettings={() => openSettings('voice')}
+                    onToggleBrowser={() => {
+                      setBrowserVisible(value => !value);
+                      setVoiceReview(false);
+                    }}
+                    onToggleWorkspace={() => {
+                      if (voiceElsewhere) {
+                        setSettingsTab(null);
+                        setShowUsage(false);
+                        setVoiceReview(false);
+                      } else setVoiceReview(value => !value);
+                      setInspectorOpen(false);
+                    }}
+                    onStopTask={() => {
+                      const turn = messages.find(message => message.status === 'streaming' && message.role === 'assistant');
+                      if (turn) void action('conversation:stop', { conversationId, messageId: turn.id });
+                    }}
+                  />
+                </div>
+              )}
             </main>
             <ConversationSearch
               open={searchOpen}
@@ -3313,8 +3785,8 @@ export default function App() {
                       ))}
                     </div>
                     <p className="integration-notice">
-                      输入 / 选择命令或 Skill，↑↓ 选择，Enter 确认，Esc 关闭。Shift+Enter
-                      换行；中文输入确认不会发送任务。带来源的 Skill 引用只对当前任务生效。
+                      输入 / 选择命令，$ 选择 Skill，@ 引用工作区文件。用 ↑↓ 选择，Enter 确认，Esc
+                      关闭。Shift+Enter 换行。
                     </p>
                   </Modal.Body>
                 </Modal.Dialog>
@@ -3335,7 +3807,7 @@ export default function App() {
         <Onboarding
           state={onboardingState}
           initial={initialOnboarding}
-          hasDraft={Boolean(draft.trim() || images.length)}
+          hasDraft={Boolean(draft.trim() || images.length || files.length)}
           onState={acceptOnboardingState}
           onExit={exitOnboarding}
         />
@@ -3343,7 +3815,7 @@ export default function App() {
       {createPortal(
         <div className="app-notifications" role="region" aria-label="应用提醒">
           {toast && <AppToast message={toast} onDismiss={dismissToast} />}
-          {workbenchMounted && !onboardingVisible && (
+          {workbenchMounted && !onboardingVisible && !voiceVisible && (
             <WorkbenchNotices update={codexUpdate} onShowRelease={openLink} />
           )}
         </div>,

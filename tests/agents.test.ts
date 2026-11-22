@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { mkdtemp, writeFile, chmod, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, writeFile, chmod, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { nodeShebang } from './node-script';
@@ -50,6 +50,7 @@ readline.createInterface({input:process.stdin}).on('line', line => {
   const request = JSON.parse(line); fs.appendFileSync(log, line+'\\n');
   const p = request.params || {};
   if (request.method === 'initialize') { if(options.holdInitialize)return; return setTimeout(()=>send({id:request.id,result:{userAgent:'fake-codex'}}),options.initializeDelayMs||0); }
+  if (request.method === 'modelProvider/capabilities/read') return send({id:request.id,result:{imageGeneration:true}});
   if (request.method === 'skills/list') return send({id:request.id,...(options.skillsError ? {error:options.skillsError} : {result:options.skillsResponse ?? {data:[{cwd:p.cwds[0],skills:options.skills ?? []}]}})});
   if (request.method === 'model/list') return send({id:request.id,result:{data:[
     {id:'catalog-a',model:'model-a',displayName:'Model A',isDefault:true,supportedReasoningEfforts:[{reasoningEffort:'low',description:'Quick'}],defaultReasoningEffort:'low'},
@@ -78,6 +79,22 @@ readline.createInterface({input:process.stdin}).on('line', line => {
     }
     send({id:request.id,result:{turn:{id:current,status:'inProgress'}}});
     event('turn/started',{threadId:'thread-1',turn:{id:current,status:'inProgress'}});
+    if (mode==='partial-images') {
+      const completed = item => event('item/completed',{threadId:'thread-1',turnId:current,item});
+      const saved={id:'first-image',type:'imageGeneration',status:'completed',result:${JSON.stringify(testImage.data)}};
+      const failed={id:'second-image',type:'imageGeneration',status:'failed',failure:{type:'usageLimitExceeded'}};
+      completed(saved);completed(saved);completed(failed);completed(failed);
+      event('item/started',{threadId:'thread-1',turnId:current,item:{...saved,status:'inProgress'}});
+      return finish();
+    }
+    if(mode==='codex-feedback'){
+      event('item/reasoning/textDelta',{threadId:'thread-1',turnId:current,itemId:'r',delta:'PRIVATE-REASONING'});
+      event('error',{threadId:'thread-1',turnId:'foreign',willRetry:true,error:{message:'foreign failure'}});
+      event('error',{threadId:'thread-1',turnId:current,willRetry:true,error:{message:'Reconnecting... 2/4',additionalDetails:'request timed out: private retry diagnostic'}});
+      event('item/agentMessage/delta',{threadId:'thread-1',turnId:current,itemId:'reply',delta:'正在检查选中的元素。'});
+      event('item/completed',{threadId:'thread-1',turnId:current,item:{id:'reply',type:'agentMessage',phase:'commentary',text:'正在检查选中的元素。'}});
+      return finish();
+    }
     if(mode==='tool-after-completion') {
       finish();
       return send({id:101,method:'item/tool/call',params:{threadId:'thread-1',turnId:current,callId:'too-late',tool:'browser_snapshot',arguments:{}}});
@@ -222,6 +239,69 @@ function session(
     ...overrides,
   });
 }
+
+test('Codex submission precedes the receipt and only public output or actual retries reach the UI', async (t) => {
+  const f = await fixture();
+  const events: AgentEvent[] = [];
+  const agent = session(f, events);
+  t.after(async () => {
+    agent.close();
+    await f.cleanup();
+  });
+  await agent.send('codex-feedback');
+  const ordered = events.flatMap((event) => {
+    if (event.type === 'status' && event.delivery) return [event.delivery.state];
+    if (event.type === 'run-started' || event.type === 'delta') return [event.type];
+    return [];
+  });
+  assert.deepEqual(ordered, ['submitting', 'run-started', 'retrying', 'delta', 'awaiting']);
+  assert.ok(
+    events.some(
+      (e) =>
+        e.type === 'status' &&
+        e.delivery?.state === 'retrying' &&
+        e.delivery.timeout &&
+        e.delivery.attempt === 2 &&
+        e.delivery.limit === 4,
+    ),
+  );
+  const beforeAck = events.slice(
+    0,
+    events.findIndex((event) => event.type === 'run-started'),
+  );
+  assert.ok(!beforeAck.some((event) => event.type === 'status' && event.status === 'thinking'));
+  assert.doesNotMatch(JSON.stringify(events), /PRIVATE-REASONING|foreign failure|retry diagnostic/);
+});
+
+test('a partial image generation keeps the saved image once and reports the failed item', async () => {
+  const f = await fixture();
+  const events: AgentEvent[] = [];
+  const directory = path.join(f.directory, 'images');
+  const client = session(f, events, undefined, undefined, { generatedImageDirectory: directory });
+  try {
+    await assert.rejects(client.send('partial-images'), /生图额度/);
+    const files = await readdir(directory);
+    assert.equal(files.length, 1);
+    assert.deepEqual(
+      await readFile(path.join(directory, files[0])),
+      Buffer.from(testImage.data, 'base64'),
+    );
+    assert.equal(events.filter((e) => e.type === 'web-execution' && e.event.artifact).length, 1);
+    const statuses = events.flatMap((e) => (e.type === 'tool' ? [[e.call.id, e.call.status]] : []));
+    assert.deepEqual(
+      statuses.filter(([id]) => id === 'first-image'),
+      [['first-image', 'done']],
+    );
+    assert.deepEqual(
+      statuses.filter(([id]) => id === 'second-image'),
+      [['second-image', 'error']],
+    );
+    assert(!events.some((e) => e.type === 'complete'));
+  } finally {
+    client.close();
+    await f.cleanup();
+  }
+});
 
 test('Codex discovers enabled skills for the effective cwd without starting a model turn', async (t) => {
   const f = await fixture({
@@ -1471,6 +1551,7 @@ test('discovery reports a runtime by its version alone and never asks for its lo
     'codex',
     'cursor',
     'gemini',
+    'kimi',
     'opencode',
     'pi',
   ]);
@@ -1780,4 +1861,28 @@ test('Codex sends image-only and mixed turns as native image inputs, never base6
     { type: 'text', text: 'describe' },
     { type: 'image', url: imageSource(testImage) },
   ]);
+});
+
+test('recording analysis sends no workspace environment, dynamic tools or browser instructions to Codex', async (t) => {
+  const f = await fixture();
+  const agent = session(f, [], undefined, undefined, { tools: [], evidenceOnly: true });
+  t.after(() => {
+    agent.close();
+    return f.cleanup();
+  });
+  await agent.send('Analyze the selected recording', '{"steps":[]}');
+  const requests = await f.requests();
+  const start = requests.find((item) => item.method === 'thread/start').params;
+  assert.deepEqual(start.environments, []);
+  assert.deepEqual(start.runtimeWorkspaceRoots, []);
+  assert.deepEqual(start.dynamicTools, []);
+  assert.deepEqual(start.selectedCapabilityRoots, []);
+  assert.deepEqual(start.config.mcp_servers, {});
+  assert.equal(start.config.features.shell_tool, false);
+  assert.equal(start.config.web_search, 'disabled');
+  assert.equal(start.approvalPolicy, 'never');
+  assert.doesNotMatch(start.developerInstructions, /workbench_browser_|web_snapshot/);
+  const turn = requests.find((item) => item.method === 'turn/start').params;
+  assert.deepEqual(turn.environments, []);
+  assert.deepEqual(turn.runtimeWorkspaceRoots, []);
 });

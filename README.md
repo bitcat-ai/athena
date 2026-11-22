@@ -133,7 +133,7 @@ npm run dev
 
 ## 使用之前
 
-- **按 CLI 的实际能力执行任务。** 模型请求使用对应账户的配额或计费。网页工具支持 Codex、Claude、Pi 和 OpenCode；Pi 的远端模型 UI 续聊仍待排查，Cursor 与 Gemini 的真实模型验收未完成，详见 [CLI 验收矩阵](docs/mainstream-cli-support.md)。
+- **按 CLI 的实际能力执行任务。** 模型请求使用对应账户的配额或计费。当前源码的网页工具支持 Codex、Claude、Pi、OpenCode 和 Kimi。输入栏可选择图片与工作区文件，也可打开所选 CLI 的独立原生会话。各运行时和发行版的验证范围见 [CLI 验收矩阵](docs/mainstream-cli-support.md)。
 - **网页功能需要本机的 Google Chrome。** Athena 使用独立的浏览器数据，不读取日常浏览器配置，也不替你下载或安装浏览器。网页执行器是固定版本的 agent-browser，首次使用时从官方发布下载并校验。
 - **费用展示为 API 等价估算。** 它不代表订阅实际扣费；未知或不完整的用量会保留其状态。
 - **数据留在本机。** 设置、对话、录制和记忆保存在本机的应用数据目录，飞书凭据经系统密钥存储加密。详见 [数据与凭据](docs/user-guide.md#数据与凭据)。

@@ -1,3 +1,4 @@
+import kimi from './assets/agents/kimi-color.svg';
 import codex from './assets/agents/codex-color.svg';
 import claude from './assets/agents/claudecode-color.svg';
 import opencode from './assets/agents/opencode.svg';
@@ -8,7 +9,7 @@ import type { AgentId } from '../shared/types';
 import { TerminalIcon } from '@hugeicons-pro/core-stroke-rounded';
 import { Icon } from './ui';
 
-const marks: Record<AgentId, string> = { codex, claude, opencode, gemini, pi, cursor };
+const marks: Record<AgentId, string> = { codex, claude, opencode, gemini, pi, cursor, kimi };
 
 export function AgentIcon({ agent, size = 20 }: { agent: AgentId; size?: number }) {
   if (!marks[agent])

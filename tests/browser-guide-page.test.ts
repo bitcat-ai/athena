@@ -159,6 +159,36 @@ async function fixture(t: TestContext) {
   return { page, events, call, show, seen, settled, rect, guideEvents };
 }
 
+test(
+  'recorded guidance follows the exact business row and refuses a duplicate or different page',
+  { skip: !executable },
+  async (t) => {
+    const { page, show } = await fixture(t);
+    await page.evaluate(() => {
+      document.body.innerHTML =
+        '<table><tr><th>C10080</th><td><button id="wrong">导出</button></td></tr><tr><th>客户 C1008 · 华东</th><td><button id="wanted">导出</button></td></tr></table>';
+    });
+    const practice = await page.evaluate(() => ({
+      origin: location.origin,
+      pathname: location.pathname,
+      object: 'C1008',
+      inRow: true,
+      tag: 'button',
+    }));
+    const step = { text: '导出', action: 'click', practice };
+    assert.equal((await show(step)).target?.selector, '#wanted');
+    assert.equal(
+      (await show({ ...step, practice: { ...practice, origin: 'https://unrelated.example' } }))
+        .reason,
+      'wrong_origin',
+    );
+    await page.evaluate(() => {
+      document.querySelector('#wanted')!.after(document.querySelector('#wanted')!.cloneNode(true));
+    });
+    assert.equal((await show(step)).reason, 'ambiguous_target');
+  },
+);
+
 async function eventually(condition: () => boolean | Promise<boolean>, what: string) {
   const until = Date.now() + 3000;
   while (!(await condition())) {

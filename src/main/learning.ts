@@ -129,6 +129,15 @@ export class Learning {
   list(): LearnedItem[] {
     return structuredClone(this.items);
   }
+  hasApplicableRules(page: string) {
+    const origin = URL.canParse(page) ? new URL(page).origin : undefined;
+    return (
+      this.enabled &&
+      this.items.some(
+        (item) => item.enabled && item.kind === 'rule' && (!item.scope || item.scope === origin),
+      )
+    );
+  }
   async setEnabled(enabled: boolean) {
     this.enabled = enabled;
     await this.save();

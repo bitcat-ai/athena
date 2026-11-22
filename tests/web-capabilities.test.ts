@@ -45,9 +45,12 @@ test(
           })
         ).text,
       );
-      assert.equal(
-        await f.state(`getComputedStyle(document.body).backgroundColor`),
-        'rgb(246, 241, 231)',
+      assert.equal(bodyEdit.element.computed['background-color'], 'rgb(246, 241, 231)');
+      await until(
+        async () =>
+          (await f.state(`getComputedStyle(document.body).backgroundColor`)) ===
+          'rgb(246, 241, 231)',
+        'the visible background reaches the applied colour',
       );
       const queried = JSON.parse(
         (await f.call('workbench_browser_query', { selector: 'h1' })).text,
@@ -73,9 +76,11 @@ test(
       );
       assert.match(edited.element.computed['font-family'], /Songti SC/);
       assert.equal(edited.element.computed.color, 'rgb(37, 99, 235)');
-      assert.equal(
-        await f.state(`getComputedStyle(document.querySelector('h1')).fontSize`),
-        '24px',
+      assert.equal(edited.element.computed['font-size'], '24px');
+      await until(
+        async () =>
+          (await f.state(`getComputedStyle(document.querySelector('h1')).fontSize`)) === '24px',
+        'the visible heading reaches the applied size',
       );
       assert.equal(await f.state(`document.querySelector('h1').textContent`), 'Updated heading');
       assert.equal(f.approvals.length, 0, 'Basic actions must not ask for approval');
@@ -91,6 +96,12 @@ test(
       assert.equal(unsafe.isError, true);
       assert.equal(await f.state(`document.querySelector('h1').style.cssText`), before);
       assert.equal(f.approvals.length, 0);
+
+      await f.call('workbench_browser_edit', { ref, text: 'Committed before stop' });
+      assert.equal(await f.state(`CSS.highlights.has('athena-swarm-pending')`), true);
+      await f.runtime.cancelTask();
+      assert.equal(await f.state(`CSS.highlights.has('athena-swarm-pending')`), false);
+      assert.equal(await f.state(`document.querySelector('h1').textContent`), 'Committed before stop');
     } finally {
       await f.cleanup();
     }
@@ -223,8 +234,18 @@ test(
     try {
       const { page } = await f.begin('act');
       const act = (args: Record<string, unknown>) => f.call('web_act', { page, ...args });
+      const presentation = f.browser.nativeScriptEdits.bind(f.browser);
+      const replays: boolean[] = [];
+      f.browser.nativeScriptEdits = async (...args) => {
+        const shown = await presentation(...args);
+        if (args[1] === 'replay') replays.push(shown);
+        return shown;
+      };
       const value = (selector: string) =>
         f.state(`document.querySelector(${JSON.stringify(selector)}).value`);
+      await f.state(
+        `document.querySelector('iframe').contentDocument.body.insertAdjacentHTML('afterbegin','<label>City<input id="city"></label>')`,
+      );
       const snap = (await f.call('web_snapshot', { page })).text;
       const name = refOf(snap, 'Name');
       const secret = refOf(snap, 'Secret');
@@ -233,12 +254,25 @@ test(
       let done = await act({ kind: 'fill', ref: name, value: 'Ada' });
       assert.match(done.text, /^已执行 fill/);
       assert(done.text.includes(`${name}：当前值 "Ada"`), done.text);
+      assert.deepEqual(replays, [true], 'one verified field change reached the real renderer');
+      await act({ kind: 'fill', ref: name, value: 'Ada' });
+      assert.deepEqual(replays, [true, false], 'identical field values produce no cursor');
       await act({ kind: 'fill', ref: name, value: ' Lovelace', clear: false });
       assert.equal(await value('#name'), 'Ada Lovelace');
+      assert.deepEqual(replays, [true, false, true], 'typing is presented once per command');
       done = await act({ kind: 'fill', ref: secret, value: 'hunter2-secret', sensitive: true });
       assert.match(done.text, /值已隐藏，回读一致/);
       assert(!done.text.includes('hunter2-secret'));
       assert.equal(await value('#secret'), 'hunter2-secret');
+      assert.equal(replays.length, 3, 'the sensitive field never starts a presentation');
+      await act({ kind: 'fill', ref: refOf(snap, 'City'), value: 'Oslo' });
+      assert.equal(
+        await f.state(
+          "document.querySelector('iframe').contentDocument.querySelector('#city').value",
+        ),
+        'Oslo',
+      );
+      assert.equal(replays.at(-1), true, 'the changed field in the child frame receives a pointer');
 
       done = await act({
         kind: 'fill',
@@ -584,7 +618,7 @@ test('tabs, groups, popups and history stay in Athena’s own browser', options,
 });
 
 test(
-  'page code that restyles the view is uncovered by cursors before it reports',
+  'page code reports the applied change while cursors draw it, and the next read sees the final page',
   options,
   async () => {
     const f = await webFixture();
@@ -594,7 +628,6 @@ test(
         f.state(
           `(() => { const el = document.querySelector('#pad'); return { color: getComputedStyle(el).backgroundColor, kept: document.getAnimations().filter((item) => item.effect?.pseudoElement === '::view-transition-old(athena-swarm-page)').length }; })()`,
         );
-      const started = performance.now();
       const call = f.call('web_evaluate_in_page', {
         page,
         code: `const style = document.createElement('style'); style.textContent = '#pad { background: rgb(0, 113, 227) !important; border-radius: 18px !important; padding: 28px !important } h1 { color: rgb(0, 113, 227) !important }'; document.head.append(style); return 'restyled'`,
@@ -606,7 +639,8 @@ test(
       const out = await call;
       assert.match(out.text, /"restyled"/);
       assert.match(out.text, /脚本改动了页面/);
-      assert(performance.now() - started > 600, 'the result waits for the show');
+      assert.deepEqual(await pad(), { color: 'rgb(0, 113, 227)', kept: 1 });
+      await f.call('web_read', { page, format: 'text' });
       assert.deepEqual(await pad(), { color: 'rgb(0, 113, 227)', kept: 0 });
 
       // A script that only reads is neither held nor delayed by a show.
@@ -614,19 +648,81 @@ test(
       await f.call('web_evaluate_in_page', { page, code: 'return document.title' });
       assert(performance.now() - quick < 600);
 
-      // A script is shown its first edits only, so a loop of edits stays quick.
+      // A standalone restyle inside a fresh web_run keeps the full-page presentation.
+      await f.call('web_run', {
+        code: `const page = browser.page(${page});
+          await page.read('h1');
+          await page.evaluateInPage(() => document.querySelector('#pad').style.setProperty('background', 'orange', 'important'));`,
+      });
+      assert.deepEqual(await pad(), { color: 'rgb(255, 165, 0)', kept: 1 });
+      await f.call('web_read', { page, format: 'text' });
+
+      // Each observed mutation starts feedback in the real renderer, including the last
+      // edit of a long script. Reading between writes must not start a new presentation.
+      const scriptEdits = f.browser.nativeScriptEdits.bind(f.browser);
+      const replays: boolean[] = [];
+      f.browser.nativeScriptEdits = async (...args) => {
+        const started = await scriptEdits(...args);
+        if (args[1] === 'replay') replays.push(started);
+        return started;
+      };
       const loop = performance.now();
       const run = await f.call('web_run', {
         code: `
         const page = browser.page(${page});
-        for (let i = 0; i < 14; i++)
+        for (let i = 0; i < 14; i++) {
+          if (i === 7) await page.evaluateInPage(() => document.title);
           await page.evaluateInPage((i) => { document.querySelector('#pad').style.setProperty('background', 'rgb(' + i * 10 + ', 80, 120)', 'important'); }, i);
+        }
         return 'looped';
       `,
       });
       assert.match(run.text, /looped/);
-      assert(performance.now() - loop < 11_000, 'later edits of a script are not shown');
+      assert(performance.now() - loop < 11_000, 'a script receives results during cursor motion');
+      assert.deepEqual(replays, [...Array(7).fill(true), false, ...Array(7).fill(true)]);
       assert.deepEqual(await pad(), { color: 'rgb(130, 80, 120)', kept: 0 });
+      // If a standalone script outlives the snapshot, its eventual mutation still gets a
+      // cursor on the live page. The expired snapshot must stay gone.
+      await f.call('web_evaluate_in_page', {
+        page,
+        code: `await new Promise(resolve => setTimeout(resolve, 3200)); document.querySelector('#pad').style.setProperty('background', 'lime', 'important')`,
+      });
+      assert.equal(replays.at(-1), true);
+      assert.deepEqual(await pad(), { color: 'rgb(0, 255, 0)', kept: 0 });
+      await f.call('web_evaluate_in_page', {
+        page,
+        code: `document.querySelector('#name').value = 'visible property change'`,
+      });
+      assert.equal(replays.at(-1), true, 'a form value can visibly change without a DOM mutation');
+      assert.equal(await f.state("document.querySelector('#name').value"), 'visible property change');
+      const paint = (colour: string) =>
+        f.call('web_evaluate_in_page', {
+          page,
+          code: `document.querySelector('#pad').style.setProperty('background', '${colour}', 'important')`,
+        });
+      await paint('red');
+      await f.runtime.cancelTask();
+      assert.deepEqual(await pad(), { color: 'rgb(255, 0, 0)', kept: 0 });
+      await f.runtime.finishTask('restyle', false);
+      await f.begin('share-after-edit');
+      await paint('blue');
+      await f.browser.setSharedTab(f.browser.getState().activeTabId!);
+      assert.deepEqual(await pad(), { color: 'rgb(0, 0, 255)', kept: 0 });
+      assert.throws(() => f.browser.allowAgentControl(), /共享/);
+      await f.browser.setSharedTab();
+      await f.runtime.finishTask('share-after-edit', false);
+
+      await f.begin('failed-script');
+      const failed = await f.runtime.callTool('web_run', {
+        code: `await browser.page(${page}).evaluateInPage(() => {
+          document.querySelector('#pad').style.setProperty('background', 'black', 'important');
+          throw new Error('failed after writing');
+        });`,
+      });
+      assert(failed.isError);
+      assert.match(failed.text, /failed after writing/);
+      assert.equal(replays.at(-1), false, 'a partial write cannot be shown as a successful edit');
+      assert.deepEqual(await pad(), { color: 'rgb(0, 0, 0)', kept: 0 });
     } finally {
       await f.cleanup();
     }

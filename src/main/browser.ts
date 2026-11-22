@@ -1,10 +1,14 @@
 import { validateElementControls, controlProperties } from '../shared/element-controls';
+import { PAGE_REMIXES } from '../shared/page-remix';
+import { pageFacts, pageHints } from '../shared/page-hints';
+import type { SelectedLayout } from './selected-layout';
 import { spawn, execFile, type ChildProcess } from 'node:child_process';
 import { access, mkdir, readFile, writeFile, rename, stat } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, extname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
+import { createInterface } from 'node:readline';
 import { randomUUID } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type {
@@ -39,6 +43,12 @@ import {
   ELEMENT_INSERT_ATTRIBUTES,
 } from '../shared/types';
 import { CdpConnection } from './browser-cdp';
+import {
+  chromeArguments,
+  findOrphanChrome,
+  lockBrowserProfile,
+  processExists,
+} from './browser-profile';
 import { browserPageSource } from './browser-page';
 import {
   Guide,
@@ -48,11 +58,14 @@ import {
   type GuideResult,
 } from './browser-guide';
 import { BrowserFrameSession, type BrowserChannel } from './browser-frame-session';
+import { verifyCustomerMaterials, type RecordingVerification } from './recording-verification';
 
 const execFileAsync = promisify(execFile);
 const WORLD = 'workbench-browser-observer';
 const PREVIEW_MAX_EDGE = 2048;
 const PREVIEW_INTERVAL = 1000 / 24;
+/** How long frames stay unpaced after an agent action ends: transitions and late paints. */
+const AGENT_FRAME_TAIL = 700;
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 /** Requests that can still change what the page shows; media and long polls are not waited for. */
 const SETTLE_RESOURCES = new Set(['Document', 'Stylesheet', 'Script', 'XHR', 'Fetch']);
@@ -488,8 +501,20 @@ interface FrameContext {
   revision: number;
   contextId?: number;
   documentId?: string;
+  recordingId?: string;
+  interaction?: number;
   source?: 'human' | 'agent';
   actorId?: string;
+}
+
+interface DownloadEntry {
+  sequence: number;
+  name: string;
+  state: 'inProgress' | 'saving' | 'completed' | 'canceled';
+  path?: string;
+  size?: number;
+  identity?: { ino: number; dev: number; size: number; mtimeMs: number };
+  observation?: { recordingId: string; tabId: string; origin: string; step?: RecordedStep };
 }
 interface TabSession {
   info: BrowserTab;
@@ -503,6 +528,11 @@ interface TabSession {
   source: 'human' | 'agent';
   actorId?: string;
   diagnostics: Array<{ time: number; kind: string; text: string }>;
+  /** The ready-made look the page is shown in, as one of its preview edits. */
+  remix?: { preset: string; editId: string };
+  /** The page outline read ahead of the next turn, with the document it describes. */
+  outline?: { text: string; url: string; activation: number; at: number };
+  outlineTimer?: ReturnType<typeof setTimeout>;
   /** In-flight page work that native web tools wait out before observing. */
   requests: Map<string, number>;
   loadingFrames: Set<string>;
@@ -565,6 +595,9 @@ export class BrowserRuntime {
     inspecting: false,
   };
   private process?: ChildProcess;
+  private profileLease?: Awaited<ReturnType<typeof lockBrowserProfile>>;
+  private recoveredPid?: number;
+  private recoveredTargets = new Set<string>();
   private browser?: CdpConnection;
   private endpoint = '';
   private tabs = new Map<string, TabSession>();
@@ -584,7 +617,9 @@ export class BrowserRuntime {
   private frameAcks = new Set<() => void>();
   private nextIdleFrameAckAt = 0;
   private interactiveFrameUntil = 0;
+  private frameLeases = 0;
   private starting?: Promise<void>;
+  private stopping?: Promise<void>;
   private disposed = false;
   private queue: Promise<unknown> = Promise.resolve();
   private pendingWheel?: {
@@ -596,24 +631,32 @@ export class BrowserRuntime {
   };
   private leaseGeneration = 0;
   private previewLeaseGeneration = 0;
+  get previewRevision(): number {
+    return this.previewLeaseGeneration;
+  }
   private agentAllowed = true;
   private previewAllowed = true;
   private agentNeedsObservation = false;
   private nativeAgentActive = false;
+  private scriptPresentation?: {
+    tab: TabSession;
+    frames: Array<{ frame: FrameContext; revision: number }>;
+    cursorOnly: boolean;
+  };
   private pendingDialogs = new Map<
     string,
     { channel: BrowserChannel; type: string; message: string; defaultPrompt?: string }
   >();
-  private downloads = new Map<
-    string,
-    {
-      sequence: number;
-      name: string;
-      state: 'inProgress' | 'saving' | 'completed' | 'canceled';
-      path?: string;
-      size?: number;
-    }
-  >();
+  private downloads = new Map<string, DownloadEntry>();
+  private recordingScope?: { tabId: string; origin: string };
+  private recordingStopAt?: number;
+  private downloadLinks: {
+    frame: FrameContext;
+    documentId: string;
+    href: string;
+    time: number;
+    step?: RecordedStep;
+  }[] = [];
   private downloadSequence = 0;
   private downloadRenames: Promise<void> = Promise.resolve();
   private suppressMouseUp = false;
@@ -769,7 +812,10 @@ export class BrowserRuntime {
           this.sharedFrameOrigins.add(new URL(frame.url).origin);
         } catch {}
       }
-    if (tabId) this.revokeAgentControl();
+    if (tabId) {
+      this.revokeAgentControl();
+      await this.stopEditPresentation();
+    }
     await this.applyDownloadBehavior();
   }
   private async applyDownloadBehavior(): Promise<void> {
@@ -792,6 +838,7 @@ export class BrowserRuntime {
     if (!entry || entry.state !== 'inProgress' || p.state === 'inProgress') return;
     if (p.state !== 'completed') {
       entry.state = 'canceled';
+      this.updateDownloadStep(entry, 'canceled');
       return;
     }
     entry.state = 'saving';
@@ -805,14 +852,62 @@ export class BrowserRuntime {
           target,
         );
         entry.path = target;
-        entry.size = (await stat(target)).size;
+        const { ino, dev, size, mtimeMs } = await stat(target);
+        entry.size = size;
+        entry.identity = { ino, dev, size, mtimeMs };
         entry.state = 'completed';
+        this.updateDownloadStep(entry, 'completed');
       } catch {
         entry.state = 'canceled';
+        this.updateDownloadStep(entry, 'unknown');
       }
     });
   }
-  private sharedNavigation(url: string, actorId: string, mainFrame = true): void {
+  private observeDownload(frameId: string, href: string, entry: DownloadEntry) {
+    if (!this.recording) return;
+    for (const tab of this.tabs.values()) {
+      const frame = tab.frames.get(frameId);
+      if (!frame || !this.inRecordingScope(tab.info.id, frame)) continue;
+      const origin = URL.canParse(frame.url) ? new URL(frame.url).origin : '';
+      const observed: NonNullable<DownloadEntry['observation']> = {
+        recordingId: this.recording.id,
+        tabId: tab.info.id,
+        origin,
+      };
+      entry.observation = observed;
+      const candidates = this.downloadLinks.filter(
+        (link) => link.frame === frame && link.href === href && Date.now() - link.time < 5000,
+      );
+      if (candidates.length !== 1 || candidates[0].documentId !== frame.documentId) return;
+      const link = candidates[0];
+      // A second download of the same link is ambiguous until the next observed activation.
+      if (link.step?.outcome) return;
+      if (!link.step) {
+        link.step = this.appendStep({
+          kind: 'download',
+          source: 'page',
+          description: '网页发起下载',
+          url: evidenceUrl(frame.url),
+          tabId: tab.info.id,
+          frameId,
+          outcome: { kind: 'download', origin: 'page', status: 'started' },
+        });
+      } else {
+        link.step.outcome = { kind: 'download', origin: 'link', status: 'started' };
+        if (!this.recordingScope) this.options.onStep(structuredClone(link.step));
+      }
+      observed.step = link.step;
+      return;
+    }
+  }
+
+  private updateDownloadStep(entry: DownloadEntry, status: 'completed' | 'canceled' | 'unknown') {
+    const observed = entry.observation;
+    if (!observed?.step?.outcome || this.recording?.id !== observed.recordingId) return;
+    observed.step.outcome.status = status;
+    if (!this.recordingScope) this.options.onStep(structuredClone(observed.step));
+  }
+  sharedNavigation(url: string, actorId: string, mainFrame = true): void {
     if (!this.sharedTab) return;
     const origin = new URL(url).origin;
     if (actorId === 'host') {
@@ -900,7 +995,7 @@ export class BrowserRuntime {
       });
   }
   getRecording(): Recording | undefined {
-    return this.recording && structuredClone(this.recording);
+    return !this.recordingScope && this.recording ? structuredClone(this.recording) : undefined;
   }
 
   constructor(private options: BrowserOptions) {}
@@ -976,9 +1071,25 @@ export class BrowserRuntime {
     this.queue = result.catch(() => {});
     return result;
   }
-  private boostFrames(): void {
-    this.interactiveFrameUntil = Date.now() + 300;
+  private boostFrames(duration = 300): void {
+    this.interactiveFrameUntil = Math.max(this.interactiveFrameUntil, Date.now() + duration);
     this.releaseFrames();
+  }
+  /**
+   * Agent work changes the page as much as a hand does. Frames stay unpaced for as long as the
+   * action runs, and for a moment after, so the result of a click or scroll is not shown at the
+   * idle rate. The page-side heartbeat alone lapses whenever the host is briefly busy.
+   */
+  private leaseFrames(): () => void {
+    this.frameLeases++;
+    this.releaseFrames();
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      this.frameLeases--;
+      this.boostFrames(AGENT_FRAME_TAIL);
+    };
   }
   private releaseFrames(): void {
     for (const acknowledge of this.frameAcks) acknowledge();
@@ -991,7 +1102,7 @@ export class BrowserRuntime {
       this.frameAcks.delete(acknowledge);
       void page.call('Page.screencastFrameAck', { sessionId }).catch(() => {});
     };
-    if (Date.now() < this.interactiveFrameUntil) acknowledge();
+    if (this.frameLeases > 0 || Date.now() < this.interactiveFrameUntil) acknowledge();
     else {
       // Bound idle work even when the capture pipeline has several frames in flight.
       this.nextIdleFrameAckAt = Math.max(Date.now(), this.nextIdleFrameAckAt) + PREVIEW_INTERVAL;
@@ -1040,6 +1151,7 @@ export class BrowserRuntime {
   ): Promise<T> {
     const end = Date.now() + timeout;
     while (Date.now() < end) {
+      this.checkStarting();
       const value = await check();
       if (value) return value as T;
       await wait(50);
@@ -1065,17 +1177,34 @@ export class BrowserRuntime {
     return binary;
   }
   start(initialUrl?: string): Promise<void> {
-    if (this.state.status === 'ready') return Promise.resolve();
+    if (this.stopping) return Promise.reject(new Error('浏览器正在关闭，请稍后重试。'));
     if (this.starting) return this.starting;
-    this.starting = this.startInternal(initialUrl).finally(() => {
-      this.starting = undefined;
-    });
+    if (this.state.status === 'ready') return Promise.resolve();
+    const previousChild = this.process;
+    this.disposed = false;
+    this.starting = this.startInternal(initialUrl)
+      .catch(async (error) => {
+        if (this.disposed) throw error;
+        const message = redactBrowserText(error instanceof Error ? error.message : error);
+        const missing = this.state.status === 'missing' && this.state.error === message;
+        this.disposed = true;
+        await this.closeBrowser(!!previousChild && previousChild === this.process);
+        if (!this.stopping)
+          this.update({ status: missing ? 'missing' : 'error', loading: false, error: message });
+        throw new Error(message);
+      })
+      .finally(() => {
+        this.starting = undefined;
+      });
     return this.starting;
+  }
+  private checkStarting(): void {
+    if (this.disposed) throw new Error('浏览器启动已取消。');
   }
   private async startInternal(initialUrl?: string): Promise<void> {
     const initial = initialUrl === undefined ? undefined : normalizeBrowserUrl(initialUrl);
-    this.disposed = false;
     const binary = await this.detectInstallation();
+    this.checkStarting();
     if (!binary) {
       this.update({
         status: 'missing',
@@ -1083,10 +1212,106 @@ export class BrowserRuntime {
       });
       throw new Error(this.state.error);
     }
-    this.update({ status: 'starting', binaryPath: binary, error: undefined });
     // A dedicated profile: never the user's everyday Chrome data.
     const profile = join(this.options.storageDir, 'agent-browser-profile');
     await mkdir(profile, { recursive: true });
+    const previousPid = this.process?.pid ?? this.recoveredPid;
+    if (this.profileLease || this.browser || this.process) await this.closeBrowser(true);
+    this.checkStarting();
+    this.update({ status: 'starting', binaryPath: binary, error: undefined });
+    this.profileLease = await lockBrowserProfile(this.options.storageDir);
+    this.checkStarting();
+    const recovered = await findOrphanChrome(profile, binary, previousPid);
+    this.checkStarting();
+    this.recoveredPid = recovered?.pid;
+    this.endpoint = recovered?.endpoint ?? (await this.launchChrome(profile, binary));
+    this.checkStarting();
+    const connection = await CdpConnection.connect(this.endpoint);
+    this.browser = connection;
+    this.checkStarting();
+    if (recovered) {
+      const { processInfo } = await connection.call('SystemInfo.getProcessInfo');
+      if (
+        !processInfo.some(
+          (p: { type: string; id: number }) => p.type === 'browser' && p.id === recovered.pid,
+        )
+      )
+        throw new Error('Chrome 已重新启动，请重新连接。');
+    }
+    connection.on('connection:closed', () => {
+      if (!this.disposed && this.browser === connection && this.state.status === 'ready')
+        this.update({
+          status: 'error',
+          loading: false,
+          error: '与 Chrome 的连接已断开，请重新连接。',
+        });
+    });
+    this.browser.on('Target.targetCreated', (p) => {
+      if (this.browser === connection) void this.handleTarget(p.targetInfo);
+    });
+    this.browser.on('Target.targetInfoChanged', (p) => {
+      if (this.browser === connection) void this.handleTarget(p.targetInfo);
+    });
+    this.browser.on('Target.targetDestroyed', (p) => {
+      if (this.browser === connection) void this.removeTarget(p.targetId);
+    });
+    const { targetInfos } = await this.browser.call('Target.getTargets');
+    if (recovered) {
+      for (const info of targetInfos) {
+        if (info.type === 'page') this.recoveredTargets.add(info.targetId);
+      }
+    }
+    // /json/list orders pages by recent activation; Target.getTargets does not.
+    let first = targetInfos.find((item: any) => item.type === 'page');
+    if (recovered && this.recoveredTargets.size > 1) {
+      const response = await fetch('http://' + new URL(this.endpoint).host + '/json/list', {
+        redirect: 'error',
+        signal: AbortSignal.timeout(3000),
+      });
+      const pages = (await response.json()) as { id: string; type: string }[];
+      const active = pages.find((page) => this.recoveredTargets.has(page.id));
+      first = targetInfos.find((item: any) => item.targetId === active?.id) ?? first;
+    }
+    const needsPage = !first && !!recovered;
+    if (needsPage) {
+      const { targetId } = await connection.call('Target.createTarget', { url: 'about:blank' });
+      first = (await connection.call('Target.getTargetInfo', { targetId })).targetInfo;
+    }
+    if (!first) throw new Error('浏览器没有创建可用页面');
+    const tab = await this.attachTab(first);
+    await this.activateTab(tab, 'human', false);
+    await this.browser.call('Target.setDiscoverTargets', { discover: true });
+    this.browser.on('Browser.downloadWillBegin', (p) => {
+      const entry: DownloadEntry = {
+        sequence: ++this.downloadSequence,
+        name: String(p.suggestedFilename || 'download'),
+        state: 'inProgress',
+      };
+      this.downloads.set(p.guid, entry);
+      this.observeDownload(p.frameId, p.url, entry);
+      if (this.downloads.size > 200) {
+        const oldest = this.downloads.keys().next().value!;
+        if (
+          this.recording &&
+          this.downloads.get(oldest)?.observation?.recordingId === this.recording.id
+        )
+          this.recording.truncated = true;
+        this.downloads.delete(oldest);
+      }
+    });
+    this.browser.on('Browser.downloadProgress', (p) => this.finishDownload(p));
+    await this.applyDownloadBehavior();
+    if (initial !== undefined && (!recovered || needsPage)) {
+      this.updateTab(tab, { url: initial, loading: true });
+      const result = await tab.page.call('Page.navigate', { url: initial });
+      if (result.errorText) throw new Error(result.errorText);
+      await this.refreshTab(tab);
+    }
+    this.checkStarting();
+    this.update({ status: 'ready', error: undefined });
+  }
+
+  private async launchChrome(profile: string, binary: string): Promise<string> {
     // Downloads started before the CDP download behavior applies still land in the owned folder.
     const preferencesPath = join(profile, 'Default', 'Preferences');
     let preferences: Record<string, any> = {};
@@ -1105,40 +1330,23 @@ export class BrowserRuntime {
     const temporary = preferencesPath + '.' + randomUUID();
     await writeFile(temporary, JSON.stringify(preferences), { mode: 0o600 });
     await rename(temporary, preferencesPath);
-    const child = spawn(
-      binary,
-      [
-        '--headless=new',
-        '--force-device-scale-factor=2',
-        '--remote-debugging-port=0',
-        '--remote-debugging-address=127.0.0.1',
-        `--user-data-dir=${profile}`,
-        '--no-first-run',
-        '--no-default-browser-check',
-        '--disable-background-networking',
-        '--disable-component-update',
-        '--disable-features=MediaRouter',
-        '--disable-sync',
-        '--disable-background-timer-throttling',
-        '--disable-renderer-backgrounding',
-        'about:blank',
-      ],
-      {
-        stdio: ['ignore', 'pipe', 'pipe'],
-        env: {
-          PATH: process.env.PATH,
-          TMPDIR: process.env.TMPDIR,
-          LANG: process.env.LANG || 'en_US.UTF-8',
-        },
+    this.checkStarting();
+    const child = spawn(binary, chromeArguments(profile), {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: {
+        PATH: process.env.PATH,
+        TMPDIR: process.env.TMPDIR,
+        LANG: process.env.LANG || 'en_US.UTF-8',
       },
-    );
+    });
     this.process = child;
     let failure: Error | undefined;
     let endpoint = '';
-    child.stderr?.on('data', (data) => {
-      const match = data
-        .toString()
-        .match(/DevTools listening on (ws:\/\/127\.0\.0\.1:\d+\/devtools\/browser\/[^\s]+)/);
+    child.stdout?.resume();
+    createInterface({ input: child.stderr }).on('line', (line) => {
+      const match = line.match(
+        /DevTools listening on (ws:\/\/127\.0\.0\.1:\d+\/devtools\/browser\/[^\s]+)/,
+      );
       if (match) endpoint = match[1];
     });
     child.on('error', (error) => {
@@ -1152,51 +1360,16 @@ export class BrowserRuntime {
           error: '浏览器已退出，请重新启动。',
         });
     });
-    try {
-      this.endpoint = await this.until(async () => {
-        if (failure) throw failure;
-        if (child.exitCode !== null) throw new Error('浏览器启动失败');
-        return endpoint || undefined;
-      }, 20_000);
-      this.browser = await CdpConnection.connect(this.endpoint);
-      this.browser.on('Target.targetCreated', (p) => {
-        void this.handleTarget(p.targetInfo);
-      });
-      this.browser.on('Target.targetInfoChanged', (p) => {
-        void this.handleTarget(p.targetInfo);
-      });
-      this.browser.on('Target.targetDestroyed', (p) => {
-        void this.removeTarget(p.targetId);
-      });
-      const { targetInfos } = await this.browser.call('Target.getTargets');
-      const first = targetInfos.find((item: any) => item.type === 'page');
-      if (!first) throw new Error('浏览器没有创建可用页面');
-      const tab = await this.attachTab(first);
-      await this.activateTab(tab, 'human', false);
-      await this.browser.call('Target.setDiscoverTargets', { discover: true });
-      this.browser.on('Browser.downloadWillBegin', (p) => {
-        this.downloads.set(p.guid, {
-          sequence: ++this.downloadSequence,
-          name: String(p.suggestedFilename || 'download'),
-          state: 'inProgress',
-        });
-        if (this.downloads.size > 200) this.downloads.delete(this.downloads.keys().next().value!);
-      });
-      this.browser.on('Browser.downloadProgress', (p) => this.finishDownload(p));
-      await this.applyDownloadBehavior();
-      if (initial !== undefined) {
-        this.updateTab(tab, { url: initial, loading: true });
-        const result = await tab.page.call('Page.navigate', { url: initial });
-        if (result.errorText) throw new Error(result.errorText);
-        await this.refreshTab(tab);
-      }
-      this.update({ status: 'ready', error: undefined });
-    } catch (error) {
-      const message = redactBrowserText(error instanceof Error ? error.message : error);
-      await this.dispose();
-      this.update({ status: 'error', loading: false, error: message });
-      throw new Error(message);
-    }
+    return this.until(async () => {
+      if (failure) throw failure;
+      if (child.exitCode !== null || child.signalCode)
+        throw new Error(
+          'Chrome 在连接前已退出（' +
+            (child.signalCode || '退出码 ' + child.exitCode) +
+            '）。请重试。',
+        );
+      return endpoint || undefined;
+    }, 20_000);
   }
 
   private async handleTarget(info: any): Promise<void> {
@@ -1228,17 +1401,24 @@ export class BrowserRuntime {
     if (pending) return pending;
     const existing = this.tabs.get(info.targetId);
     if (existing) return Promise.resolve(existing);
-    const task = this.attachTabInternal(info).finally(() => this.attaching.delete(info.targetId));
+    const task = this.attachTabInternal(info).finally(() => {
+      if (this.attaching.get(info.targetId) === task) this.attaching.delete(info.targetId);
+    });
     this.attaching.set(info.targetId, task);
     return task;
   }
   private async attachTabInternal(info: any): Promise<TabSession> {
+    const owner = this.browser;
     const host = new URL(this.endpoint).host;
     const target = await this.until(async () => {
       const all = (await (await fetch(`http://${host}/json/list`)).json()) as any[];
       return all.find((item) => item.id === info.targetId && item.webSocketDebuggerUrl);
     });
     const page = await CdpConnection.connect(target.webSocketDebuggerUrl);
+    if (this.disposed || this.browser !== owner) {
+      page.close();
+      throw new Error('浏览器连接已改变，请重试。');
+    }
     const tab: TabSession = {
       info: {
         id: info.targetId,
@@ -1264,6 +1444,19 @@ export class BrowserRuntime {
     this.tabs.set(tab.info.id, tab);
     try {
       await this.installChannel(tab, page, true);
+      if (this.recoveredTargets.delete(info.targetId)) {
+        for (const frame of await this.collectFrames(tab)) {
+          await this.bridge(
+            tab,
+            frame,
+            `(() => {
+            const page = globalThis.__workbenchPage;
+            page.setRecording(null, false); page.setSource('human'); page.setActor('host');
+            page.guideClear?.(); page.mask(false); page.clearOverlays();
+          })()`,
+          );
+        }
+      }
       page.on('Page.screencastFrame', (p) => this.receiveScreencastFrame(tab, p));
       page.on('connection:closed', () => {
         if (!this.disposed && this.tabs.get(tab.info.id) === tab)
@@ -1279,7 +1472,7 @@ export class BrowserRuntime {
       this.update();
       return tab;
     } catch (error) {
-      this.tabs.delete(tab.info.id);
+      if (this.tabs.get(tab.info.id) === tab) this.tabs.delete(tab.info.id);
       page.close();
       throw error;
     }
@@ -1318,6 +1511,8 @@ export class BrowserRuntime {
     frame.revision++;
     frame.contextId = undefined;
     frame.documentId = undefined;
+    frame.recordingId = undefined;
+    frame.interaction = undefined;
     frame.source = undefined;
     frame.actorId = undefined;
     for (const [ref, scope] of this.refs)
@@ -1374,6 +1569,31 @@ export class BrowserRuntime {
       if (!frame || frame.channel !== channel) return;
       try {
         const payload = JSON.parse(p.payload);
+        if (payload.kind === 'layout-invalidated') {
+          if (payload.docId === frame.documentId && typeof payload.editId === 'string') {
+            const index = tab.edits.findIndex(
+              (e) =>
+                e.frameId === frame.id &&
+                e.documentId === payload.docId &&
+                e.localId === payload.editId,
+            );
+            if (index >= 0) {
+              tab.edits.splice(index, 1);
+              this.update();
+            }
+          }
+          return;
+        }
+        if (payload.kind === 'cursor-motion') {
+          // Keep actual agent animation on the same short high-rate lease as a hand gesture.
+          if (
+            this.activeTabId === tab.info.id &&
+            frame.documentId === payload.docId &&
+            payload.source === 'agent'
+          )
+            this.boostFrames(500);
+          return;
+        }
         if (payload.kind === 'hover-frame') {
           if (
             !this.state.inspecting ||
@@ -1422,6 +1642,9 @@ export class BrowserRuntime {
         tab.activation++;
         tab.chooser = undefined;
         tab.edits = [];
+        tab.outline = undefined;
+        tab.remix = undefined;
+        tab.info.hints = undefined;
         this.clearTabRefs(tab);
         if (this.activeTabId === tab.info.id) {
           this.update({ selectedElement: undefined, inspecting: false });
@@ -1457,6 +1680,7 @@ export class BrowserRuntime {
       if (p.frameId === tab.mainFrameId) {
         this.updateTab(tab, { url: p.url });
         void this.refreshTab(tab);
+        this.preloadOutline(tab);
       }
     });
     channel.on('Page.frameStartedLoading', (p) => {
@@ -1468,6 +1692,7 @@ export class BrowserRuntime {
       if (p.frameId === tab.mainFrameId) {
         this.updateTab(tab, { loading: false });
         void this.refreshTab(tab);
+        this.preloadOutline(tab);
       }
       if (this.activeTabId === tab.info.id) this.refreshUnpaintedSurface(tab);
     });
@@ -1686,6 +1911,7 @@ export class BrowserRuntime {
         }
         frame.documentId = documentId;
         frame.contextId = contextId;
+        await this.syncFrameRecording(tab, frame);
         if (newDocument) {
           const actor = this.actors.get(tab.actorId || 'host') || this.currentActor();
           await channel.call('Runtime.evaluate', {
@@ -1858,6 +2084,8 @@ export class BrowserRuntime {
           dialog.channel.call('Page.handleJavaScriptDialog', { accept: false }),
         ),
       );
+      // A stopped script's blocked renderer can release its observer once the dialog closes.
+      if (dialogs.length) await this.stopEditPresentation().catch(() => {});
     }
   }
   getNativeConnection(): { endpoint: string; binaryPath: string } {
@@ -1890,11 +2118,13 @@ export class BrowserRuntime {
         if (!readonly) await this.setSource(tab, 'agent');
       }
       guard();
+      const releaseFrames = readonly ? undefined : this.leaseFrames();
       try {
         const result = await operation();
         guard();
         return result;
       } finally {
+        releaseFrames?.();
         // The web executor brings the page it works on to the front inside the browser.
         const active = this.tabs.get(this.activeTabId);
         if (active && targetId !== this.activeTabId)
@@ -1960,23 +2190,121 @@ export class BrowserRuntime {
     return Promise.race([check, wait(timeout + 300).then(() => 'retry' as const)]);
   }
   /**
-   * Shows what a page script of the agent changes in view as cursor choreography: 'watch' keeps
-   * the view as it looks before the script runs, 'replay' uncovers what changed once it has
-   * returned and resolves when that show is over, so the next capture does not cut it short.
-   * A replay without a show only uncovers the page. Page scripts run in the main frame.
+   * Watches a script in its original main frame. A single script can reveal the old view;
+   * a multi-step script marks changed elements on the live page. Neither waits for animation.
    */
-  async nativeScriptEdits(targetId: string, phase: 'watch' | 'replay', show = true): Promise<void> {
+  async nativeScriptEdits(
+    targetId: string,
+    phase: 'watch' | 'replay',
+    show = true,
+    targetsOnly: boolean | 'fields' | 'select' = false,
+  ): Promise<boolean> {
     const tab = this.tabs.get(targetId);
     // A page that was covered is uncovered whoever has it by now.
-    if (!tab || this.pendingDialogs.has(targetId)) return;
-    if (phase === 'watch' && tab.source !== 'agent') return;
+    if (!tab || this.pendingDialogs.has(targetId)) return false;
+    if (phase === 'watch' && tab.source !== 'agent') return false;
+    let expired = false;
     const call = (async () => {
-      const frame = (await this.collectFrames(tab)).find((item) => item.id === tab.mainFrameId);
-      if (frame)
-        await this.bridge(tab, frame, `globalThis.__workbenchPage.${phase}Script(${show})`);
-    })().catch(() => undefined);
+      const play = show && !this.sharedTab && this.nativeAgentActive && this.agentAllowed;
+      if (phase === 'watch' && !play) return false;
+      let drawing = this.scriptPresentation;
+      if (phase === 'watch') {
+        const frame =
+          tab.frames.get(tab.mainFrameId) ??
+          (await this.collectFrames(tab)).find((item) => item.id === tab.mainFrameId);
+        if (!frame || expired) return false;
+        const frames = [frame];
+        if (targetsOnly === 'fields' || targetsOnly === 'select') {
+          for (const child of tab.frames.values()) {
+            if (child !== frame && child.contextId) frames.push(child);
+            if (frames.length === 8) break;
+          }
+        }
+        drawing = {
+          tab,
+          frames: frames.map((frame) => ({ frame, revision: frame.revision })),
+          cursorOnly: false,
+        };
+        this.scriptPresentation = drawing;
+      }
+      if (!drawing || drawing.tab !== tab) return false;
+      const results = await Promise.all(
+        drawing.frames.map(async ({ frame, revision }) => {
+          if (tab.frames.get(frame.id) !== frame || frame.revision !== revision) return false;
+          return this.bridge<boolean | 'targets' | 'cover'>(
+            tab,
+            frame,
+            phase === 'watch'
+              ? `globalThis.__workbenchPage.watchScript(${JSON.stringify(targetsOnly)})`
+              : `globalThis.__workbenchPage.replayScript(${play},true)`,
+            () => {
+              if (
+                expired ||
+                this.scriptPresentation !== drawing ||
+                frame.revision !== revision ||
+                (play && (!this.nativeAgentActive || !this.agentAllowed || this.sharedTab))
+              )
+                throw new Error('页面演示已结束');
+            },
+          ).catch(() => false);
+        }),
+      );
+      if (phase === 'replay' && this.scriptPresentation === drawing)
+        drawing.cursorOnly = !results.includes('cover');
+      return results.some(Boolean);
+    })().catch(() => false);
     // A renderer blocked by a dialog never answers.
-    await Promise.race([call, wait(phase === 'replay' && show ? 16000 : 500)]);
+    try {
+      return await Promise.race([call, wait(500).then(() => false)]);
+    } finally {
+      expired = true;
+    }
+  }
+  /** Stop visual feedback in existing page contexts without removing the user's selection. */
+  async stopEditPresentation(): Promise<void> {
+    this.scriptPresentation = undefined;
+    const calls: Promise<unknown>[] = [];
+    for (const tab of this.tabs.values()) {
+      for (const frame of tab.frames.values()) {
+        if (!frame.contextId) continue;
+        calls.push(
+          frame.channel.call('Runtime.evaluate', {
+            contextId: frame.contextId,
+            expression: 'globalThis.__workbenchPage?.stopPresentation()',
+          }),
+        );
+      }
+    }
+    if (calls.length) await Promise.race([Promise.allSettled(calls), wait(500)]);
+  }
+  /** Release any visual cover and its scroll tour before another agent action reads coordinates. */
+  async finishScriptPresentation(keepTargetCursor = false) {
+    const shown = this.scriptPresentation;
+    if (!shown || (keepTargetCursor && shown.cursorOnly)) return;
+    const { tab } = shown;
+    if (this.pendingDialogs.has(tab.info.id)) return;
+    await Promise.all(
+      shown.frames.map(async ({ frame, revision }) => {
+        if (
+          tab.frames.get(frame.id) === frame &&
+          frame.revision === revision &&
+          this.tabs.has(tab.info.id)
+        ) {
+          await this.bridge(tab, frame, 'globalThis.__workbenchPage.finishScript()', () => {
+            if (this.scriptPresentation !== shown) throw new Error('页面演示已改变');
+          }).catch((error) => {
+            if (
+              tab.frames.get(frame.id) === frame &&
+              frame.revision === revision &&
+              this.tabs.has(tab.info.id) &&
+              this.scriptPresentation === shown
+            )
+              throw error;
+          });
+        }
+      }),
+    );
+    if (this.scriptPresentation === shown) this.scriptPresentation = undefined;
   }
   /**
    * A compact outline of what the page shows, for the agent's context at the start of a turn.
@@ -1985,7 +2313,24 @@ export class BrowserRuntime {
   async nativeOutline(targetId: string, limit = 6000): Promise<string | undefined> {
     const tab = this.tabs.get(targetId);
     if (!tab || this.pendingDialogs.has(targetId)) return undefined;
-    const call = (async () => {
+    const fresh = this.readOutline(tab, limit);
+    const ahead = tab.outline;
+    // A page that was read when it loaded never holds up the turn: the fresh reading wins when
+    // it is quick, and the earlier one is used, marked with its age, when the page is busy.
+    if (ahead && ahead.activation === tab.activation && ahead.url === tab.info.url)
+      return Promise.race([
+        fresh.then((text) => text ?? ahead.text),
+        wait(200).then(
+          () =>
+            `（此摘要读取于 ${Math.max(1, Math.round((Date.now() - ahead.at) / 1000))} 秒前，页面此后可能有变化）\n${ahead.text}`,
+        ),
+      ]);
+    // A renderer blocked by a dialog never answers.
+    return Promise.race([fresh, wait(800).then(() => undefined)]);
+  }
+  private readOutline(tab: TabSession, limit = 6000): Promise<string | undefined> {
+    const activation = tab.activation;
+    return (async () => {
       const frame = (await this.collectFrames(tab)).find((item) => item.id === tab.mainFrameId);
       if (!frame || !/^https?:/.test(frame.url || tab.info.url)) return undefined;
       const text = await this.bridge<string>(
@@ -1993,10 +2338,29 @@ export class BrowserRuntime {
         frame,
         `globalThis.__workbenchPage.digest(${limit})`,
       );
-      return typeof text === 'string' && text ? redactBrowserText(text, limit + 200) : undefined;
+      if (typeof text !== 'string' || !text) return undefined;
+      const outline = redactBrowserText(text, limit + 200);
+      if (this.tabs.get(tab.info.id) === tab && tab.activation === activation) {
+        tab.outline = { text: outline, url: tab.info.url, activation, at: Date.now() };
+        const hints = pageHints(
+          pageFacts(
+            await this.bridge(tab, frame, 'globalThis.__workbenchPage.facts()').catch(() => undefined),
+          ),
+        );
+        if (JSON.stringify(hints) !== JSON.stringify(tab.info.hints ?? []))
+          this.updateTab(tab, { hints });
+      }
+      return outline;
     })().catch(() => undefined);
-    // A renderer blocked by a dialog never answers.
-    return Promise.race([call, wait(800).then(() => undefined)]);
+  }
+  /** Reads the page as soon as it settles, so the next request about it starts already informed. */
+  private preloadOutline(tab: TabSession): void {
+    clearTimeout(tab.outlineTimer);
+    tab.outlineTimer = setTimeout(() => {
+      if (this.disposed || this.tabs.get(tab.info.id) !== tab || this.pendingDialogs.has(tab.info.id))
+        return;
+      void this.readOutline(tab);
+    }, 400);
   }
   /** Waits until loading, fresh requests and DOM changes stop. Resolves false when the page stays busy. */
   async nativeSettle(targetId: string, timeout = 3000): Promise<boolean> {
@@ -2303,6 +2667,43 @@ export class BrowserRuntime {
   }
   nativeDownloadMark(): number {
     return this.downloadSequence;
+  }
+  async verifyRecordedDownload(
+    trial: Recording,
+    options: {
+      customerId: string;
+      excludeInternal: boolean;
+      tabId: string;
+      origin: string;
+      signal?: AbortSignal;
+    },
+  ): Promise<RecordingVerification> {
+    options.signal?.throwIfAborted();
+    const entries = [...this.downloads.values()].filter(
+      ({ observation }) =>
+        observation?.recordingId === trial.id &&
+        observation.tabId === options.tabId &&
+        observation.origin === options.origin,
+    );
+    if (trial.truncated || entries.length !== 1)
+      return {
+        status: 'unknown',
+        detail:
+          entries.length > 1
+            ? '本次页面有多个下载，无法确定要核对的材料包。'
+            : '没有可唯一关联的下载文件。',
+      };
+    const [entry] = entries;
+    if (
+      !entry.observation?.step ||
+      !trial.steps.some((step) => step.id === entry.observation?.step?.id && step.outcome)
+    )
+      return { status: 'unknown', detail: '无法将下载关联到本次页面上的操作。' };
+    if (entry.state === 'canceled' && entry.observation.step.outcome?.status === 'canceled')
+      return { status: 'failed', detail: '本次下载已取消。' };
+    if (entry.state !== 'completed' || !entry.path || !entry.identity)
+      return { status: 'unknown', detail: '下载尚未完成，未能核对文件。' };
+    return verifyCustomerMaterials(entry.path, options, entry.identity);
   }
   /** Resolves with the first download that started after `mark` once it is on disk. */
   async nativeAwaitDownload(
@@ -3127,6 +3528,39 @@ export class BrowserRuntime {
     );
     this.update({ inspecting: enabled });
   }
+  /**
+   * The element under a point of the visible page, for a spoken request that says "this one".
+   * It is marked on the page for a moment so the person sees what was understood.
+   */
+  pointedElement(x: number, y: number, tabId?: string): Promise<ElementRef | undefined> {
+    const id = this.activeTab().info.id;
+    if (tabId !== undefined && tabId !== id) return Promise.resolve(undefined);
+    return this.serialize(async () => {
+      const tab = this.requireActive(id);
+      if (x > this.width || y > this.height) return undefined;
+      const element = await this.atPoint(tab, x, y);
+      if (!element || ['html', 'body'].includes(element.tag)) return undefined;
+      await this.markElement(tab, element.ref);
+      return element;
+    });
+  }
+  /** Shows on the page which element is meant, for a moment and without changing it. */
+  private async markElement(tab: TabSession, ref: string, duration = 1600): Promise<void> {
+    const scope = this.refs.get(ref);
+    const frame = scope && tab.frames.get(scope.frameId);
+    if (!scope || !frame) return;
+    const mark = (phase: string) =>
+      this.bridge(
+        tab,
+        frame,
+        `globalThis.__workbenchPage.feedback(${JSON.stringify(scope.localRef)},${phase})`,
+      ).catch(() => {});
+    await mark("'working'");
+    setTimeout(() => {
+      // Leave a mark that a running edit has since taken over.
+      if (this.workingFeedback?.ref !== ref && this.tabs.get(tab.info.id) === tab) void mark('null');
+    }, duration);
+  }
   setElementFeedback(ref: string, phase: 'working' | null): Promise<void> {
     return this.serialize(async () => {
       if (phase === 'working') {
@@ -3332,15 +3766,61 @@ export class BrowserRuntime {
     };
     return result;
   }
-  getElementDetails(ref: string): Promise<ElementDetails> {
-    return this.serialize(() => this.detailsInternal(ref));
+  /**
+   * Turns a tool's target into a ref. A selector is resolved against the page as it is now, so
+   * the model can act on what the outline shows without spending a turn on a query.
+   */
+  private async locateTarget(tab: TabSession, input: Record<string, unknown>): Promise<string> {
+    if (typeof input.ref === 'string') return input.ref;
+    const selector = String(input.selector ?? '').trim();
+    const containing = typeof input.containing === 'string' ? input.containing.trim() : '';
+    const nth = typeof input.nth === 'number' ? input.nth : undefined;
+    const found = await this.queryInternal(tab, {
+      selector,
+      ...(containing ? { text: containing } : {}),
+      limit: Math.max(8, nth ?? 0),
+    });
+    const matches = found.elements;
+    if (!matches.length)
+      throw new Error(
+        `没有元素匹配 selector ${JSON.stringify(selector)}${containing ? `（含文字 ${JSON.stringify(containing)}）` : ''}。页面未被改动；按 web_page_outline 修正选择器后重试。`,
+      );
+    if (nth !== undefined) {
+      const picked = matches[nth - 1];
+      if (!picked) throw new Error(`只有 ${matches.length} 个元素匹配，nth=${nth} 超出范围。页面未被改动。`);
+      return picked.ref;
+    }
+    if (matches.length === 1) return matches[0].ref;
+    throw new Error(
+      `有${found.truncated ? '多于 ' : ' '}${matches.length} 个元素匹配 selector ${JSON.stringify(selector)}，页面未被改动。直接用下列 ref 之一重试，或加 containing/nth：\n` +
+        matches
+          .map(
+            (item, index) =>
+              `${index + 1}. <${item.tag}> ${JSON.stringify((item.text || '').slice(0, 60))} ref=${item.ref}`,
+          )
+          .join('\n'),
+    );
   }
-  private async detailsInternal(ref: string): Promise<ElementDetails> {
+  getElementForMention(ref: string): Promise<ElementRef> {
+    return this.serialize(async () => {
+      const { tab, frame, scope } = await this.resolveRef(ref);
+      const element = await this.bridge(
+        tab,
+        frame,
+        `globalThis.__workbenchPage.mention(${JSON.stringify(scope.localRef)})`,
+      );
+      return this.expose(tab, frame, element, await this.geometry(tab, frame));
+    });
+  }
+  getElementDetails(ref: string, withLayout = false): Promise<ElementDetails> {
+    return this.serialize(() => this.detailsInternal(ref, withLayout));
+  }
+  private async detailsInternal(ref: string, withLayout = false): Promise<ElementDetails> {
     const { tab, frame, scope } = await this.resolveRef(ref);
     const detail = await this.bridge(
       tab,
       frame,
-      `globalThis.__workbenchPage.inspect(${JSON.stringify(scope.localRef)})`,
+      `globalThis.__workbenchPage.inspect(${JSON.stringify(scope.localRef)},${withLayout})`,
     );
     const element = await this.exposeDetails(tab, frame, detail);
     let objectId: string | undefined;
@@ -3415,6 +3895,14 @@ export class BrowserRuntime {
       ancestors: (detail.ancestors || []).map((element: any) =>
         this.expose(tab, frame, element, geometry),
       ),
+      ...(detail.layout && {
+        layout: {
+          ...detail.layout,
+          previous:
+            detail.layout.previous && this.expose(tab, frame, detail.layout.previous, geometry),
+          next: detail.layout.next && this.expose(tab, frame, detail.layout.next, geometry),
+        },
+      }),
     };
   }
   selectElement(ref: string): Promise<ElementDetails> {
@@ -3600,14 +4088,25 @@ export class BrowserRuntime {
     changes: { css?: string; texts?: Array<{ selector: string; text: string }> },
     source: 'human' | 'agent',
     guard?: () => void,
+    pair?: SelectedLayout,
   ): Promise<Record<string, unknown>> {
-    const frame = (await this.collectFrames(tab)).find((item) => item.id === tab.mainFrameId);
+    const selected = pair ? await this.resolveRef(pair.ref) : undefined;
+    const second = pair?.otherRef ? await this.resolveRef(pair.otherRef) : undefined;
+    if (selected && selected.frame.id !== tab.mainFrameId)
+      return { applied: false, reason: 'unsupported_frame' };
+    if (selected && (selected.tab !== tab || (second && second.frame !== selected.frame)))
+      throw new Error('所选元素不在同一个页面框架中');
+    const frame =
+      selected?.frame ??
+      (await this.collectFrames(tab)).find((item) => item.id === tab.mainFrameId);
     if (!frame) throw new Error('页面框架尚未就绪');
     await this.setSource(tab, source, frame);
     const result = await this.bridge(
       tab,
       frame,
-      `globalThis.__workbenchPage.restyle(${JSON.stringify(changes)})`,
+      pair && selected
+        ? `globalThis.__workbenchPage.layoutPair(${JSON.stringify({ ref: selected.scope.localRef, otherRef: second?.scope.localRef, direction: pair.direction })})`
+        : `globalThis.__workbenchPage.restyle(${JSON.stringify(changes)})`,
       guard,
     );
     if (!result.applied) return result;
@@ -3617,12 +4116,45 @@ export class BrowserRuntime {
     metadata.localRef = element.ref;
     metadata.source = source;
     metadata.changes = {
-      sheet: changes.css ?? '',
+      sheet: pair ? result.css : (changes.css ?? ''),
       ...(changes.texts?.length ? { texts: structuredClone(changes.texts) } : {}),
     };
+    if (
+      pair &&
+      !(await this.bridge(
+        tab,
+        frame,
+        `globalThis.__workbenchPage.layoutPairActive(${JSON.stringify(result.editId)})`,
+      ))
+    ) {
+      tab.edits = tab.edits.filter((e) => e.id !== editId);
+      this.update();
+      throw new Error('页面在布局预览时发生了变化，请重新选取元素');
+    }
     // The page as a whole changed: nothing is selected or outlined for it.
     this.update();
     return { ...evidence, editId };
+  }
+  /**
+   * Shows the active page in one of the ready-made looks, or as it was. A look is an ordinary
+   * page preview: it is listed with the other changes and can be undone like them.
+   */
+  remix(preset: string | null): Promise<{ preset: string | null; editId?: string }> {
+    const id = this.activeTab().info.id;
+    const look = preset === null ? undefined : PAGE_REMIXES.find((item) => item.id === preset);
+    if (preset !== null && !look) return Promise.reject(new Error('没有这种页面风格'));
+    return this.serialize(async () => {
+      const tab = this.requireActive(id);
+      const current = tab.remix && tab.edits.find((edit) => edit.id === tab.remix!.editId);
+      if (current) await this.undoInternal(tab, current.id, 'human');
+      tab.remix = undefined;
+      if (!look) return { preset: null };
+      const result = await this.restyleInternal(tab, { css: look.css }, 'human');
+      if (!result.applied || typeof result.editId !== 'string')
+        throw new Error('这个页面暂时不能更换风格');
+      tab.remix = { preset: look.id, editId: result.editId };
+      return { preset: look.id, editId: result.editId };
+    });
   }
   /**
    * Everything the active page currently previews, by whom and on which element, for a record
@@ -3731,9 +4263,66 @@ export class BrowserRuntime {
     return { editId: edit.id, element };
   }
 
-  startRecording(sharedSessionId?: string, part?: number): void {
+  private inRecordingScope(tabId?: string, frame?: FrameContext) {
+    if (!this.recordingScope) return true;
+    if (!frame || tabId !== this.recordingScope.tabId) return false;
+    const tab = this.tabs.get(tabId);
+    if (frame.id !== tab?.mainFrameId) return false;
+    const top = tab.info.url;
+    return (
+      !!top &&
+      URL.canParse(top) &&
+      new URL(top).origin === this.recordingScope.origin &&
+      URL.canParse(frame.url) &&
+      new URL(frame.url).origin === this.recordingScope.origin
+    );
+  }
+  private async syncFrameRecording(tab: TabSession, frame: FrameContext) {
+    const id = this.inRecordingScope(tab.info.id, frame) ? this.recording?.id : undefined;
+    if (frame.contextId === undefined || frame.recordingId === id) return;
+    frame.recordingId = id;
+    frame.interaction = undefined;
+    try {
+      await frame.channel.call('Runtime.evaluate', {
+        expression: `globalThis.__workbenchPage?.setRecording(${JSON.stringify(id ?? null)},${!!this.recordingScope})`,
+        contextId: frame.contextId,
+      });
+    } catch (error) {
+      if (frame.recordingId === id) frame.recordingId = undefined;
+      throw error;
+    }
+  }
+  private syncRecordingFrames() {
+    for (const tab of this.tabs.values())
+      for (const frame of tab.frames.values())
+        void this.syncFrameRecording(tab, frame).catch(() => {});
+  }
+  private clearRecordingSession() {
+    this.recording = undefined;
+    this.recordingScope = undefined;
+    this.downloadLinks = [];
+    this.syncRecordingFrames();
+    this.update({ recording: false });
+  }
+  startRecording(
+    sharedSessionId?: string,
+    part?: number,
+    scope?: { tabId: string; origin: string },
+  ): void {
     const tab = this.activeTab();
-    if (this.recording) return;
+    if (this.recording) {
+      if (scope || this.recordingScope) throw new Error('已有录制正在进行');
+      return;
+    }
+    if (
+      scope &&
+      (tab.info.id !== scope.tabId ||
+        !URL.canParse(tab.info.url) ||
+        new URL(tab.info.url).origin !== scope.origin)
+    )
+      throw new Error('带做页面已改变');
+    this.recordingScope = scope;
+    this.downloadLinks = [];
     this.recording = {
       id: randomUUID(),
       sharedSessionId,
@@ -3743,6 +4332,7 @@ export class BrowserRuntime {
       steps: [],
     };
     this.update({ recording: true });
+    this.syncRecordingFrames();
     this.appendStep({
       kind: 'navigate',
       description: `打开 ${evidenceUrl(tab.info.url)}`,
@@ -3756,11 +4346,12 @@ export class BrowserRuntime {
     if (this.endingRecording) return this.endingRecording;
     const current = this.recording;
     if (!current) return Promise.reject(new Error('当前没有录制'));
+    this.recordingStopAt = Date.now();
     this.endingRecording = this.withActor(this.actors.get('host')!, undefined, async () => {
-      await this.pendingWheel?.result;
+      if (!this.recordingScope) await this.pendingWheel?.result;
       const active = this.tabs.get(this.activeTabId);
       const root = active?.frames.get(active.mainFrameId);
-      if (active && root?.contextId !== undefined)
+      if (!this.recordingScope && active && root?.contextId !== undefined)
         // Input acknowledgement can precede the document's scroll event.
         await this.bridge(
           active,
@@ -3769,9 +4360,28 @@ export class BrowserRuntime {
         );
       for (const tab of this.tabs.values()) {
         for (const frame of [...tab.frames.values()]) {
-          if (frame.contextId === undefined) continue;
+          if (frame.contextId === undefined || !this.inRecordingScope(tab.info.id, frame)) continue;
+          if (this.recordingScope) {
+            await tab.page
+              .call(
+                'Runtime.evaluate',
+                {
+                  expression: 'globalThis.__workbenchPage?.flushFeedback()',
+                  contextId: frame.contextId,
+                },
+                500,
+              )
+              .catch(() => {
+                current.truncated = true;
+              });
+            continue;
+          }
           try {
-            await this.bridge(tab, frame, 'globalThis.__workbenchPage.flushScroll()');
+            await this.bridge(
+              tab,
+              frame,
+              'globalThis.__workbenchPage.flushScroll();globalThis.__workbenchPage.flushFeedback()',
+            );
           } catch (error) {
             if (this.tabs.get(tab.info.id) === tab && tab.frames.get(frame.id) === frame)
               throw error;
@@ -3779,11 +4389,28 @@ export class BrowserRuntime {
         }
       }
       if (this.recording !== current) throw new Error('录制状态已变化，请重新检查记录');
+      // Chrome's file event can follow the click, especially for generated blobs.
+      const deadline = Date.now() + 1800;
+      const recentClick = current.steps.findLast((step) => step.kind === 'click')?.timestamp ?? 0;
+      while (Date.now() < deadline) {
+        const observed = [...this.downloads.values()].filter(
+          (e) => e.observation?.recordingId === current.id,
+        );
+        if (
+          observed.length
+            ? !observed.some((e) => e.state === 'inProgress' || e.state === 'saving')
+            : !this.recordingScope && Date.now() - recentClick > 650
+        )
+          break;
+        await wait(50);
+      }
+      if (this.recording !== current) throw new Error('录制状态已变化，请重新检查记录');
       const recording = structuredClone({ ...current, endedAt: Date.now() });
-      this.recording = undefined;
-      this.update({ recording: false });
+      this.clearRecordingSession();
       return recording;
     }).finally(() => {
+      if (this.recordingScope && this.recording === current) this.clearRecordingSession();
+      this.recordingStopAt = undefined;
       this.endingRecording = undefined;
     });
     return this.endingRecording;
@@ -3792,13 +4419,63 @@ export class BrowserRuntime {
     if (
       !this.recording ||
       !event ||
-      !['click', 'fill', 'select', 'key', 'scroll', 'edit', 'undo'].includes(event.kind) ||
+      !this.inRecordingScope(tab.info.id, frame) ||
+      ![
+        'click',
+        'fill',
+        'select',
+        'key',
+        'scroll',
+        'edit',
+        'undo',
+        'download-link',
+        'feedback',
+      ].includes(event.kind) ||
       !['human', 'agent'].includes(event.source)
     )
       return;
     if (typeof event.docId !== 'string') return;
     if (frame.documentId && frame.documentId !== event.docId) return;
+    // Finalization may wait briefly for a file or a pending scroll, never record new text or clicks.
+    if (
+      this.recordingStopAt !== undefined &&
+      (!Number.isFinite(event.at) || event.at > this.recordingStopAt) &&
+      !['download-link', 'feedback', 'scroll'].includes(event.kind)
+    )
+      return;
     frame.documentId = event.docId;
+    if (event.kind === 'feedback') {
+      if (
+        event.recordingId !== this.recording.id ||
+        !Number.isSafeInteger(event.interaction) ||
+        event.interaction !== frame.interaction ||
+        !['alert', 'status'].includes(event.role) ||
+        typeof event.text !== 'string' ||
+        !event.text.trim()
+      )
+        return;
+      this.appendStep({
+        kind: 'feedback',
+        source: 'page',
+        description: event.role === 'alert' ? '网页警告' : '网页状态提示',
+        feedback: { role: event.role, text: redactBrowserText(event.text, 240) },
+        url: evidenceUrl(frame.url),
+        tabId: tab.info.id,
+        frameId: frame.id,
+      });
+      return;
+    }
+    if (event.kind === 'download-link') {
+      if (
+        event.recordingId === this.recording.id &&
+        Number.isSafeInteger(event.interaction) &&
+        event.interaction === frame.interaction
+      )
+        this.rememberDownloadLink(frame, event.docId, event.href);
+      return;
+    }
+    if (event.recordingId === this.recording.id && Number.isSafeInteger(event.interaction))
+      frame.interaction = event.interaction;
     const target =
       event.target && typeof event.target.ref === 'string'
         ? this.expose(tab, frame, {
@@ -3826,7 +4503,7 @@ export class BrowserRuntime {
         ? this.registerEdit(tab, frame, event.editId, this.actors.get(event.actorId))
         : undefined;
     if (event.kind === 'undo' && editId) tab.edits = tab.edits.filter((edit) => edit.id !== editId);
-    this.appendStep({
+    const step = this.appendStep({
       kind: event.kind,
       description: `${verbs[event.kind]}${target?.name ? `「${target.name}」` : ''}${value && ['key', 'scroll'].includes(event.kind) ? ` ${value}` : ''}`,
       url: evidenceUrl(frame.url || tab.info.url),
@@ -3836,19 +4513,61 @@ export class BrowserRuntime {
         (event.source === 'agent' ? { id: 'agent', name: 'Agent' } : undefined),
       target,
       value,
+      scopeText:
+        typeof event.scopeText === 'string' ? redactBrowserText(event.scopeText, 120) : undefined,
+      checked:
+        event.kind === 'fill' && typeof event.checked === 'boolean' ? event.checked : undefined,
       tabId: tab.info.id,
       frameId: frame.id,
       editId,
     });
+    if (event.kind === 'click' && step)
+      this.rememberDownloadLink(frame, event.docId, event.href, step);
   }
-  private appendStep(data: Omit<RecordedStep, 'id' | 'timestamp'>): void {
-    if (!this.recording || this.recording.steps.length >= 2000) return;
+  private rememberDownloadLink(
+    frame: FrameContext,
+    documentId: string,
+    href: unknown,
+    step?: RecordedStep,
+  ) {
+    if (typeof href !== 'string' || href.length > 4096 || !/^(https?:|blob:)/i.test(href)) return;
+    const time = Date.now();
+    this.downloadLinks = this.downloadLinks.filter((link) => time - link.time < 5000);
+    if (this.downloadLinks.length >= 200) {
+      if (this.recording) this.recording.truncated = true;
+      return;
+    }
+    this.downloadLinks.push({ frame, documentId, href, time, step });
+  }
+  private appendStep(data: Omit<RecordedStep, 'id' | 'timestamp'>): RecordedStep | undefined {
+    if (
+      !this.recording ||
+      (this.recordingScope &&
+        !this.inRecordingScope(
+          data.tabId,
+          this.tabs.get(data.tabId ?? '')?.frames.get(data.frameId ?? ''),
+        ))
+    )
+      return;
+    if (this.recording.steps.length >= 2000) {
+      this.recording.truncated = true;
+      return;
+    }
     const step: RecordedStep = {
-      actor: data.source === 'human' ? this.currentActor() : { id: 'agent', name: 'Agent' },
+      actor:
+        data.source === 'human'
+          ? this.currentActor()
+          : data.source === 'page'
+            ? { id: 'page', name: '网页' }
+            : { id: 'agent', name: 'Agent' },
       ...data,
       id: randomUUID(),
       timestamp: Date.now(),
     };
+    if (this.recordingScope) {
+      delete step.value;
+      if (step.target) delete step.target.value;
+    }
     const last = this.recording.steps.at(-1);
     if (
       last &&
@@ -3864,7 +4583,8 @@ export class BrowserRuntime {
       step.id = last.id;
       this.recording.steps[this.recording.steps.length - 1] = step;
     } else this.recording.steps.push(step);
-    this.options.onStep(structuredClone(step));
+    if (!this.recordingScope) this.options.onStep(structuredClone(step));
+    return step;
   }
 
   getTools(): BrowserTool[] {
@@ -3899,6 +4619,30 @@ export class BrowserRuntime {
       type: 'string',
       description:
         'workbench_browser_query/inspect/create_page 返回的精确 DOM ref，不是 web_snapshot 的交互引用；导航后必须重取。',
+    };
+    // An element named in web_page_outline can be addressed directly, without a query first.
+    const target = {
+      ref: {
+        ...ref,
+        description: ref.description + ' 已有 ref 时优先使用；没有时改用 selector。',
+      },
+      selector: {
+        type: 'string',
+        maxLength: 1000,
+        description:
+          '没有 ref 时直接用 CSS 选择器指定元素（可按 web_page_outline 的标签、#id、.类名书写），宿主在当前页面实时定位，无需先 query。必须唯一命中；多个命中时用 containing 或 nth 指定其一。',
+      },
+      containing: {
+        type: 'string',
+        maxLength: 1000,
+        description: '与 selector 配合：只保留包含这段可见文字的元素。',
+      },
+      nth: {
+        type: 'integer',
+        minimum: 1,
+        maximum: 100,
+        description: '与 selector 配合：按文档顺序取第几个命中，从 1 开始。',
+      },
     };
     const insertion = {
       type: 'object',
@@ -4011,15 +4755,15 @@ export class BrowserRuntime {
       ),
       tool(
         'inspect',
-        '读取精确元素属性、计算样式（含渐变、阴影、变换）、工具预览动画配置与实际播放状态、祖先和frame，不改变页面。',
-        { ref },
-        ['ref'],
+        '读取精确元素属性、计算样式（含渐变、阴影、变换）、工具预览动画配置与实际播放状态、祖先和frame，不改变页面，并在页面上把该元素标出片刻：用户问「看到了吗」「是哪个」时用它指给用户看。用 ref 或 selector 指定元素。',
+        { ...target },
+        [],
       ),
       tool(
         'edit',
-        '直接修改精确 DOM 的文字、字体、字号、颜色、间距等样式与可撤销 WAAPI 动效，无需额外审批；这些基础调整优先使用本工具，不要改走页面脚本。也可单独用 insert 在 ref 内部/前后创建嵌套 HTML 元素。新建返回新元素 ref，可继续 inspect/edit；要点击或填写它时重新获取 snapshot。结构最多 80 节点/8 层，不接受 HTML 字符串、脚本、事件属性或敏感控件。新增输入控件不提交到原有表单。styles 禁止 URL、var/attr、代码和 !important；animation:null 只取消自己的动画。所有修改可撤销，仅影响当前页面预览，不代表源码已保存。',
+        '直接修改一个元素的文字、字体、字号、颜色、间距等样式与可撤销 WAAPI 动效，无需额外审批。用 ref 或 selector 指定元素：目标已出现在 web_page_outline 或用户描述足够明确时，直接给 selector（可加 containing/nth）一步完成，不要先 query、inspect 或 snapshot；返回值含该元素的 ref 与修改后的实际样式，可据此继续。这些基础调整优先使用本工具，不要改走页面脚本。也可单独用 insert 在 ref 内部/前后创建嵌套 HTML 元素。新建返回新元素 ref，可继续 inspect/edit；要点击或填写它时重新获取 snapshot。结构最多 80 节点/8 层，不接受 HTML 字符串、脚本、事件属性或敏感控件。新增输入控件不提交到原有表单。styles 禁止 URL、var/attr、代码和 !important；animation:null 只取消自己的动画。所有修改可撤销，仅影响当前页面预览，不代表源码已保存。',
         {
-          ref,
+          ...target,
           text: { type: 'string', maxLength: 20_000 },
           insert: insertion,
           styles: {
@@ -4097,7 +4841,7 @@ export class BrowserRuntime {
             ],
           },
         },
-        ['ref'],
+        [],
       ),
       tool(
         'restyle',
@@ -4219,7 +4963,7 @@ export class BrowserRuntime {
    * and keystrokes, which must not wait behind it.
    */
   async guide(args: unknown, options: GuideOptions = {}): Promise<GuideResult> {
-    const plan = parseGuide(args);
+    const plan = parseGuide(args, options.practice ? 1600 : undefined);
     this.activeTab();
     if (this.sharedTab) throw new Error('共享期间由参与者操作页面，请先停止共享再带做');
     if (this.guideRun) throw new Error('页面上已有一段带做正在进行');
@@ -4250,11 +4994,11 @@ export class BrowserRuntime {
       show: (step) =>
         ask(undefined, `globalThis.__workbenchPage.guideShow(${JSON.stringify(step)})`),
       shown: async () => {
-        const state = await ask<{ token: string } | null>(
+        const state = await ask<{ token: string; located: boolean } | null>(
           undefined,
           'globalThis.__workbenchPage.guideState()',
         );
-        return state === undefined ? undefined : { token: state?.token };
+        return state === undefined ? undefined : { token: state?.token, located: state?.located };
       },
       clear: async (tabId, farewell) => {
         await ask(
@@ -4297,9 +5041,21 @@ export class BrowserRuntime {
       )
         throw new Error('新页面内容使用 append');
     }
+    if (name === 'workbench_browser_edit' || name === 'workbench_browser_inspect') {
+      if (typeof input.ref !== 'string') {
+        if (typeof input.selector !== 'string' || !input.selector.trim())
+          throw new Error('需要 ref，或用 selector 指定元素');
+        if (input.containing !== undefined && typeof input.containing !== 'string')
+          throw new Error('containing is invalid');
+        if (
+          input.nth !== undefined &&
+          (!Number.isInteger(input.nth) || Number(input.nth) < 1 || Number(input.nth) > 100)
+        )
+          throw new Error('nth 需要是从 1 开始的整数');
+      }
+    }
     if (name === 'workbench_browser_edit') {
-      if (typeof input.ref !== 'string') throw new Error('ref is required');
-      const { ref: _, tabId: __, ...changes } = input;
+      const { ref: _, tabId: __, selector: ___, containing: ____, nth: _____, ...changes } = input;
       this.validateEdit(changes as ElementEdit);
     }
     if (name === 'workbench_browser_controls') validateElementControls(input.components);
@@ -4316,7 +5072,7 @@ export class BrowserRuntime {
     )
       throw new Error('editId is invalid');
   }
-  callTool(name: string, args: unknown): Promise<ToolResult> {
+  callTool(name: string, args: unknown, pair?: SelectedLayout): Promise<ToolResult> {
     if (name === 'workbench_browser_guide')
       return this.guide(args).then(
         (result) => ({ text: JSON.stringify(result, null, 2), isError: !result.started }),
@@ -4330,6 +5086,21 @@ export class BrowserRuntime {
     const interactionGeneration = this.leaseGeneration;
     const generation = documentScoped ? this.previewLeaseGeneration : this.leaseGeneration,
       capturedTab = this.activeTabId;
+    const releaseFrames = domReadTools.has(name) ? undefined : this.leaseFrames();
+    return this.callToolQueued(name, args, pair, preview, documentScoped, interactionGeneration, generation, capturedTab).finally(
+      () => releaseFrames?.(),
+    );
+  }
+  private callToolQueued(
+    name: string,
+    args: unknown,
+    pair: SelectedLayout | undefined,
+    preview: boolean,
+    documentScoped: boolean,
+    interactionGeneration: number,
+    generation: number,
+    capturedTab: string,
+  ): Promise<ToolResult> {
     return this.serialize(async () => {
       let createdPage: BrowserTab | undefined;
       let writeStarted = false;
@@ -4340,6 +5111,9 @@ export class BrowserRuntime {
         const assertLease = () => {
           if (
             !(preview ? this.previewAllowed : this.agentAllowed) ||
+            (pair &&
+              (name !== 'workbench_browser_restyle' ||
+                pair.revision !== this.previewLeaseGeneration)) ||
             generation !== (preview ? this.previewLeaseGeneration : this.leaseGeneration)
           )
             throw new Error(
@@ -4441,10 +5215,15 @@ export class BrowserRuntime {
             message: '调整面板已显示，用户操作控件后才会修改页面。',
           });
         }
-        if (name === 'workbench_browser_inspect') {
-          if (typeof input.ref !== 'string') throw new Error('ref is required');
-          return await observed(this.detailsInternal(input.ref).then(json));
-        }
+        if (name === 'workbench_browser_inspect')
+          return await observed(
+            this.locateTarget(tab, input).then(async (ref) => {
+              const details = await this.detailsInternal(ref);
+              // Looking at an element is visible to the person: this is how it is pointed out.
+              await this.markElement(tab, ref, 2600);
+              return json(details);
+            }),
+          );
         assertLease();
         if (name !== 'workbench_browser_edit') writeStarted = true;
         if (name === 'workbench_browser_navigate') {
@@ -4453,10 +5232,9 @@ export class BrowserRuntime {
           return { text: '页面正在加载，继续前请重新获取 snapshot。' };
         }
         if (name === 'workbench_browser_edit') {
-          if (typeof input.ref !== 'string') throw new Error('ref is required');
           return json(
             await this.editInternal(
-              input.ref,
+              await this.locateTarget(tab, input),
               {
                 ...(input.text !== undefined ? { text: input.text as string } : {}),
                 ...(input.styles !== undefined
@@ -4491,6 +5269,7 @@ export class BrowserRuntime {
               },
               'agent',
               assertLease,
+              pair,
             ),
           );
         }
@@ -4541,7 +5320,18 @@ export class BrowserRuntime {
                 assertLease,
               );
               assertLease();
-              await tab.page.call('Input.insertText', { text: input.value });
+              let inserted = false;
+              try {
+                await tab.page.call('Input.insertText', { text: input.value });
+                inserted = true;
+              } finally {
+                await this.bridge(
+                  tab,
+                  frame,
+                  `globalThis.__workbenchPage.replayScript(${inserted})`,
+                  assertLease,
+                );
+              }
             } else
               await this.bridge(
                 tab,
@@ -4614,8 +5404,33 @@ export class BrowserRuntime {
       }
     });
   }
-  async dispose(): Promise<void> {
+  dispose({ handoff = false } = {}): Promise<void> {
+    if (this.stopping) return this.stopping;
+    const keepBrowser = handoff && this.state.status === 'ready' && !this.starting;
     this.disposed = true;
+    this.stopping = Promise.resolve(this.starting)
+      .catch(() => {})
+      .then(() => this.closeBrowser(keepBrowser))
+      .finally(() => {
+        this.stopping = undefined;
+      });
+    return this.stopping;
+  }
+  private async closeBrowser(handoff = false): Promise<void> {
+    try {
+      // A failed reconnection must leave the recovered tabs available for the next attempt.
+      await this.disconnectBrowser(
+        handoff || (!!this.recoveredPid && this.state.status === 'starting'),
+      );
+    } finally {
+      this.recoveredPid = undefined;
+      await this.profileLease?.close();
+      this.profileLease = undefined;
+    }
+  }
+  private async disconnectBrowser(handoff: boolean): Promise<void> {
+    const connection = this.browser;
+    this.browser = undefined;
     clearTimeout(this.frameRefreshTimer);
     this.revokeAgentControl();
     this.recording = undefined;
@@ -4625,22 +5440,32 @@ export class BrowserRuntime {
       tab.page.close();
     }
     this.tabs.clear();
+    this.attaching.clear();
+    this.recoveredTargets.clear();
     this.refs.clear();
     this.pendingDialogs.clear();
     this.activeTabId = '';
     const child = this.process;
-    this.process = undefined;
+    // Keep the original child handle across failed reconnects in this same Electron process.
+    if (!handoff || child?.exitCode !== null || child.signalCode !== null) this.process = undefined;
     const exited =
-      child?.pid && child.exitCode === null && child.signalCode === null
+      !handoff && child?.pid && child.exitCode === null && child.signalCode === null
         ? new Promise<void>((resolve) => child.once('exit', () => resolve()))
         : Promise.resolve();
-    try {
-      await this.browser?.call('Browser.close');
-    } catch {}
-    this.browser?.close();
-    this.browser = undefined;
+    if (handoff) {
+      child?.stdout?.destroy();
+      child?.stderr?.destroy();
+      child?.unref();
+    } else {
+      try {
+        await connection?.call('Browser.close');
+      } catch {}
+    }
+    const previousEndpoint = this.endpoint;
+    connection?.close();
+    this.endpoint = '';
     // Let Chromium flush the owned profile before another instance can reuse it.
-    if (child?.pid) {
+    if (child?.pid && !handoff) {
       await Promise.race([exited, wait(2000)]);
       if (child.exitCode === null && child.signalCode === null) {
         child.kill('SIGTERM');
@@ -4652,6 +5477,20 @@ export class BrowserRuntime {
       }
       if (child.exitCode === null && child.signalCode === null)
         throw new Error('无法确认浏览器已停止，请先检查运行状态');
+    }
+    if (this.recoveredPid && this.recoveredPid !== child?.pid && !handoff) {
+      const deadline = Date.now() + 8000;
+      while (processExists(this.recoveredPid) && Date.now() < deadline) await wait(40);
+      if (processExists(this.recoveredPid) && this.state.binaryPath) {
+        // A PID can outlive the profile lock while Chrome flushes data, or be reused.
+        const live = await findOrphanChrome(
+          join(this.options.storageDir, 'agent-browser-profile'),
+          this.state.binaryPath,
+          this.recoveredPid,
+        );
+        if (live?.pid === this.recoveredPid && live.endpoint === previousEndpoint)
+          throw new Error('Chrome 仍在关闭，请稍后重试。');
+      }
     }
     this.update({
       status: 'stopped',

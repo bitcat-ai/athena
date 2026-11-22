@@ -59,3 +59,38 @@ test('corrupt data is preserved instead of being silently overwritten', async ()
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test('reopening recordings stops interrupted practice and preserves finished and legacy records', async (t) => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'athena-recording-store-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const first = new Store(directory);
+  const legacy = { id: 'old', title: '历史录制', startedAt: 1, steps: [] };
+  const practice = { target: 'B', progress: [], detail: '等待下载' };
+  const finished = {
+    ...legacy,
+    id: 'finished',
+    practice: {
+      ...practice,
+      status: 'finished' as const,
+      verification: 'passed' as const,
+      detail: '已核验',
+    },
+  };
+  first.data.recordings = [
+    {
+      ...legacy,
+      id: 'running',
+      practice: { ...practice, status: 'guiding', verification: 'unknown' },
+    },
+    finished,
+    legacy,
+  ];
+  await first.save();
+  const reopened = new Store(directory);
+  await reopened.load();
+  const [interrupted, settled, old] = reopened.data.recordings;
+  assert.equal(interrupted.practice?.status, 'stopped');
+  assert.equal(interrupted.practice?.verification, 'unknown');
+  assert.deepEqual(settled, finished);
+  assert.deepEqual(old, legacy);
+});

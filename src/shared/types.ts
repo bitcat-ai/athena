@@ -1,7 +1,9 @@
 import type { ElementControlSurface } from './element-controls';
+import type { PageHint } from './page-hints';
 import type { WorkspaceSkill } from './skills';
 import type { TaskSelection } from './access';
-export type AgentId = 'codex' | 'claude' | 'opencode' | 'gemini' | 'pi' | 'cursor';
+import type { RecordingWorkflow } from './recording-workflow';
+export type AgentId = 'codex' | 'claude' | 'opencode' | 'gemini' | 'pi' | 'cursor' | 'kimi';
 export interface AgentInfo {
   id: AgentId;
   name: string;
@@ -189,6 +191,14 @@ export interface ElementAnimation {
 }
 export interface ElementDetails extends ElementRef {
   documentId: string;
+  layout?: {
+    parentDisplay: string;
+    parentDirection?: string;
+    parentColumns?: string;
+    childCount: number;
+    previous?: ElementRef;
+    next?: ElementRef;
+  };
   textContent: string;
   editableText: boolean;
   editReason?: string;
@@ -331,18 +341,46 @@ export interface BrowserActor {
 export interface RecordedStep {
   actor?: BrowserActor;
   id: string;
-  kind: 'navigate' | 'click' | 'fill' | 'select' | 'key' | 'scroll' | 'edit' | 'undo' | 'control';
+  kind:
+    | 'navigate'
+    | 'click'
+    | 'fill'
+    | 'select'
+    | 'key'
+    | 'scroll'
+    | 'edit'
+    | 'undo'
+    | 'control'
+    | 'download'
+    | 'feedback';
   description: string;
   timestamp: number;
   url: string;
-  source: 'human' | 'agent';
+  source: 'human' | 'agent' | 'page';
   target?: Partial<ElementRef>;
   value?: string;
   tabId?: string;
   frameId?: string;
   editId?: string;
+  /** Visible row heading at the time of the action. */
+  scopeText?: string;
+  /** Committed state from a non-sensitive native checkbox/radio input event. */
+  checked?: boolean;
+  feedback?: { role: 'alert' | 'status'; text: string };
+  outcome?: {
+    kind: 'download';
+    status: 'started' | 'completed' | 'canceled' | 'unknown';
+    origin: 'link' | 'page';
+  };
 }
 export interface Recording {
+  practice?: {
+    target: string;
+    status: 'guiding' | 'stopped' | 'finished';
+    progress: { note: string; status: 'pending' | 'current' | 'done' | 'skipped' }[];
+    verification: 'unknown' | 'passed' | 'failed';
+    detail: string;
+  };
   sharedSessionId?: string;
   part?: number;
   id: string;
@@ -350,7 +388,9 @@ export interface Recording {
   startedAt: number;
   endedAt?: number;
   steps: RecordedStep[];
+  truncated?: boolean;
   summary?: string;
+  workflow?: RecordingWorkflow;
 }
 export interface BrowserTab {
   id: string;
@@ -359,6 +399,8 @@ export interface BrowserTab {
   loading: boolean;
   canGoBack: boolean;
   canGoForward: boolean;
+  /** What Athena can do with this page, worked out when the page was read on load. */
+  hints?: PageHint[];
 }
 export interface BrowserState {
   viewport?: BrowserViewport & { epoch: number };
@@ -506,7 +548,7 @@ export interface WebExecutionEvent {
   outcome?: 'verified' | 'not_applied' | 'unknown';
   summary?: string;
   evidence?: string;
-  artifact?: { path: string; bytes: number; sha256: string };
+  artifact?: { path: string; bytes: number; sha256: string; mimeType?: string };
   plan?: AgentPlanStep[];
 }
 export interface ApprovalRequest {
@@ -559,6 +601,7 @@ export type AgentEvent =
       type: 'status';
       status: 'starting' | 'thinking' | 'working' | 'waiting' | 'idle';
       label?: string;
+      delivery?: import('./phase').CodexDelivery;
       /** Set by the host; `status` and `label` stay for consumers that predate phases. */
       phase?: import('./phase').TurnPhase;
     }
@@ -578,6 +621,9 @@ export interface ElementMention {
   edit?: ElementEdit;
 }
 export interface ChatMessage {
+  /** This turn was handled by a local reversible layout action and did not invoke a model. */
+  localPreview?: true;
+  files?: string[];
   id: string;
   role: 'user' | 'assistant';
   text: string;
@@ -603,6 +649,8 @@ export interface ChatMessage {
 }
 export interface Conversation {
   id: string;
+  /** Subsequent questions in this conversation are limited to this recording. */
+  recordingId?: string;
   title: string;
   updatedAt: number;
   messages: ChatMessage[];
@@ -726,6 +774,7 @@ export type AppEvent =
   | { type: 'notice'; message: string; level: 'info' | 'error' }
   | { type: 'mcp:connections'; connections: AppSnapshot['pendingExternalConnections'] };
 export interface WorkbenchBridge {
+  droppedWorkspaceFiles(workspace: string, files: File[]): Promise<string[]>;
   invoke<T = unknown>(action: string, payload?: unknown): Promise<T>;
   onEvent(callback: (event: AppEvent) => void): () => void;
 }

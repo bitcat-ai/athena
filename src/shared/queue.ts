@@ -6,6 +6,7 @@ export interface QueuedMessage {
   text: string;
   /** Number of images that go with it. */
   images: number;
+  files?: string[];
   createdAt: number;
 }
 

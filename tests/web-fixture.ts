@@ -80,6 +80,7 @@ export interface WebFixture {
   begin(
     id: string,
     readonly?: boolean,
+    askOnly?: boolean,
   ): Promise<{ sessionId: string; page: number; client: any; worker: any; elapsed: number }>;
   /** Evaluates in the visible page, outside the task. */
   state(expression: string): Promise<any>;
@@ -105,7 +106,7 @@ export async function until(read: () => unknown, label = 'condition', timeout = 
   }
 }
 
-export async function webFixture(start = '/lab'): Promise<WebFixture> {
+export async function webFixture(start = '/lab', onFrame = () => {}): Promise<WebFixture> {
   const directory = await mkdtemp(path.join(tmpdir(), 'athena-web-'));
   const site = createServer((req, res) => {
     const url = new URL(req.url!, 'http://fixture');
@@ -146,7 +147,7 @@ export async function webFixture(start = '/lab'): Promise<WebFixture> {
   const browser = new BrowserRuntime({
     storageDir: path.join(directory, 'browser'),
     onState() {},
-    onFrame() {},
+    onFrame,
     onStep() {},
     onSelected() {},
     onHumanTakeover(reason) {
@@ -189,10 +190,10 @@ export async function webFixture(start = '/lab'): Promise<WebFixture> {
     directory,
     approvals,
     call,
-    async begin(id, readonly = false) {
+    async begin(id, readonly = false, askOnly = false) {
       browser.allowAgentControl();
       const started = performance.now();
-      const task = await runtime.beginTask(id, readonly);
+      const task = await runtime.beginTask(id, readonly, false, askOnly);
       const client = (runtime.server as any).sessions.get(task.sessionId);
       return {
         sessionId: task.sessionId,

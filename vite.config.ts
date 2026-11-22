@@ -25,6 +25,7 @@ export default defineConfig(({ command }) => ({
       input: {
         main: resolve(import.meta.dirname, 'src/renderer/index.html'),
         share: resolve(import.meta.dirname, 'src/renderer/share.html'),
+        terminal: resolve(import.meta.dirname, 'src/renderer/terminal.html'),
       },
     },
   },

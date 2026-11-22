@@ -340,6 +340,35 @@ try {
   assert.deepEqual((await snapshot()).queue, { items: [], paused: [] });
   checks.push('A message for another conversation is queued behind the running turn');
 
+  const file = 'queue-note.txt';
+  await writeFile(path.join(initial.settings.workspace, file), 'SNAPSHOT-BEFORE-QUEUE');
+  await field.fill('hold 文件测试');
+  await field.press('Enter');
+  await expect.poll(streaming).toBe(1);
+  await field.fill('@queue-note');
+  await page.locator('[role=menuitem][data-key="file:queue-note.txt"]').click();
+  await expect(page.getByRole('button', { name: '移除文件 ' + file })).toBeVisible();
+  await sendButton.click();
+  await expect(rows).toHaveCount(1);
+  await rows.first().getByRole('button', { name: '取回编辑' }).click();
+  await expect(page.getByRole('button', { name: '移除文件 ' + file })).toBeVisible();
+  await sendButton.click();
+  await expect(rows).toHaveCount(1);
+  await writeFile(path.join(initial.settings.workspace, file), 'CHANGED-AFTER-QUEUE');
+  await writeFile(release, 'go');
+  await expect
+    .poll(
+      async () =>
+        (await snapshot()).conversations
+          .flatMap((c) => c.messages)
+          .find((m) => m.files?.includes(file))?.context,
+      { timeout: 20000 },
+    )
+    .toContain('SNAPSHOT-BEFORE-QUEUE');
+  checks.push(
+    'File-only messages retain their workspace reference while editing a queue item and keep the submitted text snapshot while queued',
+  );
+
   assert.deepEqual(errors, []);
   console.log(
     JSON.stringify({ passed: true, checks, screenshot: 'test-results/message-queue.png' }, null, 2),

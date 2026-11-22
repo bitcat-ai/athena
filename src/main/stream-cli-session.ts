@@ -338,6 +338,8 @@ export class StreamCliSession implements AgentSession {
     this.options.onEvent(event);
   }
   async prepare(selection?: ModelSelection) {
+    if (this.options.evidenceOnly && this.options.cli !== 'claude')
+      throw new Error('当前 CLI 无法隔离全部录制分析上下文，请选择 Codex、Claude 或 Pi');
     if (this.closed) throw new Error('CLI 会话已关闭');
     if (selection && this.active) throw new Error('任务进行中，不能切换 CLI 模型');
     if (this.options.tools.length && this.options.cli !== 'claude')
@@ -525,16 +527,18 @@ export class StreamCliSession implements AgentSession {
         '--verbose',
         '--include-partial-messages',
         '--tools',
-        this.options.previewOnly ? '' : 'Read,Glob,Grep,Skill',
+        this.options.previewOnly || this.options.evidenceOnly ? '' : 'Read,Glob,Grep,Skill',
         '--allowedTools',
         [
-          ...(this.options.previewOnly ? [] : ['Read', 'Glob', 'Grep', 'Skill']),
+          ...(this.options.previewOnly || this.options.evidenceOnly
+            ? []
+            : ['Read', 'Glob', 'Grep', 'Skill']),
           ...(run.browserConfig
             ? this.options.tools.map((tool) => `mcp__athena__${tool.name}`)
             : []),
         ].join(','),
         '--disallowedTools',
-        this.options.previewOnly
+        this.options.previewOnly || this.options.evidenceOnly
           ? 'Read,Glob,Grep,Skill,Write,Edit,Bash,Task,WebFetch,WebSearch'
           : 'Write,Edit,Bash,Task,WebFetch,WebSearch',
         '--settings',
@@ -553,6 +557,14 @@ export class StreamCliSession implements AgentSession {
               previewInstructions,
               '--disable-slash-commands',
               '--no-session-persistence',
+            ]
+          : []),
+        ...(this.options.evidenceOnly
+          ? [
+              '--system-prompt',
+              'Analyze only the supplied recording without tools.',
+              '--disable-slash-commands',
+              '--safe-mode',
             ]
           : []),
         ...resume,
@@ -676,7 +688,7 @@ export class StreamCliSession implements AgentSession {
       env: {
         ...process.env,
         ...(run.browserConfig ? { ENABLE_TOOL_SEARCH: 'false' } : {}),
-        ...(this.options.cli === 'claude' ? { CLAUDE_CODE_SAFE_MODE: '0' } : {}),
+        ...(this.options.cli === 'claude' ? { CLAUDE_CODE_SAFE_MODE: this.options.evidenceOnly ? '1' : '0' } : {}),
         PATH: `${path.dirname(this.options.executablePath)}${path.delimiter}${process.env.PATH ?? '/usr/bin:/bin'}`,
       },
       detached: process.platform !== 'win32',

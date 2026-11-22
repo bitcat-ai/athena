@@ -154,6 +154,14 @@ window.workbench={
   }
   if(action==='agents:refresh')return fixture.snapshot.agents;
   if(action==='browser:inspect'){fixture.browser({inspecting:payload.enabled});return true;}
+  if(action==='web:connect'){
+    fixture.browser({status:'starting',error:undefined});
+    return new Promise((resolve,reject)=>{
+      fixture.failBrowserRetry=()=>{fixture.browser({status:'error',error:'Chrome 仍未响应'});reject(Error('Chrome 仍未响应'));};
+      fixture.finishBrowserRetry=()=>{fixture.browser({status:'ready'});fixture.emit({type:'web:state',state:{status:'starting'}});};
+      fixture.finishWebRetry=()=>{fixture.emit({type:'web:state',state:{status:'ready'}});resolve({status:'ready'});};
+    });
+  }
   if(action==='browser:element-details')return fixture.snapshot.browser.selectedElement;
   if(action==='recording:start'){fixture.browser({recording:true});return true;}
   if(action==='browser:resize')return {width:payload.fitToWidth?Math.max(900,payload.width):payload.width,height:payload.height,tabId:payload.tabId};
@@ -289,11 +297,12 @@ try {
     );
   const wide = await toolbarBoxes();
   await expect(page.locator('.agent-picker img[data-agent="codex"]')).toBeVisible();
-  assert.equal(wide.length, 4);
+  assert.equal(wide.length, 5);
   assert.ok(wide.every((b) => b.height === 36 && Math.abs(b.y - wide[0].y) < 1));
   assert.equal(wide[0].width, wide[0].height, 'Add context must stay square');
-  assert.equal(wide[3].width, wide[3].height, 'Send must stay square');
-  checks.push('The four homepage toolbar controls share one center line and a 36px hit height');
+  assert.equal(wide[3].width, wide[3].height, 'Voice must stay square');
+  assert.equal(wide[4].width, wide[4].height, 'Send must stay square');
+  checks.push('The homepage toolbar including Voice shares one center line and a 36px hit height');
   await page.screenshot({ path: path.join(output, 'home-light.png') });
   checks.push(
     'Initial snapshot gate prevents early model requests; actual local username/initial, 216px sidebar, 760px composer, 34/56px official logos, neutral borderless 24px surface',
@@ -502,7 +511,7 @@ try {
   await page.keyboard.press('Escape');
   await expect(page.locator('.local-user-menu')).toBeHidden();
   await expect(composer).toHaveText('保留这段草稿');
-  await page.getByRole('button', { name: '添加网页上下文', exact: true }).click();
+  await page.getByRole('button', { name: '添加附件与网页上下文', exact: true }).click();
   await page.screenshot({ path: path.join(output, 'context-menu.png') });
   await page.getByRole('menuitem', { name: '当前页面', exact: true }).click();
   await expect(page.getByRole('menuitem', { name: '当前页面', exact: true })).toHaveCount(0);
@@ -518,7 +527,7 @@ try {
   await expect(page.getByRole('dialog', { name: '搜索对话' })).toHaveCount(0);
   await expect(page.locator('.browser-keyboard')).toBeFocused();
   await page.evaluate(() => (window as any).__homeFixture.browser({ status: 'starting' }));
-  await page.getByRole('button', { name: '添加网页上下文', exact: true }).click();
+  await page.getByRole('button', { name: '添加附件与网页上下文', exact: true }).click();
   await expect(page.getByRole('menuitem', { name: '选取页面元素', exact: true })).toHaveAttribute(
     'aria-disabled',
     'true',
@@ -529,7 +538,7 @@ try {
   );
   await page.keyboard.press('Escape');
   await page.evaluate(() => (window as any).__homeFixture.browser({ status: 'ready' }));
-  await page.getByRole('button', { name: '添加网页上下文', exact: true }).click();
+  await page.getByRole('button', { name: '添加附件与网页上下文', exact: true }).click();
   await page.getByRole('menuitem', { name: '录制网页操作', exact: true }).click();
   await expect(page.locator('.composer-recording')).toContainText('录制中');
   assert.equal((await calls('recording:start')).length, 1);
@@ -627,7 +636,32 @@ try {
   assert.equal(await page.getByRole('dialog', { name: '设置' }).count(), 0);
   await page.screenshot({ path: path.join(output, 'settings-agent.png') });
   await page.getByRole('tab', { name: '浏览器', exact: true }).click();
-  await expect(page.getByRole('button', { name: '选择 Chrome', exact: true })).toBeVisible();
+  const browserSettings = page.getByRole('tabpanel', { name: '浏览器', exact: true });
+  const chooseChrome = browserSettings.getByRole('button', { name: '选择 Chrome', exact: true });
+  const retryChrome = browserSettings.getByRole('button', { name: '重新连接', exact: true });
+  await expect(chooseChrome).toBeVisible();
+  await page.evaluate(() => (window as any).__homeFixture.browser({
+    status: 'error', binaryPath: '/fixture/Chrome', error: 'Chrome 没有响应',
+  }));
+  await expect(browserSettings.getByText('Chrome 没有响应')).toBeVisible();
+  const starts = (await calls('web:connect')).length;
+  await retryChrome.click();
+  await expect(retryChrome).toBeDisabled();
+  await expect(chooseChrome).toBeDisabled();
+  await expect(browserSettings.getByText('连接中', { exact: true })).toBeVisible();
+  assert.equal((await calls('web:connect')).length, starts + 1);
+  await page.evaluate(() => (window as any).__homeFixture.failBrowserRetry());
+  await expect(browserSettings.getByText('Chrome 仍未响应')).toBeVisible();
+  await expect(retryChrome).toBeEnabled();
+  await retryChrome.click();
+  await page.evaluate(() => (window as any).__homeFixture.finishBrowserRetry());
+  await expect(browserSettings.getByText('已连接', { exact: true })).toHaveCount(0);
+  await expect(browserSettings.getByText('Chrome 没有响应')).toHaveCount(0);
+  await expect(retryChrome).toBeDisabled();
+  await page.evaluate(() => (window as any).__homeFixture.finishWebRetry());
+  await expect(browserSettings.getByText('已连接', { exact: true })).toBeVisible();
+  await expect(retryChrome).toHaveCount(0);
+  assert.equal((await calls('web:connect')).length, starts + 2);
   await page.getByRole('tab', { name: '飞书', exact: true }).click();
   await expect(page.getByRole('button', { name: '授权并选择机器人', exact: true })).toBeVisible();
   await page.evaluate(() =>

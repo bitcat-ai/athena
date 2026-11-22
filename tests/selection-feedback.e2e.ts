@@ -42,6 +42,10 @@ event('turn/completed',{threadId,turnId:current,turn:{id:current,status}});
 readline.createInterface({input:process.stdin}).on('line',line=>{
 const r=JSON.parse(line);fs.appendFileSync(process.env.INTERACTION_LOG,line+'\n');
 if(r.method==='initialize')return send({id:r.id,result:{userAgent:'fixture'}});
+if(r.method==='skills/list')return send({id:r.id,result:{data:[{cwd:r.params.cwds[0],skills:[]}]}});
+if(r.method==='model/list')return send({id:r.id,result:{data:[]}});
+if(r.method==='modelProvider/capabilities/read')return send({id:r.id,result:{imageGeneration:false,webSearch:false}});
+if(r.method==='config/read')return send({id:r.id,result:{config:{},layers:[]}});
 if(r.method==='thread/start'||r.method==='thread/resume')return send({id:r.id,result:{thread:{id:threadId}}});
 if(r.method==='turn/start'){
 current='turn-'+(++count);const input=r.params.input[0].text;mode=input.split('\n')[0];
@@ -166,6 +170,9 @@ try {
   checks.push(
     'Hover precedes click; picker does not open the inspector until selection; exact heading selected',
   );
+  // Opening and closing the browser drawer preserves the inspector tab; finish this check explicitly.
+  await page.getByRole('button', { name: '元素检查器', exact: true }).click();
+  await expect(page.getByRole('textbox', { name: '元素文字', exact: true })).toHaveCount(0);
 
   await page.getByRole('button', { name: '选取元素', exact: true }).click();
   await page.keyboard.press('Escape');

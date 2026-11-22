@@ -40,6 +40,7 @@ test('default changes never rebind existing or legacy conversations or leak mode
   assert.equal(supportsBrowser('cursor'), false);
   assert.equal(supportsBrowser('codex'), true);
   assert.equal(supportsBrowser('opencode'), true);
+  assert.equal(supportsBrowser('kimi'), true);
 });
 
 async function executable(file: string, body: string) {
@@ -198,5 +199,23 @@ test('OpenCode requires the verified 1.x ACP and plugin isolation flags', async 
     }
   } finally {
     await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('Kimi detection requires the version with global tool filtering and an ACP command', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'athena-kimi-detect-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  for (const [version, commands, good] of [
+    ['2.1.1', 'acp provider session', true],
+    ['2.0.0', 'acp provider session', false],
+    ['2.1.1', 'provider session', false],
+  ] as const) {
+    await executable(
+      path.join(root, 'kimi'),
+      `if [ "$1" = "--version" ]; then echo '${version}'; else echo '${commands}'; fi`,
+    );
+    const info = (await detectAgents(undefined, [root])).find((a) => a.id === 'kimi')!;
+    assert.equal(info.available, true);
+    assert.equal(info.supported, good);
   }
 });

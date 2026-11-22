@@ -17,6 +17,8 @@ export class ShareConnection {
   private retry?: ReturnType<typeof setTimeout>;
   private attempts = 0;
   private resume = sessionStorage.getItem('athena-share-resume') || '';
+  /** Only an image delivered by this socket can acknowledge its in-flight frame. */
+  receivedFrame?: BrowserFrame;
   state?: ShareState;
   browser?: BrowserState;
   participantId = '';
@@ -40,7 +42,7 @@ export class ShareConnection {
       );
     };
     socket.onmessage = (event) => {
-      if (this.socket !== socket) return;
+      if (this.stopped || this.socket !== socket) return;
       const message: ShareServerMessage = JSON.parse(event.data);
       if (message.type === 'welcome') {
         this.participantId = message.participantId;
@@ -54,6 +56,7 @@ export class ShareConnection {
         if (message.browser) this.browser = message.browser;
         for (const check of this.frameReaders) check();
       }
+      if (message.type === 'frame') this.receivedFrame = message.frame;
       if (message.type === 'result') {
         const pending = this.pending.get(message.id);
         if (pending) {
@@ -72,7 +75,7 @@ export class ShareConnection {
     };
     socket.onclose = (event) => {
       if (socket !== this.socket) return;
-      this.frame = undefined;
+      this.receivedFrame = this.frame = undefined;
       this.rejectPending('连接已中断，未确认的操作不会重试，请查看页面后继续');
       if (event.code === 4001 || event.code === 1008) {
         this.stopped = true;
@@ -91,11 +94,29 @@ export class ShareConnection {
       }
     };
   }
-  acknowledge(frame: BrowserFrame): void {
-    if (this.socket?.readyState !== WebSocket.OPEN) return;
+  acknowledge(frame: BrowserFrame): boolean {
+    if (this.stopped || this.socket?.readyState !== WebSocket.OPEN || frame !== this.receivedFrame)
+      return false;
     this.frame = frame;
     this.socket.send(JSON.stringify({ type: 'ack', sequence: frame.sequence, epoch: frame.epoch }));
     for (const check of this.frameReaders) check();
+    return true;
+  }
+  frameIsCurrent(value = this.frame) {
+    const viewport = this.browser?.viewport;
+    return Boolean(
+      !this.stopped &&
+      this.socket?.readyState === WebSocket.OPEN &&
+      value &&
+      value === this.frame &&
+      this.browser &&
+      !this.browser.loading &&
+      (!this.browser.activeTabId || value.tabId === this.browser.activeTabId) &&
+      (!viewport ||
+        (value.epoch === viewport.epoch &&
+          value.width === viewport.width &&
+          value.height === viewport.height)),
+    );
   }
   async invoke<T = unknown>(action: string, payload?: unknown): Promise<T> {
     const frame = this.frame,
@@ -185,6 +206,6 @@ export class ShareConnection {
     clearTimeout(this.retry);
     this.socket?.close();
     this.rejectPending('已离开共享');
-    this.frame = undefined;
+    this.receivedFrame = this.frame = undefined;
   }
 }

@@ -2,15 +2,19 @@
 
 ## 使用与范围
 
-- 当前包括 Codex、Claude Code、Gemini CLI、Pi、Cursor Agent、OpenCode 1.x，使用用户已有安装、登录与 Provider 配置。不会自动安装、登录或切换到其他 CLI。
+输入栏的 Agent 菜单和「设置 → Agent」都提供「打开原生会话」。Athena 在独立终端窗口中以当前工作目录启动所选 CLI；终端输入、命令、插件、MCP、登录与权限由该程序处理。它开启新的交互会话，已有 Athena 对话仍可单独续聊。在设置里的本机安装列表打开「其他本机 CLI」，可以使用检测到的 Grok、Amp 等终端程序，也可以手动选择可执行文件。关闭终端会结束该 CLI。
+
+Codex 的结构化对话也支持原生生图。启动时查询本机 app-server 的 `modelProvider/capabilities/read`；所选 Provider 提供 `image_gen.imagegen` 时直接走当前登录身份。收到 `imageGeneration` 完成事件后，Athena 保存可解码的实际图片，在对话中显示预览，并可在访达中打开原文件。仅当运行时实际交付图像才显示产物。额度失败、只返回不能读取的文件标识、或 Provider 缺少生图能力时会按实际情况处理，不自动切换到单独计费的 Images API。[OpenAI 原生扩展验收](https://github.com/openai/codex/blob/main/codex-rs/app-server/tests/suite/v2/imagegen_extension.rs)
+
+- 当前包括 Codex、Claude Code、Gemini CLI、Pi、Cursor Agent、OpenCode 1.x、Kimi Code CLI 2.1.1+，使用用户已有安装、登录与 Provider 配置。不会自动安装、登录或切换到其他 CLI。
 - 设置中的默认 CLI 只用于新对话；输入栏可为新对话改选 CLI。已有消息或原生执行会话的对话不能重绑，切换时创建新对话。旧档案缺少 `agent` 的对话仍为 Codex，不随应用默认值改变。
 - 对话保存原始 CLI session ID，只能由对应适配器恢复；恢复失败不自动换新 ID，也不用拼接可见历史假装恢复。模型选择与目录缓存按 CLI 隔离。手动刷新会使空闲连接重新读取本机配置；任务进行中则延后到任务结束，不只凭路径、版本或登录方式相同就复用旧账户配置。
 - 模型目录来自 CLI。未提供可靠目录的 CLI 沿用本机默认配置，不编造选项。实际本轮模型另取 CLI 消息元数据，不把初始化配置或模型自述当作执行证据。
-- 当前源码向 Codex、Claude、Pi、OpenCode 开放同一套网页和元素预览工具；Gemini、Cursor 尚未接入该授权链路。Claude 通过每轮私有 MCP 配置接入，Pi 通过显式加载的 Athena 扩展注册宿主工具，不导入任意第三方 MCP。
+- 当前源码向 Codex、Claude、Pi、OpenCode、Kimi 开放同一套网页和元素预览工具；Gemini、Cursor 尚未接入该授权链路。Claude 通过每轮私有 MCP 配置接入，Pi 通过显式加载的 Athena 扩展注册宿主工具，不导入任意第三方 MCP。
 
 ## 能力与验证矩阵
 
-2026-11-15 新增本机 MCP 宿主网关：设置只保存服务来源 ID，连接配置与凭据留在原 CLI。Codex、Claude、Pi、OpenCode 通过现有宿主工具访问已连接服务，原生第三方 MCP 自动加载仍关闭。已完成真实公共文档 MCP 的连接、工具发现和读取；未逐项验证所有私人服务或 OAuth 流程。Skills 设置和命令菜单的跨 UI 检查使用隔离 IPC fixture，不能外推为所有原生 Skill 均已实际执行。浏览器新建页、读写与控制边界见 [交互协议](browser-interaction-protocol.md)。
+2026-11-15 新增本机 MCP 宿主网关：设置只保存服务来源 ID，连接配置与凭据留在原 CLI。Codex、Claude、Pi、OpenCode、Kimi 通过现有宿主工具访问已连接服务，原生第三方 MCP 自动加载仍关闭。已完成真实公共文档 MCP 的连接、工具发现和读取；未逐项验证所有私人服务或 OAuth 流程。Skills 设置和命令菜单的跨 UI 检查使用隔离 IPC fixture，不能外推为所有原生 Skill 均已实际执行。浏览器新建页、读写与控制边界见 [交互协议](browser-interaction-protocol.md)。
 
 下表中的远端真实模型验收记录来自 2026-11-05；本轮新增的本地原生联调见下方「网页工具联动」；其中的网页验收在当时的 BrowserOS neo 执行器上完成，2026-11-12 改用 agent-browser 后的验证范围见 [网页执行器](web-executor.md#验证)。**全部 CLI 的远端模型验收尚未完成；0.9.0 发布不代表源码新增能力已随安装包发布。**
 
@@ -22,6 +26,7 @@
 | Cursor Agent | Ask 只读；启动前逐次确认工作目录          | 2026.11.05-86047df 登录完成；真实服务返回周额度上限，回复/续聊/停止尚未验收。实际 Electron 的目录审批拒绝、等待审批时停止通过，未启动模型会话                                 |
 | Gemini CLI   | stream-json；admin deny 策略禁用原生工具  | 0.67.0 原生目录、经目录确认后的本地 API 回复、续聊与流式停止通过；Google 个人版登录此前被服务端拒绝，远端模型验收仍未完成                                                        |
 | OpenCode 1.x | ACP、原生文件/命令逐项审批与宿主网页工具 | 1.18.15 已通过真实 CLI + 本地模型替身的文件读写、原生续聊、停止、图片输入、宿主 MCP；真实 Electron + Neo 完成页面创建/修改/填写/核对与连续两轮对话。未做远端模型验收 |
+| Kimi Code CLI 2.x（2.1.1 起） | ACP 流式会话、图片、原生 Skill 和受控网页工具，Bash 需逐次确认 | 2.1.1 本机登录通过无网络会话握手。本地模型替身通过真实 Chrome 读回、图片、原生 Skill 激活、Kimi 提问、跨进程续聊、命令拒绝和停止；未调用远端模型 |
 
 Pi 的真实 API 验收使用独立测试配置，复用用户授权的现有 API；未修改原有 Pi Provider 配置。Cursor 与 Gemini 的隔离安装没有覆盖已有 Grok 的 `agent` 命令。测试配置、凭据、原生会话和私有 API 地址均不进入 Git。
 
@@ -127,3 +132,12 @@ WORKBENCH_LIVE_CLI=cursor WORKBENCH_CLI_UI_CHECK=permissions npx tsx tests/cli-l
 Pi 真实测试只自动批准隔离目录 evidence.txt 的指定 read/write，不批准任意命令；Claude/Cursor 真实脚本仅请求文本，不请求文件、shell 或外部消息。临时项目删除后，CLI 自身正常保存的原生会话仍遵循各自的本机存储规则，不提交到 Git。
 
 旧测试夹具把 Node 路径直接放进 shebang，在带空格的 fnm 路径下会 ENOENT；现通过 `tests/node-script.ts` 的可执行 JS 头修复夹具，并覆盖带空格、单引号的 Node 路径及参数透传，不改变生产执行器或放宽断言。
+
+
+## Kimi Code CLI
+
+在设置中选择已安装的 Kimi，沿用它配置的 Provider 和登录。普通对话通过 `kimi acp` 运行，模型和思考档位来自本机配置与 ACP 会话目录。支持模型接收图片、一个显式原生 Skill 和工作区附件。原生工具发来的选项题由 Athena 展示。ACP 返回的用量若不完整，将按已知字段显示。
+
+结构化会话使用独立的 Kimi 数据目录。OAuth 由 Kimi 读取原有凭据，静态 API key 只经该进程的环境传递。原生技能目录可用；原配置里的 hooks、插件、项目 MCP 不会随对话启动。需要使用第三方 MCP 时，在「设置 → MCP」显式连接。Kimi 的 Git 文件工具有内部自动批准路径，结构化会话仅启用受控前台 Bash、技能及交互工具，命令在宿主确认后运行。在「原生会话」中可使用 Kimi 本身的文件工具、插件、命令和登录流程。带自定义 HTTP 请求头或 Provider env 子表的配置也可从原生会话使用。
+
+实机检查可运行 `npx tsx tests/kimi-native.e2e.ts`。需要已安装 Kimi Code CLI 和 Google Chrome，测试使用临时 Kimi 配置、本地模型替身和隔离网页，检查 Git 仓库内拒绝写入、恢复与停止。Kimi 原生协议见 [ACP 子命令](https://moonshotai.github.io/kimi-code/en/reference/kimi-acp)。

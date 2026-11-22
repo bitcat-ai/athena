@@ -39,3 +39,30 @@ export function ImageAttachments({
     </ChatAttachmentGroup>
   );
 }
+
+export function WorkspaceFileAttachments({
+  files,
+  onRemove,
+}: {
+  files: string[];
+  onRemove?: (path: string) => void;
+}) {
+  return (
+    <ChatAttachmentGroup
+      className="workspace-files"
+      aria-label={onRemove ? '待发送工作区文件' : '工作区文件'}
+    >
+      {files.map((file) => (
+        <ChatAttachment key={file} mediaType="document" name={file} title={file}>
+          <ChatAttachment.Icon />
+          <ChatAttachment.Info>
+            <ChatAttachment.Name>{file}</ChatAttachment.Name>
+          </ChatAttachment.Info>
+          {onRemove && (
+            <ChatAttachment.Remove aria-label={`移除文件 ${file}`} onPress={() => onRemove(file)} />
+          )}
+        </ChatAttachment>
+      ))}
+    </ChatAttachmentGroup>
+  );
+}

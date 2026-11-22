@@ -233,7 +233,8 @@ try {
     height: inspectorViewport.height,
   });
   await invoke('share:control', { id: guestId });
-  await expect(guest.getByText('你正在操作', { exact: true })).toBeVisible();
+  await expect(guest.getByRole('button',{name:'交回控制权',exact:true})).toBeVisible();
+  await expect(guest.getByRole('button',{name:'打开',exact:true})).toBeDisabled();
   await expect
     .poll(() => guest.evaluate(() => (window as any).__inspectorFrameGate.staleReads))
     .toBe(1);
@@ -272,7 +273,22 @@ try {
     .poll(() => evaluate('document.querySelector("#title").textContent'))
     .toBe('Alice 与 Bob 的共同计划');
   // A dropped transport preserves identity, but control returns to A and no input is replayed.
-  await guest.evaluate(() => (window as any).__testSocket.close());
+  await guest.evaluate(() => {
+    const decode = HTMLImageElement.prototype.decode;
+    let release!: () => void;
+    const wait = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    HTMLImageElement.prototype.decode = function () {
+      const loaded = decode.call(this);
+      return this.classList.contains('shared-frame') ? loaded.then(() => wait) : loaded;
+    };
+    (window as any).__resumeDecoding = () => {
+      HTMLImageElement.prototype.decode = decode;
+      release();
+    };
+    (window as any).__testSocket.close();
+  });
   await expect
     .poll(async () => (await invoke<ShareState>('share:state')).controllerId)
     .toBe('host');
@@ -284,6 +300,10 @@ try {
   );
   await guest.getByRole('button', { name: '请求操作', exact: true }).click();
   await invoke('share:control', { id: guestId });
+  await expect(guest.getByRole('button', { name: '交回控制权', exact: true })).toBeVisible();
+  await expect(guest.getByRole('button', { name: '打开', exact: true })).toBeDisabled();
+  await expect(guest.getByText('你正在操作', { exact: true })).toHaveCount(0);
+  await guest.evaluate(() => (window as any).__resumeDecoding());
   await expect(guest.getByText('你正在操作', { exact: true })).toBeVisible();
   // Cross-origin navigation cannot reach host services from the guest page capability.
   await guest.getByLabel('共享网页地址').fill('http://127.0.0.1:9/private');

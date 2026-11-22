@@ -4,7 +4,11 @@ import path from 'node:path';
 import { AgentMcpServer } from './agent-mcp';
 import { cliEnvironment, readCliOutput } from './agent-process';
 import { discoverOpenCodeModels } from './cli-models';
-import { unavailableProviderSkillDiscovery } from '../shared/provider-skills';
+import { kimiEnvironment, discoverKimiModels, supportsKimiVersion } from './kimi-profile';
+import {
+  normalizeProviderSkillDiscovery,
+  unavailableProviderSkillDiscovery,
+} from '../shared/provider-skills';
 import type { ProviderSkill } from '../shared/skills';
 import { browserToolsFingerprint } from './agents';
 import {
@@ -50,8 +54,8 @@ function permissionMatches(pattern: string, name: string) {
   return p === pattern.length;
 }
 
-/** OpenCode 1.x ACP, with a private mode whose native operations always require host approval. */
-export class OpenCodeSession implements AgentSession {
+/** ACP transport shared by runtimes with independently constrained native configurations. */
+export class AcpSession implements AgentSession {
   private child?: ChildProcessWithoutNullStreams;
   private startup?: Promise<void>;
   private closed = false;
@@ -81,12 +85,31 @@ export class OpenCodeSession implements AgentSession {
   >();
   private calls = new Map<string, ToolCall>();
   private hostCallIds = new Set<string>();
+  private knownArguments = new Set<string>();
 
-  constructor(private options: AgentSessionOptions) {
+  private commands = new Map<string, string>();
+  private catalogReady = false;
+  private catalogChanged?: () => void;
+  private earlyCatalog?: Json;
+  private thinkingId?: string;
+  private questionOptions = new Map<string, Map<string, string>>();
+  private get name() {
+    return this.runtime === 'kimi' ? 'Kimi' : 'OpenCode';
+  }
+  private validId(id: unknown): id is string {
+    return (
+      text(id) &&
+      (this.runtime === 'kimi' ? /^session_[a-zA-Z0-9-]+$/ : /^ses_[a-zA-Z0-9]+$/).test(id)
+    );
+  }
+  constructor(
+    private options: AgentSessionOptions,
+    private runtime: 'opencode' | 'kimi' = 'opencode',
+  ) {
     if (!path.isAbsolute(options.workspace) || !path.isAbsolute(options.executablePath))
       throw new Error('CLI 与工作目录需要完整路径');
-    if (options.sessionId && !/^ses_[a-zA-Z0-9]+$/.test(options.sessionId))
-      throw new Error('需要明确的 OpenCode 原生会话 ID');
+    if (options.sessionId && !this.validId(options.sessionId))
+      throw new Error(`需要明确的 ${this.name} 原生会话 ID`);
     if (options.tools.some((tool) => !/^[a-zA-Z0-9_]+$/.test(tool.name) || !tool.inputSchema))
       throw new Error('浏览器工具定义无效');
     this.fingerprint = browserToolsFingerprint(options.tools);
@@ -133,19 +156,29 @@ export class OpenCodeSession implements AgentSession {
     this.options.onEvent(event);
   }
   async prepare(selection?: ModelSelection) {
-    if (this.closed) throw new Error('OpenCode 会话已关闭');
+    if (this.options.evidenceOnly)
+      throw new Error(`${this.name} 当前无法隔离全部录制分析上下文，请选择 Codex、Claude 或 Pi`);
+    if (this.closed) throw new Error(`${this.name} 会话已关闭`);
     this.startup ??= this.start().catch((error) => {
-      this.shutdown('OpenCode 初始化失败');
+      this.shutdown(`${this.name} 初始化失败`);
       throw error;
     });
     await this.startup;
     if (selection) {
-      if (selection.effort || !this.models.some((model) => model.model === selection.model))
-        throw new Error('所选模型不在 OpenCode 可用目录中');
+      if (
+        !this.models.some(
+          (model) =>
+            model.model === selection.model &&
+            (!selection.effort ||
+              this.runtime === 'kimi' ||
+              model.efforts.some((e) => e.id === selection.effort)),
+        )
+      )
+        throw new Error(`所选模型不在 ${this.name} 可用目录中`);
       this.selection = { ...selection };
     }
   }
-  private async start() {
+  private async openCodeEnvironment() {
     const read = (args: string[]) =>
       readCliOutput(
         this.options.executablePath,
@@ -155,7 +188,7 @@ export class OpenCodeSession implements AgentSession {
         this.metadata.signal,
       );
     if (!/^1\./.test((await read(['--version'])).trim()))
-      throw new Error('当前适配仅支持 OpenCode 1.x');
+      throw new Error(`当前适配仅支持 ${this.name} 1.x`);
     let nativeConfig: Json, nativeAgent: Json;
     try {
       nativeConfig = JSON.parse(await read(['debug', 'config', '--pure']));
@@ -163,7 +196,7 @@ export class OpenCodeSession implements AgentSession {
       if (!text(nativeMode) || nativeMode.startsWith('-')) throw new Error();
       nativeAgent = JSON.parse(await read(['debug', 'agent', nativeMode, '--pure']));
     } catch {
-      throw new Error('无法读取 OpenCode 原有权限配置，请在终端检查后刷新');
+      throw new Error(`无法读取 ${this.name} 原有权限配置，请在终端检查后刷新`);
     }
     if (
       !Array.isArray(nativeAgent.permission) ||
@@ -176,7 +209,7 @@ export class OpenCodeSession implements AgentSession {
           !['allow', 'ask', 'deny'].includes(rule.action),
       )
     )
-      throw new Error('OpenCode 原有权限配置格式无效');
+      throw new Error(`${this.name} 原有权限配置格式无效`);
     const localTools = ['read', 'edit', 'bash', 'glob', 'grep', 'list', 'external_directory'];
     const permissions = Object.fromEntries(
       [...localTools, ...this.options.tools.map((tool) => `athena_${tool.name}`)].map((name) => {
@@ -193,16 +226,16 @@ export class OpenCodeSession implements AgentSession {
       }),
     );
     if (this.options.tools.length) await this.bridge.start();
-    if (this.closed) throw new Error('OpenCode 会话已关闭');
+    if (this.closed) throw new Error(`${this.name} 会话已关闭`);
     const env = cliEnvironment(this.options.executablePath);
     let config: Json = {};
     if (env.OPENCODE_CONFIG_CONTENT) {
       try {
         config = JSON.parse(env.OPENCODE_CONFIG_CONTENT);
       } catch {
-        throw new Error('OpenCode 环境配置不是有效 JSON');
+        throw new Error(`${this.name} 环境配置不是有效 JSON`);
       }
-      if (!object(config)) throw new Error('OpenCode 环境配置格式无效');
+      if (!object(config)) throw new Error(`${this.name} 环境配置格式无效`);
     }
     env.OPENCODE_CONFIG_CONTENT = JSON.stringify({
       ...config,
@@ -220,9 +253,27 @@ export class OpenCodeSession implements AgentSession {
         },
       },
     });
+    return env;
+  }
+
+  private async start() {
+    const kimi = this.runtime === 'kimi';
+    const env = kimi
+      ? await kimiEnvironment(
+          this.options.sessionDirectory,
+          this.options.tools,
+          cliEnvironment(this.options.executablePath),
+        )
+      : await this.openCodeEnvironment();
+    if (this.closed) throw new Error('连接已关闭');
+    if (kimi && this.options.tools.length) await this.bridge.start();
+    if (this.closed) {
+      this.bridge.close();
+      throw new Error('连接已关闭');
+    }
     this.child = spawn(
       this.options.executablePath,
-      ['acp', '--pure', '--hostname', '127.0.0.1', '--port', '0'],
+      kimi ? ['acp'] : ['acp', '--pure', '--hostname', '127.0.0.1', '--port', '0'],
       {
         cwd: this.options.workspace,
         env,
@@ -231,9 +282,9 @@ export class OpenCodeSession implements AgentSession {
       },
     );
     this.child.stderr.resume();
-    this.child.on('error', () => this.shutdown('无法启动 OpenCode，请检查本机安装'));
-    this.child.on('close', () => this.shutdown('OpenCode 连接已关闭'));
-    this.child.stdin.on('error', () => this.shutdown('OpenCode 输入连接中断'));
+    this.child.on('error', () => this.shutdown(`无法启动 ${this.name}，请检查本机安装`));
+    this.child.on('close', () => this.shutdown(`${this.name} 连接已关闭`));
+    this.child.stdin.on('error', () => this.shutdown(`${this.name} 输入连接中断`));
     let buffer = '';
     this.child.stdout.setEncoding('utf8');
     this.child.stdout.on('data', (chunk) => {
@@ -241,7 +292,7 @@ export class OpenCodeSession implements AgentSession {
       buffer += chunk;
       // ACP replays base64 image content when restoring a native session.
       if (Buffer.byteLength(buffer) > 16 * 1024 * 1024) {
-        this.shutdown('OpenCode 协议记录过大');
+        this.shutdown(`${this.name} 协议记录过大`);
         return;
       }
       let newline: number;
@@ -252,7 +303,7 @@ export class OpenCodeSession implements AgentSession {
         try {
           this.handle(JSON.parse(line));
         } catch {
-          this.shutdown('OpenCode ACP 协议格式无效');
+          this.shutdown(`${this.name} ACP 协议格式无效`);
         }
       }
     });
@@ -261,8 +312,14 @@ export class OpenCodeSession implements AgentSession {
       clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
       clientInfo: { name: 'agent-workbench', title: 'Athena', version: '0.9.0' },
     });
-    if (initialized.protocolVersion !== 1 || !/^1\./.test(initialized.agentInfo?.version ?? ''))
-      throw new Error('当前 OpenCode 版本不支持此适配器');
+    if (
+      initialized.protocolVersion !== 1 ||
+      !(kimi ? /^2\./ : /^1\./).test(initialized.agentInfo?.version ?? '') ||
+      (kimi &&
+        (initialized.agentInfo?.name !== 'Kimi Code CLI' ||
+          !supportsKimiVersion(initialized.agentInfo?.version || '')))
+    )
+      throw new Error(`当前 ${this.name} 版本不支持此适配器`);
     this.imagesSupported = initialized.agentCapabilities?.promptCapabilities?.image === true;
     const bridge = this.options.tools.length ? this.bridge.definition() : undefined;
     const params = {
@@ -281,18 +338,24 @@ export class OpenCodeSession implements AgentSession {
     let state: Json;
     if (this.options.sessionId) {
       if (!initialized.agentCapabilities?.loadSession)
-        throw new Error('OpenCode 不支持恢复此会话，原记录仍保留');
+        throw new Error(`${this.name} 不支持恢复此会话，原记录仍保留`);
       state = await this.request('session/load', { ...params, sessionId: this.options.sessionId });
       this.id = this.options.sessionId;
     } else {
       state = await this.request('session/new', params);
-      if (!text(state.sessionId) || !/^ses_[a-zA-Z0-9]+$/.test(state.sessionId))
-        throw new Error('OpenCode 未返回有效原生会话 ID');
+      if (!this.validId(state.sessionId)) throw new Error(`${this.name} 未返回有效原生会话 ID`);
       this.id = state.sessionId;
+    }
+    if (this.earlyCatalog) {
+      this.handle(this.earlyCatalog);
+      this.earlyCatalog = undefined;
     }
     this.acceptModels(state);
     // Never use a native default mode: its saved permissions can bypass Athena approvals.
-    await this.request('session/set_mode', { sessionId: this.id, modeId: this.mode });
+    await this.request('session/set_mode', {
+      sessionId: this.id,
+      modeId: kimi ? 'default' : this.mode,
+    });
   }
   private acceptModels(state: Json) {
     const config = state.configOptions?.find(
@@ -300,12 +363,12 @@ export class OpenCodeSession implements AgentSession {
     );
     if (config) {
       if (!text(config.id) || !Array.isArray(config.options))
-        throw new Error('OpenCode 模型目录格式无效');
+        throw new Error(`${this.name} 模型目录格式无效`);
       this.modelConfigId = config.id;
       const entries = config.options.flatMap((item: Json) => item.options ?? [item]);
-      if (entries.length > 4096) throw new Error('OpenCode 模型目录返回过大');
+      if (entries.length > 4096) throw new Error(`${this.name} 模型目录返回过大`);
       this.models = entries.map((item: Json) => {
-        if (!text(item.value) || !text(item.name)) throw new Error('OpenCode 模型条目无效');
+        if (!text(item.value) || !text(item.name)) throw new Error(`${this.name} 模型条目无效`);
         return {
           id: item.value,
           model: item.value,
@@ -317,9 +380,10 @@ export class OpenCodeSession implements AgentSession {
       });
     } else if (Array.isArray(state.models?.availableModels)) {
       this.modelConfigId = undefined;
-      if (state.models.availableModels.length > 4096) throw new Error('OpenCode 模型目录返回过大');
+      if (state.models.availableModels.length > 4096)
+        throw new Error(`${this.name} 模型目录返回过大`);
       this.models = state.models.availableModels.map((item: Json) => {
-        if (!text(item.modelId) || !text(item.name)) throw new Error('OpenCode 模型条目无效');
+        if (!text(item.modelId) || !text(item.name)) throw new Error(`${this.name} 模型条目无效`);
         return {
           id: item.modelId,
           model: item.modelId,
@@ -329,15 +393,29 @@ export class OpenCodeSession implements AgentSession {
           efforts: [],
         };
       });
-    } else throw new Error('OpenCode 未返回模型目录');
+    } else throw new Error(`${this.name} 未返回模型目录`);
+    if (this.runtime === 'kimi') {
+      const thinking = state.configOptions?.find(
+        (o: Json) => o.category === 'thought_level' && o.type === 'select',
+      );
+      this.thinkingId = thinking?.id;
+      const model = this.models.find((m) => m.isDefault);
+      if (model && thinking && Array.isArray(thinking.options)) {
+        model.efforts = thinking.options
+          .filter((o: Json) => text(o.value))
+          .map((o: Json) => ({ id: o.value, description: o.name || o.value }));
+        model.defaultEffort = thinking.currentValue;
+      }
+    }
   }
   async listModels() {
-    if (this.closed) throw new Error('OpenCode 会话已关闭');
+    if (this.closed) throw new Error(`${this.name} 会话已关闭`);
     if (this.startup) {
       await this.startup;
       return this.models;
     }
     // Catalog probes must not create empty records in the user's native session history.
+    if (this.runtime === 'kimi') return discoverKimiModels();
     return discoverOpenCodeModels(
       this.options.executablePath,
       this.options.workspace,
@@ -345,9 +423,40 @@ export class OpenCodeSession implements AgentSession {
     );
   }
   async discoverProviderSkills() {
+    if (this.runtime === 'kimi') {
+      await this.prepare();
+      if (!this.catalogReady && !this.closed) {
+        await new Promise<void>((resolve) => {
+          const previous = this.catalogChanged;
+          const timer = setTimeout(resolve, 2500);
+          this.catalogChanged = () => {
+            previous?.();
+            clearTimeout(timer);
+            resolve();
+          };
+        });
+      }
+      if (!this.catalogReady)
+        return unavailableProviderSkillDiscovery(
+          { id: 'kimi', name: 'Kimi' },
+          'Kimi 尚未回报原生技能列表',
+        );
+      return normalizeProviderSkillDiscovery(
+        {
+          capability: 'supported',
+          provider: { id: 'kimi', name: 'Kimi' },
+          skills: [...this.commands].map(([name, description]) => ({
+            name,
+            description,
+            userInvocable: true,
+          })),
+        },
+        { approvedRoot: this.options.workspace, providerManagedPaths: true },
+      );
+    }
     return unavailableProviderSkillDiscovery(
       { id: 'opencode', name: 'OpenCode' },
-      '当前 OpenCode 会话未启用原生 Skill，可使用工作区 Skill。',
+      `当前 ${this.name} 会话未启用原生 Skill，可使用工作区 Skill。`,
     );
   }
   async send(
@@ -358,8 +467,11 @@ export class OpenCodeSession implements AgentSession {
     skills: ProviderSkill[] = [],
     images?: ImageAttachment[],
   ) {
-    if (skills.length) throw new Error('当前 OpenCode 会话未启用原生 Skill');
-    if (this.active || this.bridge.pendingCalls) throw new Error('请等待当前 OpenCode 任务完成');
+    if (skills.length && this.runtime !== 'kimi')
+      throw new Error(`当前 ${this.name} 会话未启用原生 Skill`);
+    if (skills.length > 1) throw new Error('Kimi 每轮可显式激活一个原生 Skill');
+    if (this.active || this.bridge.pendingCalls)
+      throw new Error(`请等待当前 ${this.name} 任务完成`);
     const attachments = parseImages(images);
     if (
       (!prompt.trim() && !attachments.length) ||
@@ -377,11 +489,12 @@ export class OpenCodeSession implements AgentSession {
     this.active = turn;
     this.calls.clear();
     this.hostCallIds.clear();
+    this.knownArguments.clear();
     try {
       await this.prepare(selection);
       if (turn.cancelled || this.closed) throw new Error('任务已停止');
       if (attachments.length && !this.imagesSupported)
-        throw new Error('当前 OpenCode 不支持图片输入');
+        throw new Error(`当前 ${this.name} 不支持图片输入`);
       const snapshot = await selectedElementContext(selected, this.options.inspectSelectedElement);
       if (this.selection) {
         const result = await this.request(
@@ -395,6 +508,25 @@ export class OpenCodeSession implements AgentSession {
         );
         if (result.configOptions || result.models) this.acceptModels(result);
       }
+      if (
+        this.selection?.effort &&
+        this.runtime === 'kimi' &&
+        (!this.thinkingId ||
+          !this.models
+            .find((m) => m.model === this.selection?.model)
+            ?.efforts.some((e) => e.id === this.selection?.effort))
+      )
+        throw new Error('Kimi 未提供该模型的思考档位');
+      if (this.selection?.effort && this.thinkingId) {
+        await this.request('session/set_config_option', {
+          sessionId: this.id,
+          configId: this.thinkingId,
+          value: this.selection.effort,
+        });
+      }
+      if (skills.length && !this.catalogReady) await this.discoverProviderSkills();
+      if (skills.some((skill) => skill.provider.id !== 'kimi' || !this.commands.has(skill.name)))
+        throw new Error('Kimi Skill 已变化，请重新选择');
       if (turn.cancelled || this.closed) throw new Error('任务已停止');
       turn.started = true;
       this.emit({
@@ -404,7 +536,7 @@ export class OpenCodeSession implements AgentSession {
         model: { requested: this.selection?.model, source: 'unconfirmed' },
         baseline: zeroTokens(),
       });
-      this.emit({ type: 'status', status: 'thinking', label: 'OpenCode 已接收任务' });
+      this.emit({ type: 'status', status: 'thinking', label: `${this.name} 已接收任务` });
       const content = [
         `<user_task>\n${prompt}\n</user_task>`,
         context ? `<task_context>\n${context}\n</task_context>` : '',
@@ -417,7 +549,7 @@ export class OpenCodeSession implements AgentSession {
         {
           sessionId: this.id,
           prompt: [
-            { type: 'text', text: content },
+            { type: 'text', text: skills.length ? '/' + skills[0].name + ' ' + content : content },
             ...attachments.map(({ data, mimeType }) => ({ type: 'image', data, mimeType })),
           ],
         },
@@ -425,7 +557,7 @@ export class OpenCodeSession implements AgentSession {
       );
       if (turn.cancelled || result.stopReason === 'cancelled') throw new Error('任务已停止');
       if (result.stopReason !== 'end_turn' || this.approvals.size || this.bridge.pendingCalls)
-        throw new Error('OpenCode 未完成本轮任务');
+        throw new Error(`${this.name} 未完成本轮任务`);
       if (object(result.usage)) {
         const count = (value: unknown) =>
           typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null;
@@ -448,7 +580,7 @@ export class OpenCodeSession implements AgentSession {
       }
       this.emit({ type: 'complete', text: turn.text, sessionId: this.id });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'OpenCode 执行失败';
+      const message = error instanceof Error ? error.message : `${this.name} 执行失败`;
       this.emit({ type: 'error', message });
       this.shutdown(message);
       throw error;
@@ -466,9 +598,11 @@ export class OpenCodeSession implements AgentSession {
       this.pending.delete(message.id);
       clearTimeout(pending.timer);
       if (pending.method === 'session/prompt' && this.active) this.active.finishing = true;
-      if (message.error)
-        pending.reject(new Error('OpenCode 请求失败，请检查本机登录、模型与服务配置'));
-      else if (!object(message.result)) pending.reject(new Error('OpenCode 响应格式无效'));
+      if (message.error?.code === -32000 && this.runtime === 'kimi')
+        pending.reject(new Error('Kimi 需要登录，请在原生终端运行 kimi login'));
+      else if (message.error)
+        pending.reject(new Error(`${this.name} 请求失败，请检查本机登录、模型与服务配置`));
+      else if (!object(message.result)) pending.reject(new Error(`${this.name} 响应格式无效`));
       else pending.resolve(message.result);
       return;
     }
@@ -497,12 +631,45 @@ export class OpenCodeSession implements AgentSession {
       }
       if ([...this.approvals.values()].some((pending) => pending.rpcId === message.id))
         throw new Error();
+      const questions = params.options.filter(
+        (o: Json) =>
+          o?.kind === 'allow_once' && /^q0_opt_\d+$/.test(o.optionId) && text(o.name, 1000),
+      );
+      if (
+        this.runtime === 'kimi' &&
+        questions.length &&
+        questions.length <= 20 &&
+        text(params.toolCall?.title, 1000)
+      ) {
+        const id = 'kimi-question-' + randomUUID();
+        this.questionOptions.set(id, new Map(questions.map((o: Json) => [o.name, o.optionId])));
+        this.approvals.set(id, { rpcId: message.id, allow: '', turn });
+        this.emit({
+          type: 'user-input',
+          request: {
+            id,
+            questions: [
+              {
+                id: 'choice',
+                header: 'Kimi',
+                question: text(params.toolCall.content?.[0]?.content?.text, 1000)
+                  ? params.toolCall.content[0].content.text
+                  : params.toolCall.title,
+                isSecret: false,
+                options: questions.map((o: Json) => ({ label: o.name, description: '' })),
+              },
+            ],
+          },
+        });
+        return;
+      }
       const allow = params.options.find((option: Json) => option.kind === 'allow_once');
       const reject = params.options.find((option: Json) => option.kind === 'reject_once');
       if (
         !text(allow?.optionId) ||
         !text(params.toolCall?.title, 1000) ||
-        !object(params.toolCall.rawInput)
+        (!object(params.toolCall.rawInput) &&
+          !(this.runtime === 'kimi' && this.calls.has(params.toolCall.toolCallId)))
       ) {
         deny();
         return;
@@ -511,18 +678,41 @@ export class OpenCodeSession implements AgentSession {
         ...(this.calls.get(params.toolCall.toolCallId)?.input as Json | undefined),
         ...params.toolCall.rawInput,
       };
-      if (!Object.keys(input).length) {
+      if (
+        !Object.keys(input).length &&
+        !(this.runtime === 'kimi' && this.knownArguments.has(params.toolCall.toolCallId))
+      ) {
         deny();
-        this.shutdown('OpenCode 未返回可确认的操作参数，已停止');
+        this.shutdown(`${this.name} 未返回可确认的操作参数，已停止`);
+        return;
+      }
+      if (
+        this.runtime === 'kimi' &&
+        this.hostCallIds.has(params.toolCall.toolCallId) &&
+        this.options.tools.some((t) => params.toolCall.title === 'mcp__athena__' + t.name)
+      ) {
+        // The per-session MCP bridge performs the actual host approval immediately before dispatch.
+        this.respond(message.id, { outcome: { outcome: 'selected', optionId: allow.optionId } });
+        return;
+      }
+      if (
+        this.runtime === 'kimi' &&
+        params.toolCall.title === 'Bash' &&
+        (input.run_in_background === true ||
+          typeof input.command !== 'string' ||
+          !input.command.trim() ||
+          input.command.includes('\0'))
+      ) {
+        deny();
         return;
       }
       const detail = JSON.stringify(input, null, 2);
       if (detail.length > 12000) {
         deny();
-        this.shutdown('OpenCode 操作参数过长，无法完整确认，已停止');
+        this.shutdown(`${this.name} 操作参数过长，无法完整确认，已停止`);
         return;
       }
-      const id = `opencode-${randomUUID()}`;
+      const id = `${this.runtime}-${randomUUID()}`;
       this.approvals.set(id, {
         rpcId: message.id,
         allow: allow.optionId,
@@ -533,7 +723,7 @@ export class OpenCodeSession implements AgentSession {
         type: 'approval',
         request: {
           id,
-          title: `OpenCode · ${params.toolCall.title}`,
+          title: `${this.name} · ${params.toolCall.title}`,
           detail,
           kind:
             params.toolCall.kind === 'execute'
@@ -546,9 +736,37 @@ export class OpenCodeSession implements AgentSession {
       this.emit({ type: 'status', status: 'waiting', label: '等待你的确认' });
       return;
     }
-    if (message.method !== 'session/update' || params.sessionId !== this.id) return;
+    if (message.method !== 'session/update') return;
+    if (params.sessionId !== this.id) {
+      if (
+        this.runtime === 'kimi' &&
+        !this.id &&
+        this.validId(params.sessionId) &&
+        params.update?.sessionUpdate === 'available_commands_update'
+      )
+        this.earlyCatalog = message;
+      return;
+    }
     const update = params.update;
     if (!object(update)) throw new Error();
+    if (
+      this.runtime === 'kimi' &&
+      update.sessionUpdate === 'available_commands_update' &&
+      Array.isArray(update.availableCommands)
+    ) {
+      // Kimi reserves builtin ACP commands; the other entries are activatable skills.
+      this.catalogReady = true;
+      this.catalogChanged?.();
+      this.catalogChanged = undefined;
+      const builtin = new Set(['compact', 'status', 'usage', 'mcp', 'tasks', 'help']);
+      this.commands = new Map(
+        update.availableCommands
+          .filter(
+            (c: Json) => text(c.name) && /^[A-Za-z0-9_.:-]+$/.test(c.name) && !builtin.has(c.name),
+          )
+          .map((c: Json) => [c.name, text(c.description, 3000) ? c.description : c.name]),
+      );
+    }
     if (
       update.sessionUpdate === 'config_option_update' &&
       update.configOptions?.some((item: Json) => item.category === 'model')
@@ -567,19 +785,38 @@ export class OpenCodeSession implements AgentSession {
       ['tool_call', 'tool_call_update'].includes(update.sessionUpdate) &&
       text(update.toolCallId)
     ) {
-      if (this.options.tools.some((tool) => update.title === `athena_${tool.name}`))
+      if (
+        this.options.tools.some(
+          (tool) =>
+            update.title === `athena_${tool.name}` || update.title === `mcp__athena__${tool.name}`,
+        )
+      )
         this.hostCallIds.add(update.toolCallId);
-      if (this.hostCallIds.has(update.toolCallId)) return;
+
       const old = this.calls.get(update.toolCallId);
+      let input = object(update.rawInput) ? update.rawInput : undefined;
+      if (this.runtime === 'kimi' && !input && update.sessionUpdate === 'tool_call') {
+        // Kimi 2.1 sends its initial arguments as one JSON content block, before permission.
+        const raw = update.content?.length === 1 ? update.content[0]?.content : undefined;
+        if (raw?.type === 'text' && typeof raw.text === 'string' && raw.text.length <= 12000) {
+          try {
+            const args = JSON.parse(raw.text);
+            if (object(args)) input = args;
+          } catch {
+            /* incomplete argument stream */
+          }
+        }
+      }
+      if (input) this.knownArguments.add(update.toolCallId);
       const call: ToolCall = {
-        id: `opencode-${update.toolCallId}`,
-        name: text(update.title, 1000) ? update.title : old?.name || 'OpenCode tool',
-        input: object(update.rawInput) ? update.rawInput : old?.input || {},
+        id: `${this.runtime}-${update.toolCallId}`,
+        name: text(update.title, 1000) ? update.title : old?.name || this.name + ' tool',
+        input: input ?? old?.input ?? {},
         status:
           update.status === 'completed' ? 'done' : update.status === 'failed' ? 'error' : 'running',
       };
       this.calls.set(update.toolCallId, call);
-      this.emit({ type: 'tool', call });
+      if (!this.hostCallIds.has(update.toolCallId)) this.emit({ type: 'tool', call });
     } else if (update.sessionUpdate === 'plan' && Array.isArray(update.entries)) {
       this.emit({
         type: 'plan',
@@ -603,12 +840,13 @@ export class OpenCodeSession implements AgentSession {
     const pending = this.approvals.get(id);
     if (
       !pending ||
+      this.questionOptions.has(id) ||
       pending.turn !== this.active ||
       pending.turn.cancelled ||
       pending.turn.finishing ||
       typeof approved !== 'boolean'
     )
-      throw new Error('OpenCode 审批已失效');
+      throw new Error(`${this.name} 审批已失效`);
     const optionId = approved ? pending.allow : pending.reject;
     this.approvals.delete(id);
     this.respond(pending.rpcId, {
@@ -616,8 +854,24 @@ export class OpenCodeSession implements AgentSession {
     });
     this.emit({ type: 'request-resolved', id });
   }
-  resolveUserInput() {
-    throw new Error('OpenCode 未接入此类问题，请在对话中回复');
+  resolveUserInput(id: string, answers: Record<string, string[]>) {
+    const item = this.approvals.get(id),
+      choices = this.questionOptions.get(id);
+    if (
+      !item ||
+      !choices ||
+      item.turn !== this.active ||
+      item.turn.cancelled ||
+      item.turn.finishing
+    )
+      throw new Error('问题已失效');
+    const answer = answers.choice?.length === 1 ? choices.get(answers.choice[0]) : undefined;
+    this.approvals.delete(id);
+    this.questionOptions.delete(id);
+    this.respond(item.rpcId, {
+      outcome: answer ? { outcome: 'selected', optionId: answer } : { outcome: 'cancelled' },
+    });
+    this.emit({ type: 'request-resolved', id });
   }
   private cancelApprovals() {
     for (const [id, pending] of this.approvals) {
@@ -625,6 +879,7 @@ export class OpenCodeSession implements AgentSession {
       this.emit({ type: 'request-resolved', id });
     }
     this.approvals.clear();
+    this.questionOptions.clear();
   }
   async interrupt() {
     if (this.active) this.active.cancelled = true;
@@ -633,11 +888,13 @@ export class OpenCodeSession implements AgentSession {
     this.shutdown('任务已停止');
   }
   close() {
-    this.shutdown('OpenCode 会话已关闭');
+    this.shutdown(`${this.name} 会话已关闭`);
   }
   private shutdown(reason: string) {
     if (this.closed) return;
     this.metadata.abort();
+    this.catalogChanged?.();
+    this.catalogChanged = undefined;
     if (this.active) this.active.cancelled = true;
     this.cancelApprovals();
     this.closed = true;
@@ -662,12 +919,14 @@ export class OpenCodeSession implements AgentSession {
     this.write({ jsonrpc: '2.0', id, result });
   }
   private request(method: string, params: Json, timeout = 30000): Promise<Json> {
-    if (this.closed || !this.child) return Promise.reject(new Error('OpenCode 连接不可用'));
+    if (this.closed || !this.child) return Promise.reject(new Error(`${this.name} 连接不可用`));
     const id = ++this.nextId;
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => this.shutdown('OpenCode 请求超时，已停止'), timeout);
+      const timer = setTimeout(() => this.shutdown(`${this.name} 请求超时，已停止`), timeout);
       this.pending.set(id, { resolve, reject, timer, method });
       this.write({ jsonrpc: '2.0', id, method, params });
     });
   }
 }
+
+export { AcpSession as OpenCodeSession };

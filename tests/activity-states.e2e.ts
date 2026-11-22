@@ -554,6 +554,22 @@ try {
         }),
       [event, state] as const,
     );
+  for (const [phase, label] of [
+    [{ kind: 'preparing', submitting: true }, '正在发送给 Codex'],
+    [{ kind: 'thinking', delivery: { state: 'awaiting' } }, '等待 Codex 输出'],
+    [
+      { kind: 'thinking', delivery: { state: 'retrying', timeout: true, attempt: 2, limit: 4 } },
+      'Codex 连接超时，正在重试（2/4）',
+    ],
+    [{ kind: 'thinking', delivery: { state: 'responding' } }, '正在回复'],
+  ] as const) {
+    await emit({
+      type: 'status',
+      status: phase.kind === 'preparing' ? 'starting' : 'thinking',
+      phase,
+    });
+    await expect(title).toHaveText(label);
+  }
   await emit({
     type: 'status',
     status: 'working',

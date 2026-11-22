@@ -38,6 +38,7 @@ export const browserPageSource = String.raw`(() => {
   let nextEditId = 0;
   let nextAnimationId = 0;
   let source = 'human';
+  let recordingId, privateTrial=false, feedbackWindow, interactionSequence=0;
   let actorId = 'host';
   let maskNodes = [];
   let inspecting = false;
@@ -122,7 +123,7 @@ export const browserPageSource = String.raw`(() => {
     const style=getComputedStyle(el);
     return rect.width>0 && rect.height>0 && style.visibility!=='hidden' && style.visibility!=='collapse' && style.display!=='none';
   }
-  function safeText(el, limit=4000) {
+  function safeText(el, limit=4000, separateNodes=false) {
     const pieces=[];
     const seen=new Set();
     let length=0;
@@ -131,7 +132,7 @@ export const browserPageSource = String.raw`(() => {
       seen.add(node);
       if (node.nodeType===Node.TEXT_NODE) {
         const value=node.nodeValue || '';
-        pieces.push(value); length+=value.length; return;
+        pieces.push(value); if(separateNodes) pieces.push(' '); length+=value.length; return;
       }
       if (!(node instanceof Element) || overlays.has(node) || sensitive(node) || ['SCRIPT','STYLE','NOSCRIPT','TEMPLATE','TEXTAREA','INPUT','SELECT'].includes(node.localName.toUpperCase())) return;
       const style=getComputedStyle(node);
@@ -167,17 +168,17 @@ export const browserPageSource = String.raw`(() => {
     if (getComputedStyle(el).cursor==='pointer') evidence.push('pointer cursor');
     return {kind:evidence.includes('onclick attribute') || evidence.length>=2 ? 'button':'element',source:evidence.length?'inferred':'unknown',evidence};
   }
-  function describe(el) {
+  function describe(el, shallow=false) {
     if (!(el instanceof Element) || overlays.has(el)) return null;
     flush();
     observe(el.getRootNode());
     if (!ids.has(el)) { const ref=docId+':'+(++nextId); ids.set(el,ref); elements.set(ref,el); }
     const rect=el.getBoundingClientRect();
     const hidden=sensitive(el);
-    const text=hidden ? '[hidden]' : safeText(el,180);
+    const text=hidden ? '[hidden]' : shallow === true ? (el.isContentEditable || /^(input|textarea|select|option)$/i.test(el.localName) ? '' : clean(leafText(el).trim(),100)) : safeText(el,180);
     const label=el.getAttribute('aria-label') || (el.labels && [...el.labels].map(label=>safeText(label,180)).join(' ')) || el.getAttribute('placeholder') || el.getAttribute('title') || text || el.getAttribute('alt') || el.localName;
     return {ref:ids.get(el),documentId:docId,tag:el.localName,role:role(el),name:hidden ? '[hidden]' : clean(label),selector:selector(el),shadowPath:shadowPath(el),text,
-      value:'value' in el ? (hidden ? '[hidden]' : clean(el.value)) : undefined,
+      value:shallow !== true && 'value' in el ? (hidden ? '[hidden]' : clean(el.value)) : undefined,
       bounds:{x:rect.x,y:rect.y,width:rect.width,height:rect.height}};
   }
   function resolve(ref) {
@@ -325,16 +326,22 @@ export const browserPageSource = String.raw`(() => {
   ${browserSwarmSource}
   // While cursors carry out an edit they are the feedback; the regular boxes keep their state unseen.
   function muteOverlays(muted) {
+    if(muted && overlayMute?.isConnected) return;
     overlayMute?.remove();overlayMute=null;
     if(!muted || !overlayHost?.isConnected) return;
     overlayMute=document.createElement('style');overlayMute.textContent='.selected,.feedback,.agent-cursor{visibility:hidden}';
     overlayRoot.appendChild(overlayMute);
   }
-  const swarm=createSwarm({root:overlaySurface,parent,reduced:reducedMotion,mute:muteOverlays,ours:node=>overlays.has(node),origin() {
+  let scriptWatchVersion=0;
+  const swarm=createSwarm({root:overlaySurface,parent,sensitive,roots:()=>observers.keys(),interrupted:()=>{scriptWatchVersion++;},reduced:reducedMotion,mute:muteOverlays,motion:()=>send({kind:'cursor-motion'}),ours:node=>overlays.has(node),origin() {
     if(!agentCursor?.isConnected || agentCursor.style.display!=='block') return null;
     const rect=agentCursor.getBoundingClientRect();
     return [rect.x,rect.y];
   }});
+  function presentElement(spec) {
+    if(source==='agent') swarm.present(spec);
+    else swarm.present({actor:source,targets:[spec.el || spec.near],gone:spec.gone,near:spec.near});
+  }
   document.addEventListener('mousemove',event=>{
     if(!inspecting) return;
     if(!hoverPoint) send({kind:'hover-frame'});
@@ -344,10 +351,11 @@ export const browserPageSource = String.raw`(() => {
     if(!event.relatedTarget || event.relatedTarget?.localName==='iframe') {hoverPoint=null;hoverElement=null;refreshOverlays();}
   },true);
   ${browserGuideSource}
-  const guide=createGuide({root:overlaySurface,host:()=>overlayHost,visible,sensitive,safeText,resolve,scan,describe,send,reduced:reducedMotion,ours:node=>overlays.has(node)});
+  const guide=createGuide({root:overlaySurface,host:()=>overlayHost,visible,sensitive,safeText,scopeText,resolve,scan,describe,send,reduced:reducedMotion,ours:node=>overlays.has(node)});
   window.addEventListener('pagehide',()=>{guide.clear();globalThis.__workbenchPage?.clearOverlays();});
   function send(payload) {
-    try { globalThis.__workbenchEvent(JSON.stringify({docId,source,actorId,...payload})); } catch {}
+    if(privateTrial && payload.target) payload={...payload,value:undefined,target:{...payload.target,value:undefined}};
+    try { globalThis.__workbenchEvent(JSON.stringify({docId,source,actorId,at:Date.now(),recordingId,interaction:feedbackWindow?.interaction,...payload})); } catch {}
   }
   function textEditState(el) {
     if (sensitive(el)) return {editableText:false,editReason:'Sensitive fields cannot be edited.'};
@@ -451,8 +459,8 @@ export const browserPageSource = String.raw`(() => {
     }
   });
   // Observations report the page as edited, never a frame of a running edit choreography.
-  const inspect = ref => swarm.truth(()=>details(ref));
-  function details(ref) {
+  const inspect = (ref,withLayout) => swarm.truth(()=>details(ref,withLayout));
+  function details(ref,withLayout=false) {
     const el=resolve(ref);
     const attributes={};
     for (const attribute of el.attributes) if (attributeNames.has(attribute.name)) attributes[attribute.name]=sensitive(el) && !['type','role','disabled','readonly','tabindex'].includes(attribute.name) ? '[hidden]' : clean(attribute.value,512);
@@ -460,30 +468,172 @@ export const browserPageSource = String.raw`(() => {
     const style=getComputedStyle(el);
     for (const name of styleNames) computed[name]=clean(style.getPropertyValue(name),2000);
     const ancestors=[];
-    for (let node=parent(el); node && ancestors.length<8; node=parent(node)) ancestors.push(describe(node));
+    for (let node=parent(el); node && ancestors.length<8; node=parent(node)) ancestors.push(describe(node,withLayout));
     const textContent=sensitive(el) ? '[hidden]' : el.children.length || el.shadowRoot ? safeText(el,textLimit) : clean(leafText(el),textLimit);
     const animation=ownedAnimations.get(el);
-    return {...describe(el),semantics:semantics(el),textContent,...textEditState(el),attributes,computed,ancestors,animation:animation?.config ? clone(animation.config) : null,animationState:animation?.config ? reducedMotion.matches && !animation.player ? 'reduced-motion' : animation.player?.playState || 'idle' : 'idle'};
+    let layout;
+    if(withLayout && el.parentElement && !sensitive(el)){
+      const host=el.parentElement, css=getComputedStyle(host);
+      const neighbor=node=>node && !sensitive(node) && visible(node) && !overlays.has(node) && !skippedLayoutTag.test(node.localName) ? describe(node,true) : undefined;
+      layout={parentDisplay:css.display,parentDirection:css.display.includes('flex') ? css.flexDirection : undefined,
+        parentColumns:css.display.includes('grid') ? clean(css.gridTemplateColumns,180) : undefined,childCount:host.childElementCount,
+        previous:neighbor(el.previousElementSibling),next:neighbor(el.nextElementSibling)};
+    }
+    return {...describe(el),semantics:semantics(el),textContent,...textEditState(el),attributes,computed,ancestors,layout,animation:animation?.config ? clone(animation.config) : null,animationState:animation?.config ? reducedMotion.matches && !animation.player ? 'reduced-motion' : animation.player?.playState || 'idle' : 'idle'};
   }
+  const skippedLayoutTag=/^(script|style|template|noscript|link|meta)$/;
+  function scopeText(el) {
+    const row=el?.closest('tr,[role="row"],li');
+    if(!row || sensitive(el)) return undefined;
+    const heading=[...row.children].find(node=>node.matches('th,[role="rowheader"]') && visible(node))
+      || [...row.children].find(node=>node.matches('td,[role="cell"],[role="gridcell"],h1,h2,h3,h4,h5,h6') && visible(node));
+    if(!heading || sensitive(heading)) return undefined;
+    const hint=safeText(heading,120,true).replace(/\s+/g,' ').trim();
+    if (/\[hidden\]|[\w.+-]+@[\w.-]+\.[a-z]{2,}|(?:\d[ -]?){11,}/i.test(hint)) return undefined;
+    return hint || undefined;
+  }
+  function feedbackText(value) {
+    return clean(value,500).replace(/[\w.+-]+@[\w.-]+\.[a-z]{2,}/gi,'[hidden]')
+      .replace(/(?:\d[ -]?){11,}/g,'[hidden]').replace(/\s+/g,' ').trim().slice(0,240);
+  }
+  function visibleFeedback() {
+    const messages=new Map();
+    const nodes=document.querySelectorAll('[role="alert"],[role="status"]');
+    for(let i=0;i<Math.min(nodes.length,24);i++) {
+      const el=nodes[i], rect=el.getBoundingClientRect();
+      if(overlays.has(el) || el.closest('[aria-hidden=true]') || sensitive(el) || !visible(el) ||
+        rect.bottom<=0 || rect.right<=0 || rect.top>=innerHeight || rect.left>=innerWidth ||
+        el.checkVisibility?.({opacityProperty:true,visibilityProperty:true})===false) continue;
+      const role=el.getAttribute('role'), text=feedbackText(safeText(el,500));
+      if(text) messages.set(role+'\n'+text,{role,text});
+    }
+    return messages;
+  }
+  function stopFeedback() {
+    if(!feedbackWindow) return;
+    feedbackWindow.observer.disconnect(); clearTimeout(feedbackWindow.timer);
+    cancelAnimationFrame(feedbackWindow.frame); feedbackWindow=undefined;
+  }
+  function feedbackMessage(role,text) {
+    const window=feedbackWindow;
+    const key=role+'\n'+text;
+    if(!text || !window || window.seen.has(key) || performance.now()>window.deadline) return;
+    window.seen.add(key);
+    send({kind:'feedback',recordingId,role,text});
+    if(++window.count>=3) stopFeedback();
+  }
+  function flushFeedback() {
+    if(!feedbackWindow) return;
+    feedbackWindow.frame=0;
+    for(const {role,text} of visibleFeedback().values()) feedbackMessage(role,text);
+  }
+  function armFeedback(event,el) {
+    if(!recordingId || !event.isTrusted || !el || event.composedPath().some(node=>overlays.has(node))) return;
+    if(sensitive(el)) {stopFeedback();return;}
+    if(feedbackWindow) flushFeedback();
+    stopFeedback();
+    const observer=new MutationObserver(()=>{
+      if(feedbackWindow && !feedbackWindow.frame) feedbackWindow.frame=requestAnimationFrame(flushFeedback);
+    });
+    feedbackWindow={interaction:++interactionSequence,seen:new Set(visibleFeedback().keys()),count:0,deadline:performance.now()+1800,observer,
+      frame:0,timer:setTimeout(stopFeedback,1800)};
+    observer.observe(document,{subtree:true,childList:true,characterData:true,attributes:true,
+      attributeFilter:['role','class','style','aria-hidden','hidden']});
+  }
+  function setRecording(id,privateInputs) {
+    if(recordingId!==id) stopFeedback();
+    recordingId=id; privateTrial=!!privateInputs;
+  }
+  // Native form controls store their live values in properties and may emit one input per character.
+  // Keep a baseline only for the current agent command, then draw once from the final field values.
+  let fieldWatch=null;
+  function fieldValue(el) {
+    if(!el || sensitive(el)) return undefined;
+    if(el instanceof HTMLInputElement) {
+      if(['password','file','hidden'].includes(el.type)) return undefined;
+      return ['checkbox','radio'].includes(el.type) ? el.checked : el.value;
+    }
+    if(el instanceof HTMLSelectElement) return el.multiple ? JSON.stringify([...el.selectedOptions].map(o=>o.value)) : el.value;
+    if(el instanceof HTMLTextAreaElement) return el.value;
+    if(el.isContentEditable) return el.textContent;
+  }
+  function rememberField(el) {
+    if(!fieldWatch || !el || fieldWatch.before.has(el)) return;
+    const value=fieldValue(el);
+    if(value!==undefined) fieldWatch.before.set(el,value);
+  }
+  function endFields(show=false) {
+    if(!fieldWatch) return false;
+    const {before,touched,timer}=fieldWatch;fieldWatch=null;clearTimeout(timer);
+    if(!show || source!=='agent') return false;
+    const targets=[...touched].filter(el=>{
+      const value=el.isConnected ? fieldValue(el) : undefined;
+      return value!==undefined && before.has(el) && before.get(el)!==value;
+    });
+    return !!(targets.length && swarm.present({targets,script:true}));
+  }
+  function beginFields(only,select=false) {
+    endFields();
+    if(source!=='agent' || reducedMotion.matches || document.visibilityState!=='visible') return false;
+    fieldWatch={before:new Map(),touched:new Set(),timer:setTimeout(endFields,30000)};
+    if(only) rememberField(only);
+    else {
+      rememberField(document.activeElement);
+      // Some drivers set selects directly, without a focus or beforeinput event.
+      if(select) {
+        const list=document.getElementsByTagName('select');
+        for(let i=0;i<32 && list[i];i++) rememberField(list[i]);
+        let roots=0;
+        for(const root of observers.keys()) if(root instanceof ShadowRoot) {
+          rememberField(root.querySelector('select'));
+          if(++roots===8) break;
+        }
+      }
+    }
+    return true;
+  }
+  for(const type of ['focusin','beforeinput','pointerdown','keydown']) document.addEventListener(type,event=>{
+    if(fieldWatch) rememberField(eventTarget(event));
+  },true);
+  document.addEventListener('invalid',event=>{
+    const el=eventTarget(event);
+    if(feedbackWindow && event.isTrusted && el?.validity?.valid===false && !sensitive(el) && visible(el) && typeof el.validationMessage==='string')
+      feedbackMessage('alert',feedbackText(el.validationMessage));
+  },true);
   document.addEventListener('click', event=> {
-    if (!event.isTrusted && source!=='agent') return;
-    const target=describe(eventTarget(event));
-    if (target) {send({kind:'click',target});if(source==='agent') feedback(target.ref,'applied');}
+    const el=eventTarget(event);
+    const anchor=el?.closest('a[href]');
+    // Used only for transient matching to Chrome's download event; never persist this URL.
+    const href=anchor && /^(https?:|blob:)/i.test(anchor.href) && anchor.href.length<=4096 ? anchor.href : undefined;
+    if (!event.isTrusted && source!=='agent') {
+      if(href && anchor.hasAttribute('download') && feedbackWindow && performance.now()<=feedbackWindow.deadline)
+        send({kind:'download-link',href,recordingId});
+      return;
+    }
+    armFeedback(event,el);
+    const target=describe(el);
+    if (target) {send({kind:'click',target,href,scopeText:scopeText(el)});if(source==='agent' && !fieldWatch) feedback(target.ref,'applied');}
   },true);
   document.addEventListener('input', event=> {
     if (!event.isTrusted && source!=='agent') return;
     const el=eventTarget(event);
     if (!el) return;
+    armFeedback(event,el);
     const target=describe(el);
-    send({kind:el.tagName==='SELECT' ? 'select' : 'fill',target,value:target.value || ''});
-    if(source==='agent') feedback(target.ref,'applied');
+    const checked=event.isTrusted && el instanceof HTMLInputElement && ['checkbox','radio'].includes(el.type) && !sensitive(el) ? el.checked : undefined;
+    send({kind:el.tagName==='SELECT' ? 'select' : 'fill',target,value:target.value || '',scopeText:scopeText(el),checked});
+    if(fieldWatch) fieldWatch.touched.add(el);
   },true);
   document.addEventListener('change', event=> {
+    if (!event.isTrusted && source!=='agent') return;
     const el=eventTarget(event);
-    if (el instanceof HTMLSelectElement) { const target=describe(el); send({kind:'select',target,value:target.value || ''}); }
+    if(fieldWatch && el) fieldWatch.touched.add(el);
+    if (el instanceof HTMLSelectElement) { const target=describe(el); send({kind:'select',target,value:target.value || '',scopeText:scopeText(el)}); }
   },true);
   document.addEventListener('keydown', event=> {
+    if (!event.isTrusted && source!=='agent') return;
     if (!['Enter','Tab','Escape','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(event.key)) return;
+    if(event.key==='Enter') armFeedback(event,eventTarget(event));
     send({kind:'key',target:describe(eventTarget(event)),value:event.key});
   },true);
   let scrollTimer, pendingScroll;
@@ -556,10 +706,10 @@ export const browserPageSource = String.raw`(() => {
     patches.set(editId,{ref:element.ref,el,inserted:true,anchor,anchorRef:ref,container,nodes:treeNodes(el),after:el.cloneNode(true),fields:formStates(el)});
     editOrder.push(editId);
     send({kind:'edit',target:element,editId,value:JSON.stringify({insert:insertion})});
-    el.scrollIntoView({block:'nearest',inline:'nearest',behavior:'instant'});
+    if(source==='agent') el.scrollIntoView({block:'nearest',inline:'nearest',behavior:'instant'});
     feedback(element.ref,'applied');
     const result={editId,element:inspect(element.ref)};
-    if(source==='agent') swarm.play({el,inserted:true,before});
+    presentElement({el,inserted:true,before});
     return result;
   }
   // A page restyle is one adopted stylesheet plus text replacements by selector. The styling
@@ -600,6 +750,15 @@ export const browserPageSource = String.raw`(() => {
       if (after!==before) { node.nodeValue=after; changed.push({node,before,after}); }
     });
   }
+  function readSheetSample(el,names,pseudo) {
+    const style=getComputedStyle(el,pseudo);
+    return names.map(name=>style.getPropertyValue(name));
+  }
+  function sheetSampleChanged(el,names,before,pseudo) {
+    const style=getComputedStyle(el,pseudo);
+    return names.some((name,i)=>style.getPropertyValue(name)!==before[i]) ||
+      el.getAnimations().some(player=>player instanceof CSSTransition && names.includes(player.transitionProperty));
+  }
   async function restyle(request) {
     // Nothing is applied unless all of it is valid; a rejection says why instead of throwing.
     const refuse=(reason,more={})=>({applied:false,reason,...more});
@@ -626,9 +785,10 @@ export const browserPageSource = String.raw`(() => {
       try { found=[...document.querySelectorAll(probe)].filter(el=>!overlays.has(el)); } catch { continue; }
       if (!found.length) { if (unmatched.length<20) unmatched.push(clean(rule.selectorText,120)); continue; }
       for (const el of found.slice(0,2000)) reached.add(el);
-      if (probe===rule.selectorText.trim() && rule.style.length && samples.length<200) {
+      const selector=rule.selectorText.trim(), pseudo=selector.match(/(::(?:before|after|marker|placeholder))$/)?.[1];
+      if ((!selector.includes('::') || (pseudo && !selector.includes(','))) && rule.style.length && samples.length<200) {
         const names=[...rule.style].slice(0,24), els=found.slice(0,3);
-        samples.push({rule,names,els,before:els.map(el=> { const style=getComputedStyle(el); return names.map(name=>style.getPropertyValue(name)); })});
+        samples.push({rule,names,els,pseudo,probe,report:probe===selector,before:els.map(el=>readSheetSample(el,names,pseudo))});
       }
     }
     const jobs=texts.map(item=> {
@@ -639,45 +799,162 @@ export const browserPageSource = String.raw`(() => {
     if (!reached.size && !jobs.some(job=>job.slots.length)) return refuse('Nothing on the page matches these selectors',{unmatched,dropped,texts:report()});
     if (source==='agent') await swarm.watch();
     document.adoptedStyleSheets=[...document.adoptedStyleSheets,sheet];
-    const changed=[];
+    const changed=[],targets=new Set(),witnesses=[];
     for (const job of jobs) {
       job.changed=0;
       for (const [el,nodes] of job.slots) {
         const size=changed.length;
         if (el.isConnected) writeText(el,nodes,job.item.text,changed);
-        if (changed.length>size) job.changed++;
+        if (changed.length>size) {job.changed++;targets.add(el);}
       }
     }
     const unchanged=[];
     for (const sample of samples) {
-      const same=sample.els.every((el,index)=> {
-        const style=getComputedStyle(el);
-        return sample.names.every((name,at)=>style.getPropertyValue(name)===sample.before[index][at]) && !el.getAnimations().some(player=>player instanceof CSSTransition);
-      });
-      if (same && unchanged.length<20) unchanged.push(clean(sample.rule.selectorText,120));
+      let affected=false;
+      for(const [i,el] of sample.els.entries()) {
+        // A currently overridden rule may become the effective rule before someone undoes it.
+        if(witnesses.length<24) witnesses.push({el,names:sample.names,selector:sample.probe,pseudo:sample.pseudo});
+        if(sheetSampleChanged(el,sample.names,sample.before[i],sample.pseudo)) {affected=true;targets.add(el);}
+      }
+      if (!affected && sample.report && unchanged.length<20) unchanged.push(clean(sample.rule.selectorText,120));
     }
     const root=describe(document.documentElement), editId=docId+':edit:'+(++nextEditId);
-    patches.set(editId,{ref:root.ref,el:document.documentElement,sheet,texts:changed});
+    patches.set(editId,{ref:root.ref,el:document.documentElement,sheet,texts:changed,witnesses});
     editOrder.push(editId);
     send({kind:'edit',target:root,editId,value:JSON.stringify({sheet:css,...(texts.length ? {texts} : {})})});
     // The cursors only withhold pixels of a page that is already restyled, so the answer does not wait for them.
-    swarm.replay(source==='agent');
+    if(!swarm.replay(source==='agent') && targets.size) swarm.present({actor:source,targets:[...targets]});
     return {applied:true,editId,element:root,rules:styled.length,matched:reached.size,unmatched,unchanged,dropped,texts:report()};
   }
+  // Place two adjacent business elements without moving their DOM or reflowing the other children into columns.
+  function layoutPair(request) {
+    const refuse=reason=>({applied:false,reason});
+    if(!request || !['row','column'].includes(request.direction)) return refuse('invalid_direction');
+    let first,second;
+    try { first=resolve(request.ref); second=request.otherRef===undefined ? null : resolve(request.otherRef); }
+    catch {return refuse('stale_ref');}
+    const host=first.parentElement;
+    if(!host || host===document.body || host===document.documentElement || host.getRootNode()!==document ||
+        host.childElementCount>16 || sensitive(first) || !visible(first)) return refuse('unsupported_parent');
+    const children=[...host.children];
+    if(!second) {
+      if(!first.matches('h1,h2,h3,h4,h5,h6,[role="heading"]')) return refuse('subtitle_not_identified');
+      const eligible=children.filter(el=>el!==first && !sensitive(el) && visible(el) && !el.matches('[role=alert],[role=status],[aria-live]'));
+      const marked=eligible.filter(el=>el.matches('.intro,.subtitle,.subheading,.subheadline,[data-role="subtitle"]'));
+      const candidates=marked.length ? marked : eligible.filter(el=>el.matches('p,small'));
+      if(candidates.length!==1 || candidates[0]!==first.nextElementSibling) return refuse('subtitle_not_identified');
+      second=candidates[0];
+    }
+    if(second.parentElement!==host || sensitive(second) || !visible(second)) return refuse('different_parent_or_hidden');
+    if(second.nextElementSibling===first) [first,second]=[second,first];
+    if(first.nextElementSibling!==second) return refuse('not_adjacent');
+    const direction=request.direction, style=getComputedStyle(host);
+    const boxes=()=>[first.getBoundingClientRect(),second.getBoundingClientRect()];
+    const arranged=([a,b])=>{
+      if(Math.min(a.width,b.width,a.height,b.height)<=0) return false;
+      const overlapX=Math.min(a.right,b.right)-Math.max(a.left,b.left),overlapY=Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top);
+      return direction==='row' ? a.right<=b.left+1 && overlapY>=Math.min(a.height,b.height)/2
+        : a.bottom<=b.top+1 && overlapX>=Math.min(a.width,b.width)/2;
+    };
+    const from=boxes();
+    if(arranged(from))return {applied:false,already:true,direction};
+    const previousPair=[...patches.values()].some(patch=>patch.pairHost===host);
+    if(!['block','flex','grid'].includes(style.display) || style.writingMode!=='horizontal-tb' || style.direction!=='ltr' ||
+      (style.display==='grid' && !previousPair && children.length>2) ||
+      (style.display==='flex' && style.flexDirection!=='column' && children.length>2) ||
+      [...host.childNodes].some(n=>n.nodeType===Node.TEXT_NODE && n.nodeValue.trim()) ||
+      ['::before','::after'].some(pseudo=>!['none','normal'].includes(getComputedStyle(host,pseudo).content))) return refuse('complex_layout');
+    const flow=children.filter(el=>visible(el));
+    if(flow.some(el=>{
+      const css=getComputedStyle(el); return sensitive(el) || css.position==='absolute' || css.position==='fixed' ||
+        css.float!=='none' || css.order!=='0' || css.display==='contents';
+    }))return refuse('complex_children');
+    const peers=flow.filter(el=>el!==first && el!==second).map(el=>({el,width:el.getBoundingClientRect().width}));
+    const previousOverflow=host.scrollWidth-host.clientWidth;
+    const clippedY=[host,first,second].filter(el=>['clip','hidden'].includes(getComputedStyle(el).overflowY))
+      .map(el=>({el,overflow:el.scrollHeight-el.clientHeight}));
+    const parents=[],path=[];
+    for(let node=host;node!==document.documentElement;node=node.parentElement) {
+      if(!node.parentElement || path.length>=32)return refuse('unsupported_parent');
+      parents.push(node.parentElement);
+      path.unshift(':nth-child('+([...node.parentElement.children].indexOf(node)+1)+')');
+    }
+    const scope=':root > '+path.join(' > '),pairIndex=children.indexOf(first)+1;
+    const align=style.display==='flex' && style.flexDirection==='column' && ['flex-end','end','center'].includes(style.justifyContent) ? style.justifyContent : 'start';
+    const row=direction==='row';
+    const css=scope+'{display:grid!important;grid-template-columns:'+(row ? 'repeat(2,minmax(0,1fr))':'minmax(0,1fr)')+
+      '!important;grid-auto-flow:row!important;align-content:'+align+'!important;'+(row && !parseFloat(style.columnGap) ? 'column-gap:1em!important;':'')+'}'+
+      scope+' > *{grid-column:1/-1!important;grid-row:auto!important}'+
+      scope+' > :nth-child('+pairIndex+'){grid-column:1!important;min-width:0!important}'+
+      scope+' > :nth-child('+(pairIndex+1)+'){grid-column:'+(row?'2':'1')+'!important;min-width:0!important;'+(row?'margin-block-start:0!important;align-self:start!important;':'')+'}';
+    const sheet=new CSSStyleSheet();
+    const remove=()=>{document.adoptedStyleSheets=document.adoptedStyleSheets.filter(other=>other!==sheet);};
+    try {
+      sheet.replaceSync(css);
+      document.adoptedStyleSheets=[...document.adoptedStyleSheets,sheet];
+      const [a,b]=boxes(), limit=host.getBoundingClientRect();
+      const top=Math.min(a.top,b.top),bottom=Math.max(a.bottom,b.bottom);
+      if(!arranged([a,b]) || Math.min(a.left,b.left)<limit.left-1 || Math.max(a.right,b.right)>limit.right+1 ||
+        host.scrollWidth-host.clientWidth>Math.max(1,previousOverflow+1) ||
+        clippedY.some(({el,overflow})=>el.scrollHeight-el.clientHeight>overflow+1) ||
+        [first,second].some(el=>el.scrollWidth>el.clientWidth+1) ||
+        peers.some(({el,width})=>{
+          const r=el.getBoundingClientRect();
+          return Math.abs(r.width-width)>1 || (children.indexOf(el)<pairIndex-1 ? r.bottom>top+1 : r.top<bottom-1);
+        })) {remove();return refuse('geometry_not_verified');}
+    }catch{remove();return refuse('layout_not_applied');}
+    const root=describe(document.documentElement),id=docId+':edit:'+(++nextEditId);
+    const active=()=>host.isConnected && host.matches(scope) && children.length===host.childElementCount &&
+      children.every((el,i)=>host.children[i]===el) && document.adoptedStyleSheets.includes(sheet);
+    const guard=new MutationObserver(records=>{
+      const detached=records.some(record=>[...record.removedNodes].some(node=>
+        node===first || node===second || node===host || (node.nodeType===Node.ELEMENT_NODE && node.contains(host))));
+      if(!detached && active()) return;
+      guard.disconnect();remove();patches.delete(id);
+      const at=editOrder.indexOf(id);if(at>=0)editOrder.splice(at,1);
+      send({kind:'layout-invalidated',editId:id});
+    });
+    for(const node of [document,host,...parents])guard.observe(node,{childList:true});
+    const pair=[first,second];
+    patches.set(id,{ref:root.ref,el:document.documentElement,sheet,texts:[],pairHost:host,pair,guard,active});
+    editOrder.push(id);
+    send({kind:'edit',target:root,editId:id,value:JSON.stringify({sheet:css})});
+    feedback(request.ref,'applied');
+    swarm.present({actor:source,targets:pair,from});
+    return {applied:true,editId:id,element:root,css,direction};
+  }
   async function undoRestyle(id,patch) {
-    if (source==='agent') await swarm.watch();
+    patch.guard?.disconnect();
+    if (source==='agent' && !patch.pairHost) await swarm.watch();
+    const from=patch.pair?.map(el=>el.getBoundingClientRect());
+    const samples=[];
+    for(const witness of patch.witnesses || []) {
+      const el=witness.el.isConnected ? witness.el : document.querySelector(witness.selector);
+      if(el) samples.push({el,names:witness.names,pseudo:witness.pseudo,before:readSheetSample(el,witness.names,witness.pseudo)});
+    }
+    const targets=new Set();
     document.adoptedStyleSheets=document.adoptedStyleSheets.filter(item=>item!==patch.sheet);
     // Text the page has rewritten since is newer than this preview and stays.
     let kept=0;
     for (const change of [...patch.texts].reverse()) {
       if (!change.node.isConnected || change.node.nodeValue!==change.after) { kept++; continue; }
+      if(change.node.parentElement) targets.add(change.node.parentElement);
       if (change.created) change.node.remove(); else change.node.nodeValue=change.before;
     }
     patches.delete(id);
     editOrder.splice(editOrder.indexOf(id),1);
     const root=describe(document.documentElement);
     send({kind:'undo',target:root,editId:id,value:JSON.stringify({editId:id})});
-    swarm.replay(source==='agent');
+    if(patch.pair) {
+      const moved=patch.pair.some((el,i)=>{
+        const rect=el.getBoundingClientRect();
+        return ['x','y','width','height'].some(key=>Math.abs(rect[key]-from[i][key])>0.5);
+      });
+      if(moved) swarm.present({actor:source,targets:patch.pair,from});
+    } else if(!swarm.replay(source==='agent')) {
+      for(const {el,names,before,pseudo} of samples) if(sheetSampleChanged(el,names,before,pseudo)) targets.add(el);
+      if(targets.size) swarm.present({actor:source,targets:[...targets]});
+    }
     return {editId:id,page:true,element:details(root.ref),...(kept ? {keptTexts:kept} : {})};
   }
   // What is on the page, compact enough to sit in the agent's context: enough to write selectors
@@ -773,26 +1050,53 @@ export const browserPageSource = String.raw`(() => {
     return head.join('\n')+'\n'+(body.length>room ? body.slice(0,room)+'\n…' : body);
   }
   globalThis.__workbenchPage = {
+    setRecording,flushFeedback,
     docId,
     setActor(value) { if(actorId!==value) flushScroll(); actorId=value; },
     flushScroll,
-    setSource(value) { source=value==='agent' ? 'agent' : 'human'; },
+    setSource(value) {
+      if (source==='agent' && value!=='agent') {scriptWatchVersion++;endFields();}
+      source=value==='agent' ? 'agent' : 'human';
+    },
     setInspect(value) { inspecting=!!value;hoverPoint=null;hoverElement=null;refreshOverlays(); },
     leave() { hoverPoint=null;hoverElement=null;refreshOverlays(); },
     feedback,
-    // A page script of the agent edits outside this bridge: the view is kept as it looks before
-    // the script runs, and what changed is uncovered by cursors once it has returned. The answer
-    // waits for the show to end; without a show the page is only uncovered.
     // A guide outlives clearOverlays: it ends when the host says so or the document goes away.
     guideShow(step) { return guide.show(step); },
     guideState() { return guide.state(); },
     guideClear(farewell) { guide.clear(farewell); return true; },
-    watchScript() { return source==='agent' && swarm.watch(); },
-    replayScript(show=true) {
-      const played=swarm.replay(source==='agent' && show)>0;
-      return played ? swarm.rest(15500).then(()=>true) : false;
+    async watchScript(targetsOnly=false) {
+      const version=++scriptWatchVersion;
+      if (source!=='agent') return false;
+      if(targetsOnly==='fields' || targetsOnly==='select') return beginFields(null,targetsOnly==='select');
+      let covered=false;
+      if (!targetsOnly) {
+        try { covered=await swarm.watch(); } catch { swarm.replay(false); }
+      }
+      if (version!==scriptWatchVersion || source!=='agent') return false;
+      // Also keep targets for a slow script that outlives the visual cover.
+      const tracking=swarm.watchTargets();
+      return covered || tracking;
     },
+    replayScript(show=true,reportMode=false) {
+      if(fieldWatch) {
+        const played=endFields(show);
+        return reportMode && played ? 'targets' : played;
+      }
+      if (source!=='agent' || !show) { swarm.finishScript(); return false; }
+      const covered=swarm.hasScriptCover;
+      let mode=false;
+      if (swarm.replay(covered)>0) {
+        swarm.replayTargets(false);
+        mode='cover';
+      } else if (swarm.replayTargets(true,covered)>0) mode='targets';
+      return reportMode ? mode : !!mode;
+    },
+    finishScript() { scriptWatchVersion++; endFields(); swarm.finishScript(); },
+    stopPresentation() { scriptWatchVersion++; endFields(); swarm.interrupt(); },
     clearOverlays() {
+      scriptWatchVersion++;
+      endFields();
       swarm.settle();
       inspecting=false;hoverPoint=null;hoverElement=null;selectedElement=null;feedbackElement=null;feedbackPhase=null;clearTimeout(feedbackTimer);
       cancelAnimationFrame(overlayFrame);overlayFrame=0;overlayHost?.remove();
@@ -830,12 +1134,28 @@ export const browserPageSource = String.raw`(() => {
       return {documentId:docId,elements:result.slice(0,limit).map(el=>({...describe(el),...textEditState(el)})),truncated:truncated || result.length>limit};
     },
     inspect,
+    mention(ref) { return swarm.truth(()=>describe(resolve(ref))); },
     reveal(ref) {
       const el=resolve(ref);
       el.scrollIntoView({block:'center',inline:'nearest',behavior:'instant'});
       return describe(el);
     },
     atPoint(x,y) { const el=atPoint(x,y); return el ? describe(el) : null; },
+    // Counts only: what kinds of things the page holds, never what they say.
+    facts() {
+      const shown=el=>{const box=el.getBoundingClientRect();return box.width>1 && box.height>1;};
+      const fields=[...document.querySelectorAll('input:not([type=hidden]):not([type=submit]):not([type=button]):not([type=reset]),textarea,select')].filter(shown);
+      const body=document.body?.innerText || '';
+      return {
+        fields:fields.length,
+        password:fields.some(el=>el.type==='password'),
+        tables:[...document.querySelectorAll('table')].filter(el=>el.rows.length>=3 && shown(el)).length,
+        paragraphs:[...document.querySelectorAll('p')].filter(el=>(el.textContent || '').trim().length>80).length,
+        characters:body.length,
+        headings:[...document.querySelectorAll('h1,h2')].filter(shown).length,
+        prices:(body.match(/[¥￥$€£]\s?\d[\d,.]*/g) || []).length,
+      };
+    },
     node(ref) { return resolve(ref); },
     previewStyles(request) {
       const el=resolve(request.ref);
@@ -849,9 +1169,11 @@ export const browserPageSource = String.raw`(() => {
       if (patch && el.style.cssText!==patch.afterCssText) throw new Error('Page styles changed during this gesture; refusing to overwrite newer changes');
       const editId=request.editId || docId+':edit:'+(++nextEditId);
       if (!patch) {
-        patch={ref:request.ref,el,hasStyles:true,beforeCssText:el.style.cssText,transient:true,styles:{}};
+        patch={ref:request.ref,el,hasStyles:true,beforeCssText:el.style.cssText,transient:true,styles:{},firstStyles:new Map()};
         patches.set(editId,patch);editOrder.push(editId);
       }
+      const fresh=Object.keys(styles).filter(name=>!patch.firstStyles.has(name));
+      if(fresh.length) readSheetSample(el,fresh).forEach((value,i)=>patch.firstStyles.set(fresh[i],value));
       for (const [name,value] of Object.entries(styles)) value==='' ? el.style.removeProperty(name) : el.style.setProperty(name,value);
       Object.assign(patch.styles,styles);patch.afterCssText=el.style.cssText;
       return {editId};
@@ -863,7 +1185,10 @@ export const browserPageSource = String.raw`(() => {
       if (el!==patch.el || el.style.cssText!==patch.afterCssText) throw new Error('Page styles changed during this gesture; refusing to overwrite newer changes');
       patch.transient=false;
       send({kind:'edit',target:describe(el),editId,value:JSON.stringify({styles:patch.styles})});
-      return {editId,element:inspect(patch.ref)};
+      const result={editId,element:inspect(patch.ref)};
+      if(patch.beforeCssText!==patch.afterCssText && sheetSampleChanged(el,[...patch.firstStyles.keys()],[...patch.firstStyles.values()])) swarm.present({actor:source,targets:[el]});
+      delete patch.firstStyles;
+      return result;
     },
     edit(request) {
       if (!request || typeof request!=='object' || Array.isArray(request) || Object.keys(request).some(key=>!['ref','text','styles','animation','insert'].includes(key))) throw new Error('Only supported preview changes can be edited');
@@ -888,23 +1213,32 @@ export const browserPageSource = String.raw`(() => {
       const beforeText=textNodes.map(node=>node.nodeValue);
       const created=hasText && textNodes.length===0;
       const beforeCssText=el.style.cssText;
+      const textChanged=hasText && ((beforeText[0] ?? '')!==request.text || beforeText.slice(1).some(Boolean));
+      const animationChanged=hasAnimation && (!!animation || !!beforeAnimation?.config);
+      const styleKeys=entries.filter(([key,value])=>el.style.getPropertyValue(key)!==value || !!el.style.getPropertyPriority(key)).map(([key])=>key);
+      const mayChange=textChanged || animationChanged || styleKeys.length>0;
       // What is on screen now, possibly mid-way through an earlier edit, is where this one starts.
-      const before=source==='agent' ? swarm.capture(swarm.reveal(el),Object.keys(styles)) : null;
-      swarm.settle(el);
+      const before=source==='agent' && mayChange ? swarm.capture(swarm.reveal(el),Object.keys(styles)) : null;
+      if(mayChange) swarm.settle(el);
+      const previousStyles=styleKeys.length ? readSheetSample(el,styleKeys) : [];
       if (created) { const node=document.createTextNode(''); el.appendChild(node); textNodes.push(node); }
       if (hasText) textNodes.forEach((node,index)=> { node.nodeValue=index===0 ? request.text : ''; });
       for (const [name,value] of entries) value==='' ? el.style.removeProperty(name) : el.style.setProperty(name,value);
       if (hasAnimation) applyAnimation(el,prepared);
       const editId=docId+':edit:'+(++nextEditId);
-      patches.set(editId,{ref:request.ref,el,textNodes,textStructure:[...el.childNodes],beforeText,created,hasText,afterText:textNodes.map(node=>node.nodeValue),hasStyles:entries.length>0,beforeCssText,afterCssText:el.style.cssText,hasAnimation,beforeAnimation,afterAnimationToken:prepared?.token});
+      const afterText=textNodes.map(node=>node.nodeValue),afterCssText=el.style.cssText;
+      const changed=textChanged || animationChanged || (beforeCssText!==afterCssText && sheetSampleChanged(el,styleKeys,previousStyles));
+      patches.set(editId,{ref:request.ref,el,textNodes,textStructure:[...el.childNodes],beforeText,created,hasText,afterText,hasStyles:entries.length>0,beforeCssText,afterCssText,hasAnimation,beforeAnimation,afterAnimationToken:prepared?.token,contentChanged:textChanged || animationChanged});
       editOrder.push(editId);
       send({kind:'edit',target:describe(el),editId,value:JSON.stringify({...(hasText ? {text:request.text} : {}),...(entries.length ? {styles} : {}),...(hasAnimation ? {animation} : {})})});
-      feedback(request.ref,'applied');
+      if(changed) feedback(request.ref,'applied');
       const result={editId,element:inspect(request.ref)};
-      if(source==='agent') swarm.play({el,before,text:hasText && request.text ? textNodes[0] : null,was:beforeText[0],animation:!!animation});
+      if(changed) presentElement({el,before,text:hasText && request.text ? textNodes[0] : null,was:beforeText[0],animation:!!animation});
       return result;
     },
     restyle,
+    layoutPair,
+    layoutPairActive(id) { return patches.get(id)?.active?.()===true; },
     digest: limit=>swarm.truth(()=>digest(limit)),
     undo(editId) {
       const id=editId===undefined ? editOrder[editOrder.length-1] : editId;
@@ -925,7 +1259,7 @@ export const browserPageSource = String.raw`(() => {
         send({kind:'undo',target:describe(anchor),editId:id,value:JSON.stringify({editId:id})});
         feedback(patch.anchorRef,'applied');
         const result={editId:id,element:inspect(patch.anchorRef)};
-        if(source==='agent') swarm.play({gone,before,near});
+        presentElement({gone,before,near});
         return result;
       }
       if (patch.hasText) {
@@ -941,8 +1275,11 @@ export const browserPageSource = String.raw`(() => {
         checkAnimation(current);
         restoredAnimation=patch.beforeAnimation ? prepareAnimation(el,patch.beforeAnimation.config,patch.beforeAnimation,patch.beforeAnimation.token) : null;
       }
-      const before=source==='agent' ? swarm.capture(swarm.reveal(el),patch.hasStyles ? swarm.inline(el,patch.beforeCssText) : []) : null;
-      swarm.settle(el);
+      const styleKeys=patch.hasStyles && patch.beforeCssText!==patch.afterCssText ? swarm.inline(el,patch.beforeCssText) : [];
+      const mayChange=!patch.transient && (patch.contentChanged || styleKeys.length>0);
+      const before=source==='agent' && mayChange ? swarm.capture(swarm.reveal(el),styleKeys) : null;
+      if(mayChange) swarm.settle(el);
+      const previousStyles=mayChange && styleKeys.length ? readSheetSample(el,styleKeys) : [];
       if (patch.hasText) {
         if (patch.created) patch.textNodes[0].remove();
         else patch.textNodes.forEach((node,index)=> { node.nodeValue=patch.beforeText[index]; });
@@ -952,9 +1289,10 @@ export const browserPageSource = String.raw`(() => {
       patches.delete(id);
       editOrder.splice(editOrder.indexOf(id),1);
       send({kind:'undo',target:describe(el),editId:id,value:JSON.stringify({editId:id})});
-      feedback(patch.ref,'applied');
+      const changed=mayChange && (patch.contentChanged || sheetSampleChanged(el,styleKeys,previousStyles));
+      if(changed) feedback(patch.ref,'applied');
       const result={editId:id,element:inspect(patch.ref)};
-      if(source==='agent') swarm.play({el,before,text:patch.hasText && !patch.created ? patch.textNodes.find(node=>node.nodeValue) : null,was:patch.afterText[0],animation:!!restoredAnimation});
+      if(changed) presentElement({el,before,text:patch.hasText && !patch.created ? patch.textNodes.find(node=>node.nodeValue) : null,was:patch.afterText?.[0],animation:!!restoredAnimation});
       return result;
     },
     bounds(ref) {
@@ -972,12 +1310,15 @@ export const browserPageSource = String.raw`(() => {
       if (!['INPUT','TEXTAREA'].includes(el.tagName) || ['file','checkbox','radio','button','submit','hidden'].includes(el.type)) throw new Error('This element is not a supported text input');
       if (el.disabled || el.readOnly) throw new Error('Input is not editable');
       el.scrollIntoView({block:'center',behavior:'instant'}); el.focus(); el.select();
+      beginFields(el);
     },
     select(ref,value) {
       const el=resolve(ref);
       if (!(el instanceof HTMLSelectElement) || el.disabled) throw new Error('This element is not an enabled select');
       if (![...el.options].some(option=>option.value===value)) throw new Error('The requested option does not exist');
+      beginFields(el);
       el.value=value; el.dispatchEvent(new Event('input',{bubbles:true,composed:true})); el.dispatchEvent(new Event('change',{bubbles:true,composed:true}));
+      endFields(true);
     },
     outline(ref) {
       selectedElement=ref ? resolve(ref) : null;refreshOverlays();
@@ -1086,6 +1427,8 @@ export const browserPageSource = String.raw`(() => {
     mask(enabled) {
       maskNodes.forEach(node=>node.remove()); maskNodes=[];
       if (!enabled) return;
+      scriptWatchVersion++;
+      endFields();
       // A capture shows the page as edited, not a moment of the choreography.
       swarm.settle();
       for (const el of scan().found) {

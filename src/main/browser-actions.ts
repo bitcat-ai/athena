@@ -127,6 +127,11 @@ export async function dispatchBrowserAction(
         pixelRatio: data.pixelRatio as number | undefined,
       });
     }
+    case 'browser:remix': {
+      const preset = record(payload).preset;
+      if (preset !== null && typeof preset !== 'string') throw new Error('页面风格不正确');
+      return browser.remix(preset === null ? null : string(preset, 40));
+    }
     case 'browser:inspect': {
       const enabled = record(payload).enabled;
       if (typeof enabled !== 'boolean') throw new Error('选择状态不正确');

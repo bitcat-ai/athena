@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src data:; font-src 'self'; base-uri 'none'; object-src 'none'"
+    />
+    <title>Athena · 原生会话</title>
+  </head>
+  <body>
+    <header>
+      <strong id="name">原生会话</strong><span id="workspace"></span
+      ><span id="status" role="status">正在启动…</span>
+    </header>
+    <main id="terminal" aria-label="原生终端"></main>
+    <script type="module" src="/terminal.ts"></script>
+  </body>
+</html>
