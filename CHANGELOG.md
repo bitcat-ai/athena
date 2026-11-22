@@ -39,6 +39,13 @@
 
 各 CLI 与各项能力的验证范围见 [本机 CLI 适配](docs/mainstream-cli-support.md)，Live 的交接规则与依据见 [语音到后端 Agent 的交接](docs/voice-agent-handoff-research.md)。
 
+macOS Apple Silicon：
+
+- [DMG 安装包](https://github.com/bitcat-ai/athena/releases/download/v0.12.0/Athena-0.12.0-mac-arm64.dmg)
+- [ZIP 归档](https://github.com/bitcat-ai/athena/releases/download/v0.12.0/Athena-0.12.0-mac-arm64.zip)
+- [SHA-256 校验文件](https://github.com/bitcat-ai/athena/releases/download/v0.12.0/SHA256SUMS.txt)
+- [Release 页面](https://github.com/bitcat-ai/athena/releases/tag/v0.12.0)
+
 ## 0.11.1 · 2026-11-17
 
 这一版修复右侧网页画面在切换标签后停住的问题。
