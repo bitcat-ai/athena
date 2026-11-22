@@ -829,15 +829,26 @@ select {
 .remix-select .choice-select-trigger {
   min-height: 32px;
   height: 32px;
-  padding-inline: 10px 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding-inline: 10px 8px;
   border-radius: var(--radius-control);
   background: transparent;
   box-shadow: none;
   color: var(--secondary);
   font-size: 12px;
+  white-space: nowrap;
 }
 .remix-select .choice-select-trigger:is([data-hovered], [aria-expanded='true']) {
   background: var(--surface-secondary);
+}
+/* The indicator sits beside the value, not on top of it. */
+.remix-select .select__indicator {
+  position: static;
+  flex: none;
+  width: 12px;
+  height: 12px;
 }
 .tool-buttons {
   display: flex;
@@ -3410,4 +3421,14 @@ html[data-theme='dark'] .composer [data-slot='prompt-input-shell'] {
 .browser-status .selection-clear[data-hovered='true'] {
   background: var(--surface-tertiary);
   color: var(--foreground);
+}
+
+/* In a narrow pane the tool row keeps every control in view: the style menu drops its label. */
+@container browser (max-width: 480px) {
+  .remix-select .choice-select-trigger::before {
+    content: none;
+  }
+  .remix-select .choice-select-trigger {
+    padding-inline: 8px 6px;
+  }
 }

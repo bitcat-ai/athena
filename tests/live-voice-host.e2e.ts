@@ -188,12 +188,12 @@ try {
   );
 
   const delegate = (id: string, text: string, startMs: number) =>
-    invoke<string>('voice:delegate', {
+    invoke<{ text: string; silent: boolean }>('voice:delegate', {
       requestId: 'host_request',
       delegationId: id,
       offsetMs: startMs + 100,
       transcripts: [{ role: 'user', text, startMs, endMs: startMs + 100 }],
-    });
+    }).then((reply) => reply.text);
   await expect.poll(async () => (await snapshot()).browser.status, { timeout: 30000 }).toBe('ready');
   const original = await invoke('browser:query', { selector: 'h1' });
   assert.notEqual(original.elements[0]?.text, '语音委托已生效');
@@ -230,7 +230,8 @@ try {
   await expect(panel.getByRole('button', { name: '允许这次', exact: true })).toBeVisible({
     timeout: 20_000,
   });
-  assert.match(await delegate('spoken_yes', '同意，执行', 1200), /尚未提交/);
+  // A spoken yes neither approves the request nor interrupts the task that is waiting on it.
+  assert.match(await delegate('spoken_yes', '同意，执行', 1200), /界面上点允许/);
   assert.equal((await snapshot()).pendingRequests?.length, 1);
   await panel.getByRole('button', { name: '允许这次', exact: true }).click();
   const approved = await approval;

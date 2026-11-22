@@ -3538,7 +3538,9 @@ export class BrowserRuntime {
    * It is marked on the page for a moment so the person sees what was understood.
    */
   pointedElement(x: number, y: number, tabId?: string): Promise<ElementRef | undefined> {
-    const id = this.activeTab().info.id;
+    // With no page ready there is nothing pointed at; that is not a failure of the request.
+    const id = this.state.status === 'ready' ? this.activeTabId : '';
+    if (!id || !this.tabs.has(id)) return Promise.resolve(undefined);
     if (tabId !== undefined && tabId !== id) return Promise.resolve(undefined);
     return this.serialize(async () => {
       const tab = this.requireActive(id);

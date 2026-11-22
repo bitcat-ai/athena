@@ -42,7 +42,10 @@ async function press(f: WebFixture, selector: string) {
 }
 /** The step the page is showing, asked the way the guide itself asks. */
 const onPage = (f: WebFixture): Promise<{ token?: string }> =>
-  (f.browser as any).guideHost().shown();
+  (f.browser as any)
+    .guideHost()
+    .shown()
+    .then((shown: { token?: string }) => ({ token: shown.token }));
 const steps = {
   title: '数一次',
   steps: [

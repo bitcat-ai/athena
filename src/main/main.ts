@@ -3746,6 +3746,8 @@ async function launch() {
         pointer && supportsBrowser(conversationAgent(conversation))
           ? await browser.pointedElement(pointer.x, pointer.y, pointer.tabId).catch(() => undefined)
           : undefined;
+      // Superseded or hung up while the page was being read: start nothing.
+      if (signal.aborted) throw new Error('语音任务已取消');
       let messageId: string | undefined;
       const cancel = () => {
         if (messageId) void stopTurn(messageId).catch(() => {});
@@ -3969,6 +3971,9 @@ app.on('before-quit', (event) => {
   active?.abort.abort();
   browser?.revokeAgentControl();
   demoServer?.close();
+  // What is known now is written first: the clean-up below can wait on the network, and a
+  // force quit in that time must not cost the conversation.
+  void store?.save().catch(() => {});
   void Promise.allSettled([
     practiceRun?.done,
     liveVoice?.disconnect(),

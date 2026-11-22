@@ -101,12 +101,22 @@ const interrupting: Array<[string, VoiceRelay]> = [
   ['改完之后帮我总结一下这一页', 'add'],
   ['对了，标题现在是什么颜色', 'add'],
   ['这个按钮是干什么用的', 'add'],
+  ['这个标题是不是太大了', 'add'],
+  ['不对吧，你看到的是哪个按钮', 'add'],
+  ['把别的按钮也改成蓝色', 'revise'],
+  ['另外把特别大的那张图缩小', 'add'],
   ['停', 'stop'],
   ['停下', 'stop'],
   ['算了，停下吧', 'stop'],
   ['取消', 'stop'],
   ['呃，不用了', 'stop'],
   ['别改了', 'stop'],
+  ['好的', 'ack'],
+  ['同意，执行', 'ack'],
+  ['嗯嗯，可以', 'ack'],
+  ['谢谢', 'ack'],
+  ['好的继续吧', 'ack'],
+  ['好的，再把标题加粗', 'revise'],
   ['好了吗', 'status'],
   ['做到哪了', 'status'],
   ['还要多久', 'status'],
@@ -117,7 +127,7 @@ const interrupting: Array<[string, VoiceRelay]> = [
 test('words spoken during a task are told apart: a change, something more, stop, or how it is going', () => {
   const wrong = interrupting.filter(([text, expected]) => voiceRelay(text) !== expected);
   // Stopping work that should have continued is the costly mistake; count it on its own.
-  const interrupted = wrong.filter(([, expected]) => expected === 'add' || expected === 'status');
+  const interrupted = wrong.filter(([, expected]) => ['add', 'status', 'ack'].includes(expected));
   console.log(
     `voice relay: ${interrupting.length} interruptions, wrong ${wrong.length}, work stopped needlessly ${interrupted.length}`,
   );

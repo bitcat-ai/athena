@@ -266,9 +266,13 @@ try {
       .trim()
       .split('\n')
       .map((line) => JSON.parse(line));
-    assert.deepEqual(requests.find((r) => r.method === 'turn/start').params.input, [
-      { type: 'image', url: pastedSource },
-    ]);
+    // The host adds its page context as text; the picture itself goes through untouched.
+    assert.deepEqual(
+      requests
+        .find((r) => r.method === 'turn/start')
+        .params.input.filter((item: { type: string }) => item.type === 'image'),
+      [{ type: 'image', url: pastedSource }],
+    );
     checks.push(
       'Image-only draft survives navigation and removal; exact image bytes reach native turn/start and the saved message',
     );

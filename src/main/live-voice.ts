@@ -246,6 +246,8 @@ export class LiveVoice {
             },
             transport: { type: 'webrtc', sdp },
           }),
+          // Not tied to hanging up: a session the service has already created must be heard
+          // of, so that it can be ended rather than left running.
           signal: AbortSignal.timeout(30_000),
         });
       } catch {
@@ -323,6 +325,10 @@ export class LiveVoice {
       task = Promise.resolve(
         `还在处理${quoted((running ?? open[0]).text)}${open.length > 1 ? `，后面还排着 ${open.length - 1} 项` : ''}，没有打断它，完成后会告诉用户结果。`,
       );
+    } else if (relay === 'ack') {
+      task = Promise.resolve(
+        `没有打断正在进行的任务${quoted((running ?? open[0]).text)}，它会继续。如果它正在等用户确认，需要在 Athena 界面上点允许或拒绝，口头同意不能代替。`,
+      );
     } else if (relay === 'stop') {
       const stopped = this.supersede(call, open);
       task = Promise.all(open.map((item) => item.settled)).then(
@@ -366,12 +372,15 @@ export class LiveVoice {
     relay: string[],
   ): Promise<string> {
     const controller = new AbortController();
+    const ended = () => controller.abort();
     if (call.controller.signal.aborted) controller.abort();
-    else call.controller.signal.addEventListener('abort', () => controller.abort(), { once: true });
+    else call.controller.signal.addEventListener('abort', ended, { once: true });
     let finish!: () => void;
     const settled = new Promise<void>((resolve) => {
       finish = resolve;
     });
+    // A long call makes many requests; none keeps a listener on the call once it is over.
+    void settled.then(() => call.controller.signal.removeEventListener('abort', ended));
     const task = new Promise<string>((resolve, reject) => {
       call.queue.push({
         id,

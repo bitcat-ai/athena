@@ -50,13 +50,17 @@ export function voiceIntent(text: string): VoiceIntent {
  * - `add`: something more; do it after the work in hand.
  * - `stop`: stop, with nothing new to do.
  * - `status`: a question about the work in hand; answer without disturbing it.
+ * - `ack`: "好的", "同意", "谢谢": the person is following along, not asking for anything. The
+ *   work goes on, and a spoken yes never stands in for an approval in the interface.
  */
-export type VoiceRelay = 'revise' | 'add' | 'stop' | 'status';
+export type VoiceRelay = 'revise' | 'add' | 'stop' | 'status' | 'ack';
 
 const stopping =
   /^(?:(?:先|就|那)?(?:停下来|停一下|停下|停止|停|取消|暂停|算了|不用改了|不用了|别(?:改|做|弄|搞)了|不要(?:改|做|弄|搞)了|不做了|不改了)(?:吧|啊|了)?)+$/;
 const progress =
   /(?:好|完成|做完|改完|弄完|结束)了(?:吗|嘛|没|没有)|(?:做|改|弄|进行)到哪|还要多久|还有多久|进度|怎么样了|还在(?:做|改|弄|忙)吗|还没好/;
+const acknowledging =
+  /^(?:(?:好的?|好吧|好啊|嗯+|行|可以|没问题|没事|对的?|是的?|同意|确认|允许|批准|执行|继续|ok|okay|谢谢你?|辛苦了?|不错|很好|挺好|真棒|厉害|知道了|明白了?|收到|了解)(?:吧|啊|呀|了|的|哦)*)+$/i;
 const adding = /^(?:再|另外|还有|顺便|然后|接着|对了|同时|以及|完了(?:之后)?|(?:做|改|弄)完(?:之后|以后|了)?|等(?:它|你|这个)?(?:做|改|弄)?完)/;
 const correcting = /不对|不是|错了|搞错|弄错|别|不要|不用|算了|重新|停/;
 
@@ -64,9 +68,12 @@ export function voiceRelay(text: string): VoiceRelay {
   // Only interjections are dropped here: "然后" and "那" are what mark an addition.
   const bare = text.replace(/[，,。.！!？?；;、\s]/g, '').replace(/^(?:嗯|呃|啊|哎|诶|哦|喂)+/, '');
   if (stopping.test(bare)) return 'stop';
+  if (acknowledging.test(bare)) return 'ack';
   if (progress.test(bare)) return 'status';
   // Any other question is answered once the work in hand is done.
-  if (correcting.test(bare)) return 'revise';
+  // A question never stops work in hand: it is answered afterwards. "是不是" and "特别" hold
+  // the words of a correction without being one.
   if (voiceIntent(text) === 'ask') return 'add';
+  if (correcting.test(bare.replace(/是不是|特别|区别|分别|个别|类别|级别|别的|别人|不用说|不停地?/g, ''))) return 'revise';
   return adding.test(bare) ? 'add' : 'revise';
 }

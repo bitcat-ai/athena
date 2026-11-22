@@ -15,6 +15,7 @@ export class Store {
   existingData = false;
   private timer?: ReturnType<typeof setTimeout>;
   private savedAt = 0;
+  private pendingSince = 0;
   private writes = Promise.resolve();
   constructor(private directory: string) {
     this.data = {
@@ -76,12 +77,18 @@ export class Store {
     clearTimeout(this.timer);
     // Serialising every conversation blocks the host, which also forwards page frames. While a
     // task streams, a save lands in each short pause, so space them out; quitting saves at once.
-    const wait = Math.max(500, this.savedAt + 2500 - Date.now());
+    // A steady stream of events must not put the save off for ever: five seconds at most.
+    this.pendingSince ||= Date.now();
+    const wait = Math.min(
+      Math.max(500, this.savedAt + 2500 - Date.now()),
+      Math.max(0, this.pendingSince + 5000 - Date.now()),
+    );
     this.timer = setTimeout(() => void this.save().catch(() => {}), wait);
   }
   save() {
     clearTimeout(this.timer);
     this.savedAt = Date.now();
+    this.pendingSince = 0;
     const json = JSON.stringify(this.data);
     const file = path.join(this.directory, 'workspace.json');
     this.writes = this.writes

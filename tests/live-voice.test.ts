@@ -354,6 +354,17 @@ test('asking how it is going does not disturb the work, and saying stop ends it 
   assert.match(status, /还在处理「把页面改成复古风格」/);
   assert.equal(runs[0].signal.aborted, false);
   assert.equal(w.tasks.length, 1);
+  // "好的" while it works is not a new request, and a spoken yes is not an approval.
+  const nodded = await w.voice.delegate(
+    'request_a',
+    'nod',
+    [...asked, say('同意，执行', 700)],
+    790,
+  );
+  assert.match(nodded, /没有打断/);
+  assert.match(nodded, /界面/);
+  assert.equal(runs[0].signal.aborted, false);
+  assert.equal(w.tasks.length, 1);
   const stop = w.voice.delegate('request_a', 'stop', [...asked, say('算了，停下吧', 800)], 1000);
   assert.equal(runs[0].signal.aborted, true);
   assert.match(await stop, /已按用户的要求停下「把页面改成复古风格」/);

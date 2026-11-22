@@ -724,7 +724,7 @@ try {
     coreReady: true,
     workspace: { status: 'ready', mode: 'personal', path: '/fixture/personal' },
   });
-  await expect(current(cursor)).toContainText('可以选择 Codex、Claude、Pi 或 OpenCode');
+  await expect(current(cursor)).toContainText('可以选择 Codex、Claude、Pi、Kimi 或 OpenCode');
   checks.push(
     'A selected non-Codex Agent can prepare the browser without being promised unsupported Agent browser tools',
   );
