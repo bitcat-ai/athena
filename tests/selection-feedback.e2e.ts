@@ -230,6 +230,13 @@ try {
   await expect.poll(async () => (await query('#headline')).text).toBe('让想法成为现实');
   await expect(page.getByRole('button', { name: '停止任务', exact: true })).toHaveCount(0);
   await expect(page.locator('.browser-agent-status')).toHaveCount(0);
+  // The selection was for that request: once it has been carried out the element is let go.
+  await expect.poll(async () => (await snapshot()).browser.selectedElement).toBe(undefined);
+  const edited = await query('#headline');
+  await page.evaluate((ref) => window.workbench.invoke('browser:element', { ref }), edited.ref);
+  await expect
+    .poll(async () => (await snapshot()).browser.selectedElement?.selector)
+    .toBe('#headline');
   await page.getByRole('button', { name: '元素检查器', exact: true }).click();
   await page.getByRole('tab', { name: '内容', exact: true }).click();
   await expect(page.getByRole('textbox', { name: '元素文字', exact: true })).toHaveValue(

@@ -129,6 +129,15 @@ test(
       console.log(`frames in 2 s: idle ${idle}, during an agent action ${acting}`);
       assert(idle <= 54, `idle frames stay paced (${idle})`);
       assert(acting >= idle * 1.4, `agent actions lift the pace (${idle} → ${acting})`);
+      // With the window in focus an animation that is only watched is shown as it paints.
+      f.runtime.setAttended(true);
+      const watched = await count(() => pause(2000));
+      f.runtime.setAttended(false);
+      await pause(300);
+      const unwatched = await count(() => pause(2000));
+      console.log(`frames in 2 s: watched ${watched}, out of focus again ${unwatched}`);
+      assert(watched >= idle * 1.4, `a focused window shows the page's own rate (${watched})`);
+      assert(unwatched <= 54, `out of focus the pace is bounded again (${unwatched})`);
     } finally {
       await f.close();
     }

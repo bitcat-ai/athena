@@ -60,12 +60,12 @@ try {
   const text =
     '请把当前网页上 h1 标题的文字改成「' + marker + '」。改完请重新读取这个标题，告诉我实际文字。';
   const result = await Promise.race([
-    invoke<string>('voice:delegate', {
+    invoke<{ text: string }>('voice:delegate', {
       requestId: 'voice_real_agent',
       delegationId: 'edit_title',
       offsetMs: 1000,
       transcripts: [{ role: 'user', text, startMs: 0, endMs: 1000 }],
-    }),
+    }).then((reply) => reply.text),
     new Promise<never>((_, reject) => {
       timer = setTimeout(
         () => reject(new Error('Timed out waiting for the real Codex turn')),

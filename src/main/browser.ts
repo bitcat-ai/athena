@@ -620,6 +620,8 @@ export class BrowserRuntime {
   private nextIdleFrameAckAt = 0;
   private interactiveFrameUntil = 0;
   private frameLeases = 0;
+  /** Someone is looking at the pane: the app window has focus. */
+  private attended = false;
   private starting?: Promise<void>;
   private stopping?: Promise<void>;
   private disposed = false;
@@ -1085,6 +1087,16 @@ export class BrowserRuntime {
    * action runs, and for a moment after, so the result of a click or scroll is not shown at the
    * idle rate. The page-side heartbeat alone lapses whenever the host is briefly busy.
    */
+  /**
+   * While the window has focus the page is shown as fast as it paints, so an animation that is
+   * only being watched is not held to the idle rate. Unfocused, frames are paced again, which
+   * bounds the work a page that animates for ever can cause in the background.
+   */
+  setAttended(attended: boolean): void {
+    if (this.attended === attended) return;
+    this.attended = attended;
+    if (attended) this.releaseFrames();
+  }
   private leaseFrames(): () => void {
     this.frameLeases++;
     this.releaseFrames();
@@ -1107,7 +1119,8 @@ export class BrowserRuntime {
       this.frameAcks.delete(acknowledge);
       void page.call('Page.screencastFrameAck', { sessionId }).catch(() => {});
     };
-    if (this.frameLeases > 0 || Date.now() < this.interactiveFrameUntil) acknowledge();
+    if (this.attended || this.frameLeases > 0 || Date.now() < this.interactiveFrameUntil)
+      acknowledge();
     else {
       // Bound idle work even when the capture pipeline has several frames in flight.
       this.nextIdleFrameAckAt = Math.max(Date.now(), this.nextIdleFrameAckAt) + PREVIEW_INTERVAL;

@@ -3905,7 +3905,12 @@ async function launch() {
   window.once('focus', restoreConnections);
   window.on('focus', () => {
     void refreshBrowserInstallation(true);
+    browser?.setAttended(true);
   });
+  // Out of focus the page is shown at the paced rate again.
+  window.on('blur', () => browser?.setAttended(false));
+  window.on('hide', () => browser?.setAttended(false));
+  window.on('minimize', () => browser?.setAttended(false));
   powerMonitor.on('resume', () => void refreshBrowserInstallation(true));
   browserDiscoveryTimer = setInterval(() => void refreshBrowserInstallation(), 15_000);
   browserDiscoveryTimer.unref();
@@ -3913,6 +3918,7 @@ async function launch() {
     await window.loadURL(process.env.WORKBENCH_DEV_SERVER_URL);
   else await window.loadFile(path.join(__dirname, '../renderer/index.html'));
   window.show();
+  browser?.setAttended(window.isFocused());
   if (window.isFocused()) restoreConnections();
   if (!quitting && onboarding.allowsBrowserStartup)
     void browser
