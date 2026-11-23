@@ -49,6 +49,7 @@ import { LiveVoice } from './live-voice';
 import { LIVE_VOICE_MODEL } from '../shared/live-voice';
 import { voiceIntent } from '../shared/voice-intent';
 import { CoderSandbox, coderCliTransport, coderOwner } from './coder-sandbox';
+import { coderCli } from './coder-cli';
 import { SandboxPip, pipKey, type PipTarget } from './sandbox-pip';
 import { SandboxPreview } from './sandbox-preview';
 import {
@@ -160,6 +161,7 @@ let window: BrowserWindow | undefined;
 let store: Store;
 let usage: UsageStore;
 let onboarding: OnboardingRuntime | undefined;
+let coderCommand: ((origin: string) => Promise<string>) | undefined;
 const modelCatalogs = new Map<
   string,
   { models?: ModelOption[]; request?: Promise<ModelOption[]>; probe?: AgentSession }
@@ -2524,6 +2526,9 @@ async function invoke(action: string, payload: unknown) {
     if (action === 'sandbox:policy') return sandboxes.setPolicy(data.policy);
     if (action === 'sandbox:coder/connect') {
       await coder.connect(data.origin, data.token);
+      // Fetched now, while the user is still on the page, so the first sandbox does not wait for it.
+      const connected = coder.connection().origin;
+      if (connected) void coderCommand?.(connected).catch(() => {});
       coderRestored = true;
       await sandboxes.reconcile();
       return sandboxes.instances();
@@ -3508,6 +3513,10 @@ async function launch() {
       (error) => console.error('[sandbox] Coder setup failed:', error.message),
     );
   const coderId = await coderOwner(sandboxDirectory);
+  coderCommand = coderCli({
+    directory: path.join(coderDirectory, 'bin'),
+    fetch: (url, init) => net.fetch(url, init),
+  });
   sandboxes = new SandboxPool(
     sandboxDirectory,
     sandboxProgram,
@@ -3537,7 +3546,11 @@ async function launch() {
             program: sandboxProgram,
             access: coder.access,
             template,
-            transport: coderCliTransport(coder.access, path.join(coderDirectory, 'cli')),
+            transport: coderCliTransport(
+              coder.access,
+              path.join(coderDirectory, 'cli'),
+              coderCommand!,
+            ),
             onArtifact: recordArtifact,
             onUpdate,
           }),

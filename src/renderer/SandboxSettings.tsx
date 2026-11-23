@@ -337,8 +337,8 @@ export function SandboxSettings({ conversations }: { conversations: Map<string, 
         <section className="sandbox-coder" aria-label="Coder">
           <h4 className="settings-subheading">Coder</h4>
           <p className="settings-card-caption">
-            连接后可以按 Coder 模板新建沙箱，它运行在 Coder 的工作区里，回收规则同样适用。需要这台
-            Mac 装有 Coder CLI，模板里带 Node.js。令牌加密保存在本机。
+            连接后可以按 Coder 模板新建沙箱，它运行在 Coder 的工作区里，回收规则同样适用。模板里需要带
+            Node.js。这台 Mac 没有 Coder CLI 时，Athena 会从所连的部署下载一份自用。令牌加密保存在本机。
           </p>
           {coder.connected && (
             <div className="settings-value-row">

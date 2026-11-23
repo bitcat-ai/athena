@@ -3,7 +3,6 @@ import { createHash, randomBytes } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import net from 'node:net';
 import path from 'node:path';
-import { discoverExecutables, executableDirectories } from './agent-discovery';
 import {
   CoderApi,
   CoderApiError,
@@ -100,21 +99,17 @@ export async function coderOwner(directory: string) {
 }
 const verbs: Record<CoderTransition, string> = { start: '启动', stop: '停止', delete: '删除' };
 
-async function coderCommand() {
-  const [found] = await discoverExecutables(['coder'], await executableDirectories());
-  if (!found)
-    throw new Error('这台 Mac 上没有找到 coder 命令。请按 Coder 页面上的说明安装 Coder CLI 后重试');
-  return found;
-}
 /**
- * Reaches workspaces through ssh over the `coder` command installed on this machine. Address
+ * Reaches workspaces through ssh over the `coder` command, see `coderCli` for where the
+ * command comes from. Address
  * and token travel in the child's environment only, and neither the user's own Coder login
  * nor their ssh configuration is read or changed: `configDirectory` is Athena's own.
  */
 export function coderCliTransport(
   access: () => Promise<CoderAccess | undefined>,
   configDirectory: string,
-  executable: () => Promise<string> = coderCommand,
+  /** The `coder` command to use for the deployment at this address. */
+  executable: (origin: string) => Promise<string>,
 ): CoderTransport {
   const ssh = async (workspace: string, options: string[], script?: string) => {
     const current = await access();
@@ -142,7 +137,7 @@ export function coderCliTransport(
         'ServerAliveCountMax=3',
         '-o',
         // Never start a stopped workspace as a side effect: stopping is how sandboxes are recycled.
-        `ProxyCommand=${quote(await executable())} ssh --stdio --disable-autostart ${workspace}`,
+        `ProxyCommand=${quote(await executable(current.origin))} ssh --stdio --disable-autostart ${workspace}`,
         ...options,
         '--',
         `coder.${workspace}`,

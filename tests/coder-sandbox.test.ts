@@ -353,7 +353,7 @@ test('the coder command gets the address and token in its environment, never as 
 
   await assert.rejects(transport.shell('x; rm -rf ~', 'echo'), /名称无效/);
   await assert.rejects(
-    coderCliTransport(async () => undefined, '/x').shell('athena-0a1b2c3d-0123456789', 'echo'),
+    coderCliTransport(async () => undefined, '/x', async () => 'coder').shell('athena-0a1b2c3d-0123456789', 'echo'),
     /尚未连接 Coder/,
   );
 });

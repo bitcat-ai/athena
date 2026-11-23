@@ -7,6 +7,7 @@ import { setTimeout as wait } from 'node:timers/promises';
 import { CoderApi } from '../src/main/coder-api';
 import { CoderConnection } from '../src/main/coder-connection';
 import { CoderSandbox, coderCliTransport, coderOwner } from '../src/main/coder-sandbox';
+import { coderCli } from '../src/main/coder-cli';
 import { SandboxPool } from '../src/main/sandbox-pool';
 import type { LocalSandboxUpdate } from '../src/main/sandbox-runtime';
 
@@ -56,7 +57,7 @@ test(
         transport: coderCliTransport(
           connection.access,
           path.join(directory, 'coder', 'cli'),
-          cli ? async () => cli : undefined,
+          cli ? async () => cli : coderCli({ directory: path.join(directory, 'coder', 'bin') }),
         ),
         onArtifact: () => {},
         onUpdate,
