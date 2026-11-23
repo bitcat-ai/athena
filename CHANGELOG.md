@@ -24,6 +24,13 @@
 
 新手引导、用量和界面的改动由单元测试与本地界面测试覆盖；真实的 OpenAI 试用通话及其用量记录尚未用真实通话验证。Coder 命令的下载在一处 Coder 2.38 部署上验证过。
 
+macOS Apple Silicon：
+
+- [DMG 安装包](https://github.com/bitcat-ai/athena/releases/download/v0.12.1/Athena-0.12.1-mac-arm64.dmg)
+- [ZIP 归档](https://github.com/bitcat-ai/athena/releases/download/v0.12.1/Athena-0.12.1-mac-arm64.zip)
+- [SHA-256 校验文件](https://github.com/bitcat-ai/athena/releases/download/v0.12.1/SHA256SUMS.txt)
+- [Release 页面](https://github.com/bitcat-ai/athena/releases/tag/v0.12.1)
+
 ## 0.12.0 · 2026-11-22
 
 这一版加入 Live 语音：直接和 Athena 说话，需要动手的事由当前对话的 Agent 去做。同时让 Agent 操作网页更顺、更快。
