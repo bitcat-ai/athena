@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { uiBrowserExecutable } from './ui-browser';
-import { chromium, expect } from '@playwright/test';
+import { chromium, expect, type Page } from '@playwright/test';
 import { checkTaskPanels } from './task-panel-checks';
 import { checkAppNotices } from './app-notice-checks';
 import { checkRuntimeSettings } from './runtime-settings-checks';
@@ -987,6 +987,51 @@ try {
   await checkChatLayout(page, output);
   checks.push(
     'Chat groups identity, status and copy in one row, removes duplicate context and keeps history and inspector controls available on demand',
+  );
+  // With reduced motion, as this page runs, icons stay still and views appear at once.
+  const playing = (target: Page, selector: string) =>
+    target.locator(selector).evaluate((node) => node.getAnimations({ subtree: true }).length);
+  const entering = (target: Page, selector: string) =>
+    target.locator(selector).evaluate((node) => getComputedStyle(node).animationName);
+  await page.locator('.sidebar-settings').hover();
+  assert.equal(await playing(page, '.sidebar-settings svg'), 0);
+  await page.getByRole('button', { name: '用量', exact: true }).click();
+  assert.equal(await entering(page, '.usage-panel'), 'none');
+
+  const lively = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
+  lively.setDefaultTimeout(8000);
+  await lively.addInitScript('window.__name = (value) => value;');
+  lively.on('pageerror', (error) => (errors as string[]).push(error.message));
+  await lively.goto(`http://127.0.0.1:${port}`);
+  await lively.evaluate(() => (window as any).__homeFixture.release());
+  await expect(lively.getByRole('heading', { name: '今天想完成什么？' })).toBeVisible();
+  // Icons move once when their control is hovered, and the control itself keeps its place.
+  for (const control of ['.sidebar-settings', '.sidebar-usage', '.search-conversation']) {
+    const before = await lively.locator(control).boundingBox();
+    await lively.locator(control).hover();
+    await expect.poll(() => playing(lively, `${control} svg`)).toBeGreaterThan(0);
+    assert.deepEqual(await lively.locator(control).boundingBox(), before, control + ' moved');
+    await expect.poll(() => playing(lively, `${control} svg`)).toBe(0);
+  }
+  // Every view of the work area arrives the same way, and each arrival plays again.
+  const title = lively.locator('.topbar-title .t-title');
+  const home = await title.getAttribute('data-enter');
+  await lively.getByRole('button', { name: '用量', exact: true }).click();
+  assert.match(await entering(lively, '.usage-panel'), /^t-page-in-[ab]$/);
+  assert.notEqual(await title.getAttribute('data-enter'), home);
+  assert.match(await entering(lively, '.topbar-title .t-title'), /^t-title-in-[ab]$/);
+  await lively.getByRole('button', { name: '设置', exact: true }).click();
+  const body = lively.locator('.settings-body');
+  assert.match(await entering(lively, '.settings-body'), /^t-page-in-[ab]$/);
+  const section = await body.getAttribute('data-enter');
+  await lively.getByRole('tab', { name: '语音' }).click();
+  assert.notEqual(await body.getAttribute('data-enter'), section);
+  await expect
+    .poll(() => body.evaluate((node) => getComputedStyle(node).opacity))
+    .toBe('1');
+  await lively.close();
+  checks.push(
+    'Icons play once on hover without moving their control; usage, settings and their sections share one entrance; reduced motion shows neither',
   );
   assert.deepEqual(errors, []);
   await writeFile(

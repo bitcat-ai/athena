@@ -11,8 +11,11 @@ import {
 } from '../src/main/usage';
 import {
   groupUsage,
+  groupVoice,
   filterUsage,
+  filterVoice,
   summarizeUsage,
+  summarizeVoice,
   unknownTokens,
   zeroTokens,
 } from '../src/shared/usage';
@@ -302,4 +305,48 @@ test('turn model confirmation requires both owned thread and exact turn; missing
     'retain the actual known subtotal',
   );
   assert.equal(store.snapshot().records[0].partial, true);
+});
+
+test('Live voice calls are kept by the time the service reported, and an unfinished call stays a lower bound', async (t) => {
+  const { store, dir } = await setup(t);
+  store.voiceStart('call_a', 'gpt-live-1');
+  store.voiceStart('call_a', 'gpt-live-1');
+  assert.equal(store.voiceFinish('call_a', 42.5, true), true);
+  assert.equal(store.voiceFinish('call_a', 99, true), false, 'a call ends once');
+  store.voiceStart('call_b', 'gpt-live-1');
+  // Ended from elsewhere, with only the last progress figure.
+  assert.equal(store.voiceFinish(undefined, 10), true);
+  store.voiceStart('call_c', 'gpt-live-1');
+  assert.equal(store.voiceFinish('call_c', Number.NaN, true), true);
+  store.voiceStart('call_d', 'gpt-live-1');
+  await store.save();
+
+  const calls = store.snapshot().voice!;
+  assert.deepEqual(
+    calls.map((call) => [call.id, call.seconds, call.final, call.status]),
+    [
+      ['call_a', 42.5, true, 'completed'],
+      ['call_b', 10, false, 'interrupted'],
+      ['call_c', undefined, false, 'interrupted'],
+      ['call_d', undefined, false, 'running'],
+    ],
+  );
+  const summary = summarizeVoice(calls);
+  assert.equal(summary.calls, 4);
+  assert.deepEqual(summary.seconds, { value: 52.5, known: 2, missing: 2 });
+  assert.equal(summary.partial, 1);
+  assert.equal(groupVoice(calls).length, 1);
+  assert.equal(filterVoice([{ ...calls[0], startedAt: Date.now() - 40 * 86_400_000 }], 30).length, 0);
+  assert.equal(summarizeVoice([]).seconds.value, null, 'no calls is unknown, never zero seconds');
+
+  // A call still open when the app stopped is not left running, and token records are untouched.
+  const reopened = new UsageStore(dir);
+  await reopened.load();
+  assert.equal(reopened.snapshot().voice!.at(-1)!.status, 'interrupted');
+  const saved = JSON.parse(await readFile(path.join(dir, 'usage.json'), 'utf8'));
+  saved.voice.push({ id: 7, startedAt: 'never' });
+  await writeFile(path.join(dir, 'usage.json'), JSON.stringify(saved));
+  const damaged = new UsageStore(dir);
+  await damaged.load();
+  assert.equal(damaged.snapshot().voice!.length, 4, 'a malformed call is dropped, the rest stay');
 });

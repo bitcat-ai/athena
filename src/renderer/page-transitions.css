@@ -1,0 +1,76 @@
+:root {
+  --page-enter-dur: 280ms;
+  --page-enter-distance: 8px;
+  --page-enter-blur: 3px;
+  --page-enter-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Page enter: one way in for every view of the work area (conversation, usage, settings and
+   its sections), so moving between them reads as one gesture. A view marks each arrival by
+   flipping data-enter between "a" and "b"; the two names restart the animation without
+   remounting anything. */
+@keyframes t-page-in-a {
+  from {
+    opacity: 0;
+    transform: translateY(var(--page-enter-distance));
+    filter: blur(var(--page-enter-blur));
+  }
+}
+@keyframes t-page-in-b {
+  from {
+    opacity: 0;
+    transform: translateY(var(--page-enter-distance));
+    filter: blur(var(--page-enter-blur));
+  }
+}
+/* Long content rises without the blur, which is costly over a full conversation. */
+@keyframes t-page-rise-a {
+  from {
+    opacity: 0;
+    transform: translateY(var(--page-enter-distance));
+  }
+}
+@keyframes t-page-rise-b {
+  from {
+    opacity: 0;
+    transform: translateY(var(--page-enter-distance));
+  }
+}
+@keyframes t-title-in-a {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+@keyframes t-title-in-b {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+.t-page[data-enter='a'] {
+  animation: t-page-in-a var(--page-enter-dur) var(--page-enter-ease) backwards;
+}
+.t-page[data-enter='b'] {
+  animation: t-page-in-b var(--page-enter-dur) var(--page-enter-ease) backwards;
+}
+.t-page-rise[data-enter='a'] {
+  animation: t-page-rise-a var(--page-enter-dur) var(--page-enter-ease) backwards;
+}
+.t-page-rise[data-enter='b'] {
+  animation: t-page-rise-b var(--page-enter-dur) var(--page-enter-ease) backwards;
+}
+.t-title[data-enter='a'] {
+  animation: t-title-in-a 200ms ease-out backwards;
+}
+.t-title[data-enter='b'] {
+  animation: t-title-in-b 200ms ease-out backwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-page,
+  .t-page-rise,
+  .t-title {
+    animation: none !important;
+  }
+}

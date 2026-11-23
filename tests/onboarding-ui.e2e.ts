@@ -83,6 +83,8 @@ window.workbench={async invoke(command,payload){
  if(command==='onboarding:complete')return fixture.begin('detect','正在核对最终准备状态',{stage:'ready'});
  if(command==='onboarding:defer')return fixture.update({operation:undefined,login:undefined,status:fixture.mode==='legacy'?'legacy':'deferred'});
  if(command==='browser:element-details')return structuredClone(fixture.element);
+ if(command==='voice:config')return fixture.voice||{configured:false,active:false};
+ if(command==='voice:configure'){fixture.voice={configured:true,active:false};return fixture.voice;}
  if(command==='conversation:new'){
   const conversation={id:'new-'+fixture.calls.length,title:'新对话',workspace:fixture.snapshot.settings.workspace,updatedAt:Date.now(),messages:[]};
   fixture.snapshot.conversations.unshift(conversation);
@@ -381,13 +383,88 @@ try {
   await page.getByRole('button', { name: '准备浏览器', exact: true }).click();
   await expect(current(page)).toContainText('我正在打开我们的第一页，稍等一下。');
   await update(page, { operation: undefined, browser: { status: 'ready' }, stage: 'ready' });
-  await expect.poll(async () => (await calls(page, 'onboarding:complete')).length).toBe(1);
-  await expect(page.locator('.onboarding')).toBeVisible();
-  await expect(page.locator('.app-workbench')).toHaveCount(0);
-  await expect(current(page)).toHaveAttribute('data-screen', 'ready');
-  await expect(current(page)).toContainText('准备好了，轮到你的想法。');
+  // Setup ends in the first example, with nothing to choose before it and nothing entered by itself.
+  await expect(current(page)).toHaveAttribute('data-screen', 'demoPage');
   await expect(current(page).locator('.onboarding-activity')).toHaveCount(0);
-  await expect(current(page).locator('.onboarding-actions')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '跳过示例', exact: true })).toBeVisible();
+  await page.waitForTimeout(1100);
+  assert.equal((await calls(page, 'onboarding:complete')).length, 0);
+  await expect(page.locator('.app-workbench')).toHaveCount(0);
+  const demo = page.locator('.onboarding-demo');
+  const oneRow = async (selector: string) => {
+    const tops = await page.locator(selector).evaluateAll((nodes) =>
+      nodes.map((node) => {
+        const box = node.getBoundingClientRect();
+        return box.top + box.height / 2;
+      }),
+    );
+    assert.ok(Math.max(...tops) - Math.min(...tops) <= 1, `${selector} wraps`);
+  };
+  await expect(current(page).getByRole('heading')).toHaveText('准备好了，先来试一样。');
+  const round = demo.getByRole('button', { name: '把按钮改成黑色圆角' });
+  await round.click();
+  await expect(round).toHaveAttribute('aria-pressed', 'true');
+  await expect(demo.locator('.onboarding-demo-cta')).toHaveAttribute('data-round', 'true');
+  await demo.getByRole('button', { name: '标题再大一点' }).click();
+  await demo.getByRole('button', { name: '整页换成深色' }).click();
+  await expect(demo.locator('.onboarding-demo-page')).toHaveAttribute('data-dark', 'true');
+  await oneRow('.onboarding-demo-chips > *');
+  await page.screenshot({ path: path.join(output, 'demo-page.png') });
+  await round.click();
+  await expect(demo.locator('.onboarding-demo-cta')).toHaveAttribute('data-round', 'false');
+
+  await page.getByRole('button', { name: '下一个：Live 语音', exact: true }).click();
+  await expect(current(page).getByRole('heading')).toHaveText('这个示例先跳过。');
+  await expect(page.getByRole('button', { name: '跳过示例', exact: true })).toBeVisible();
+  await expect(demo.getByRole('button', { name: '开始试用' })).toHaveCount(0);
+  await page.screenshot({ path: path.join(output, 'demo-voice-skipped.png') });
+  await demo.getByLabel('OpenAI API 密钥').fill('sk-isolated-test-not-a-real-key');
+  await demo.getByRole('button', { name: '保存并试用' }).click();
+  await expect(current(page).getByRole('heading')).toHaveText('开口说，就像打电话。');
+  await expect(demo.getByRole('button', { name: '开始试用' })).toBeVisible();
+  await oneRow('.onboarding-demo-row > *');
+  assert.equal((await calls(page, 'voice:connect')).length, 0);
+  await page.screenshot({ path: path.join(output, 'demo-voice-ready.png') });
+
+  await page.getByRole('button', { name: '下一个：沙箱', exact: true }).click();
+  await expect(current(page).getByRole('heading')).toHaveText('先在沙箱里跑，不碰你的项目。');
+  await expect(demo.getByRole('status')).toHaveText('在沙箱里跑通了。要用到你的项目里吗？');
+  await expect(demo.locator('.onboarding-demo-pip')).toBeVisible();
+  await oneRow('.onboarding-demo-row > *');
+  await page.screenshot({ path: path.join(output, 'demo-sandbox.png') });
+  // Throwing the sandbox away leaves the project as it was; using it marks what changed.
+  await demo.getByRole('button', { name: '丢掉' }).click();
+  await expect(demo.getByRole('status')).toHaveText('沙箱丢掉了，你的项目没有任何变化。');
+  await expect(demo.locator('.onboarding-demo-project li[data-changed="true"]')).toHaveCount(0);
+  await page.screenshot({ path: path.join(output, 'demo-sandbox-discarded.png') });
+  await demo.getByRole('button', { name: '再来一次' }).click();
+  await demo.getByRole('button', { name: '用到项目里' }).click();
+  await expect(demo.getByRole('status')).toHaveText('改动已用到你的项目里。');
+  await expect(demo.locator('.onboarding-demo-project li[data-changed="true"]')).toHaveCount(2);
+  await page.screenshot({ path: path.join(output, 'demo-sandbox-applied.png') });
+
+  await page.getByRole('button', { name: '下一个：带你做', exact: true }).click();
+  await expect(demo.getByRole('status')).toContainText('第 1 / 3 步');
+  await demo.getByRole('tab', { name: '设置' }).click();
+  await expect(demo.getByRole('status')).toContainText('第 1 / 3 步');
+  await demo.getByRole('tab', { name: '成员' }).click();
+  await expect(demo.getByRole('status')).toContainText('第 2 / 3 步');
+  await page.screenshot({ path: path.join(output, 'demo-guide.png') });
+  await demo.getByRole('button', { name: '邀请成员' }).click();
+  await demo.getByRole('button', { name: '发送邀请' }).click();
+  await expect(demo.getByRole('status')).toHaveText('完成了，每一步都是你自己点的。');
+  await expect(demo.locator('.onboarding-demo-steps li[data-state="done"]')).toHaveCount(3);
+  await page.screenshot({ path: path.join(output, 'demo-guide-done.png') });
+  // Every example has been seen: entering is all that is left.
+  await expect(page.getByRole('button', { name: /^下一个/ })).toHaveCount(0);
+  await expect(page.locator('.onboarding-progress-track')).toHaveAttribute('aria-valuenow', '4');
+  assert.equal((await calls(page, 'onboarding:complete')).length, 0);
+  await page.getByRole('button', { name: '进入 Athena', exact: true }).click();
+  await expect.poll(async () => (await calls(page, 'onboarding:complete')).length).toBe(1);
+  await expect(current(page)).toContainText('最后确认一下，我们就可以开始了。');
+  await expect(page.locator('.onboarding-demo')).toHaveCount(0);
+  await expect(page.locator('.app-workbench')).toHaveCount(0);
+  checks.push('The four examples run inside the conversation; Live voice is skipped without a key and never connects on its own');
   await expect(
     page.locator('.onboarding-message.assistant + .onboarding-message.assistant'),
   ).toHaveCount(0);
@@ -434,8 +511,8 @@ try {
     )
     .toBe(390);
   checks.push(
-    'Athena never speaks twice in a row: the automatic final check is silent and leaves the ready message as the last one',
-    'Automatic handoff waits for the matching asynchronous complete event, then enters the workbench and refreshes actual directory/agent state without creating or sending a conversation; the newly mounted panel ResizeObserver tracks 1024px viewport and sidebar changes',
+    'Athena never speaks twice in a row; setup leads into the examples and nothing enters the workbench by itself',
+    'Handoff waits for the matching asynchronous complete event, then enters the workbench and refreshes actual directory/agent state without creating or sending a conversation; the newly mounted panel ResizeObserver tracks 1024px viewport and sidebar changes',
   );
   await page.close();
 
@@ -460,6 +537,8 @@ try {
     browser: { status: 'deferred' },
     stage: 'ready',
   });
+  await expect(current(skip)).toHaveAttribute('data-screen', 'demoPage');
+  await skip.getByRole('button', { name: '跳过示例', exact: true }).click();
   await expect(skip.locator('.onboarding')).toHaveCount(0);
   await expect(skip.locator('.app-workbench')).toBeVisible();
   await expect(skip.locator('.browser-drawer')).toHaveAttribute('aria-hidden', 'true');
@@ -650,6 +729,67 @@ try {
   );
   await transfer.close();
 
+  // With motion and in the dark theme: the pointer travels first, then the change lands.
+  const lively = await createPage('fresh', true, true);
+  await lively.evaluate(() => (window as any).__onboardingFixture.release());
+  await lively.getByRole('button', { name: '开始配置', exact: true }).click();
+  await update(lively, {
+    operation: undefined,
+    codex: { status: 'ready' },
+    workspace: { status: 'ready' },
+    coreReady: true,
+    stage: 'browser',
+  });
+  await lively.getByRole('button', { name: '选择 Codex', exact: true }).click();
+  await lively.getByRole('button', { name: '以后再说', exact: true }).click();
+  await update(lively, {
+    operation: undefined,
+    status: 'complete',
+    requiresSetup: false,
+    coreReady: true,
+    browser: { status: 'deferred' },
+    stage: 'ready',
+  });
+  const livelyDemo = lively.locator('.onboarding-demo');
+  const larger = livelyDemo.getByRole('button', { name: '标题再大一点' });
+  // The conversation has followed the new message down by itself before anything is pressed.
+  await expect(lively.getByRole('button', { name: '下一个：Live 语音', exact: true })).toBeInViewport({
+    ratio: 1,
+  });
+  await expect(lively.locator('.onboarding-jump-latest')).toHaveCount(0);
+  await expect
+    .poll(() =>
+      lively.evaluate(() => {
+        const node = document.querySelector('.onboarding-scroll')!;
+        return node.scrollHeight - node.clientHeight - node.scrollTop;
+      }),
+    )
+    .toBeLessThanOrEqual(1);
+  // Raw pointer input, as a person presses it: no scrolling into view by the test driver.
+  const chip = (await larger.boundingBox())!;
+  await lively.mouse.click(chip.x + chip.width / 2, chip.y + chip.height / 2);
+  await expect(larger).toHaveAttribute('aria-pressed', 'false');
+  await expect(livelyDemo.locator('.onboarding-demo-cursor')).toBeVisible();
+  await expect(larger).toHaveAttribute('aria-pressed', 'true');
+  // Pressing inside an example leaves the conversation where it was.
+  assert.ok(
+    (await lively.evaluate(() => {
+      const node = document.querySelector('.onboarding-scroll')!;
+      return node.scrollHeight - node.clientHeight - node.scrollTop;
+    })) <= 1,
+  );
+  await lively.screenshot({ path: path.join(output, 'demo-page-dark.png') });
+  await lively.getByRole('button', { name: '下一个：Live 语音', exact: true }).click();
+  await lively.getByRole('button', { name: '下一个：沙箱', exact: true }).click();
+  await expect(livelyDemo.getByRole('status')).toHaveText('正在沙箱里运行…');
+  await expect(livelyDemo.getByRole('status')).toHaveText('在沙箱里跑通了。要用到你的项目里吗？');
+  await lively.waitForTimeout(500);
+  await lively.screenshot({ path: path.join(output, 'demo-sandbox-dark.png') });
+  await lively.getByRole('button', { name: '下一个：带你做', exact: true }).click();
+  await expect(livelyDemo.locator('.onboarding-demo-cursor')).toContainText('打开「成员」');
+  await lively.waitForTimeout(700);
+  await lively.screenshot({ path: path.join(output, 'demo-guide-dark.png') });
+  await lively.close();
   const deferred = await createPage('deferred');
   await deferred.evaluate(() => (window as any).__onboardingFixture.release());
   await expect(deferred.locator('.onboarding')).toHaveCount(0);
@@ -865,42 +1005,15 @@ try {
     workspace: { status: 'ready', mode: 'personal', path: '/fixture/personal' },
   });
   await flow.getByRole('button', { name: '准备浏览器', exact: true }).click();
-  const history = flow.locator('.onboarding-scroll');
-  await history.dispatchEvent('wheel', { deltaY: -300 });
-  await history.evaluate((node) => {
-    node.scrollTop = 0;
-  });
-  await expect(flow.getByRole('button', { name: '回到最新', exact: true })).toBeVisible();
   await update(flow, { operation: undefined, browser: { status: 'ready' }, stage: 'ready' });
-  await flow.waitForTimeout(1100);
-  assert.equal(
-    (await calls(flow, 'onboarding:complete')).length,
-    0,
-    'Reading earlier messages pauses the automatic handoff',
-  );
-  await flow.getByRole('button', { name: '回到最新', exact: true }).click();
+  await flow.getByRole('button', { name: '跳过示例', exact: true }).click();
   await expect.poll(async () => (await calls(flow, 'onboarding:complete')).length).toBe(1);
-  await expect(flow.getByRole('button', { name: '进入 Athena', exact: true })).toHaveCount(0);
   await flow.screenshot({ path: path.join(output, 'ready-final-check.png') });
   await expect(
     flow.locator('.onboarding-message.assistant + .onboarding-message.assistant'),
   ).toHaveCount(0);
   await expect(flow.locator('.app-workbench')).toHaveCount(0);
-  await history.dispatchEvent('wheel', { deltaY: -300 });
-  await history.evaluate((node) => {
-    node.scrollTop = 0;
-  });
-  await expect(flow.getByRole('button', { name: '回到最新', exact: true })).toBeVisible();
   await update(flow, { operation: undefined, status: 'complete', requiresSetup: false });
-  await flow.waitForTimeout(1100);
-  await expect(flow.locator('.onboarding')).toBeVisible();
-  await expect(flow.locator('.app-workbench')).toHaveCount(0);
-  assert.equal(
-    (await calls(flow, 'onboarding:complete')).length,
-    1,
-    'Reading during final verification preserves completion without submitting it again',
-  );
-  await flow.getByRole('button', { name: '回到最新', exact: true }).click();
   await expect(flow.locator('.app-workbench')).toHaveAttribute('data-onboarding-enter', 'true');
   await expect(flow.locator('.app-workbench')).toHaveAttribute('inert', '');
   await expect(flow.locator('.browser-drawer')).toHaveClass(/is-open/);

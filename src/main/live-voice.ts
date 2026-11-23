@@ -39,6 +39,13 @@ Generate <|SpawnThinking|> before giving an answer that depends on backend work.
 只转述后端返回的内容：做了什么、没做什么、还要用户确认什么。后端没有说的原因和细节不要自己解释，尤其不要猜测后端是依据什么选中某个元素的。后端返回核实的结果后才能说任务完成。
 任务审批、敏感输入和人工操作必须请用户在 Athena 界面完成，口头同意不替代界面审批。`;
 
+// The first-run trial has no conversation and no workspace behind it: it only talks.
+const trialInstructions = `你是 Athena 的语音助手，正在首次引导里让用户试听。用简洁、自然的中文交流，语速从容，不过分热情。
+先用一句话问好并请用户随便说点什么；之后每次回答不超过两句。
+这次试用不能查看网页、读取文件或执行任务：用户提出这类要求时，直接说明完成准备后就可以在对话里用语音交给你，不要声称已经做了什么。
+Do not generate <|SpawnThinking|>.`;
+const TRIAL_TASK = '这是首次引导里的试用，没有执行任何任务。请告诉用户：完成准备后，就可以在对话里用语音把这件事交给 Athena。';
+
 interface Options {
   file: string;
   encrypt(value: string): Promise<string>;
@@ -85,6 +92,8 @@ function pointerAt(value: unknown): VoicePointer | undefined {
 interface Call {
   requestId: string;
   conversationId: string;
+  /** A first-run trial: conversation only, nothing is carried out. */
+  trial: boolean;
   key?: string;
   sessionId?: string;
   cancelled: boolean;
@@ -196,7 +205,12 @@ export class LiveVoice {
     }
   }
 
-  connect(requestId: unknown, conversationId: string, sdp: unknown): Promise<LiveVoiceConnection> {
+  connect(
+    requestId: unknown,
+    conversationId: string,
+    sdp: unknown,
+    trial = false,
+  ): Promise<LiveVoiceConnection> {
     if (this.call || this.saving) throw new Error('已有语音连接正在处理，请先结束通话');
     if (!this.encrypted) throw new Error('请先在「设置 › 语音」保存 OpenAI API 密钥');
     if (
@@ -210,6 +224,7 @@ export class LiveVoice {
     const call: Call = {
       requestId: identifier(requestId),
       conversationId,
+      trial,
       cancelled: false,
       controller: new AbortController(),
       tasks: new Map(),
@@ -240,7 +255,7 @@ export class LiveVoice {
           body: JSON.stringify({
             session: {
               model: LIVE_VOICE_MODEL,
-              instructions,
+              instructions: call.trial ? trialInstructions : instructions,
               delegation: { type: 'client' },
               store: false,
             },
@@ -414,14 +429,16 @@ export class LiveVoice {
           item.state = 'running';
           try {
             if (call.cancelled) throw new Error('语音会话已结束，未执行新任务');
-            const result = await this.options.runTask(
-              call.conversationId,
-              item.text,
-              item.context,
-              item.controller.signal,
-              item.pointer,
-              item.relay.length ? item.relay : undefined,
-            );
+            const result = call.trial
+              ? TRIAL_TASK
+              : await this.options.runTask(
+                  call.conversationId,
+                  item.text,
+                  item.context,
+                  item.controller.signal,
+                  item.pointer,
+                  item.relay.length ? item.relay : undefined,
+                );
             item.resolve(item.superseded ? SUPERSEDED : result);
           } catch (error) {
             // Work that was stopped to make way has no failure to report.

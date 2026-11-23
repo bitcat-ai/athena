@@ -7,16 +7,21 @@ import {
   ChartNoAxesCombinedIcon,
   ExternalLinkIcon,
   HelpCircleIcon,
+  Mic01Icon,
   RefreshCwIcon,
 } from '@hugeicons-pro/core-stroke-rounded';
 import { Icon } from './ui';
 import { ChoiceSelect } from './ChoiceSelect';
 import { API_PRICING_SOURCE, costParts, type CostPart } from '../shared/usage-pricing';
 import './usage-currency.css';
+import './page-transitions.css';
 import {
   groupUsage,
+  groupVoice,
   filterUsage,
+  filterVoice,
   summarizeUsage,
+  summarizeVoice,
   usageDate,
   type UsageAmount,
   type UsageSnapshot,
@@ -61,6 +66,18 @@ function DollarAmount({ amount, partial = false }: { amount: UsageAmount; partia
     </span>
   );
 }
+/** Call time as people say it: seconds under a minute, minutes and seconds above. */
+const duration = (seconds: number | null) => {
+  if (seconds === null) return '未知';
+  const whole = Math.round(seconds);
+  const hours = Math.floor(whole / 3600);
+  const minutes = Math.floor((whole % 3600) / 60);
+  return hours
+    ? `${hours} 小时 ${minutes} 分`
+    : minutes
+      ? `${minutes} 分 ${whole % 60} 秒`
+      : `${whole} 秒`;
+};
 function Amount({ amount }: { amount: UsageAmount }) {
   return (
     <span title={amount.missing ? `${amount.missing} 项缺少此字段` : '已采集值'}>
@@ -71,7 +88,7 @@ function Amount({ amount }: { amount: UsageAmount }) {
     </span>
   );
 }
-export function UsagePanel() {
+export function UsagePanel({ enter }: { enter?: 'a' | 'b' }) {
   const [data, setData] = useState<UsageSnapshot>();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -114,6 +131,15 @@ export function UsagePanel() {
   const chart = daily.slice(-30);
   const peak = Math.max(0.000001, ...chart.map((day) => day.cost.value ?? 0));
   const incomplete = total.missing > 0 || total.partial > 0;
+  // Voice is not an Agent's work: it follows the time range and ignores the other two filters.
+  const calls = useMemo(
+    () => filterVoice(data?.voice ?? [], days === 'all' ? undefined : Number(days)),
+    [data, days],
+  );
+  const voice = summarizeVoice(calls);
+  const voiceDays = groupVoice(calls).slice(-30);
+  const voicePeak = Math.max(1, ...voiceDays.map((day) => day.seconds.value ?? 0));
+  const voiceIncomplete = voice.seconds.missing > 0 || voice.partial > 0;
   const costIncomplete = total.cost.missing > 0 || total.cost.partial > 0;
   const showDates = () => {
     flushSync(() => setDimension('date'));
@@ -122,7 +148,7 @@ export function UsagePanel() {
     detailsHeading.current?.focus({ preventScroll: true });
   };
   return (
-    <section className="usage-panel" aria-label="独立用量面板">
+    <section className="usage-panel t-page" data-enter={enter} aria-label="独立用量面板">
       <div className="usage-heading">
         <div>
           <h1>用量概览</h1>
@@ -300,6 +326,88 @@ export function UsagePanel() {
               </Card>
             ))}
           </dl>
+          <section className="usage-voice" aria-labelledby="usage-voice-title">
+            <div className="usage-section-heading">
+              <h2 id="usage-voice-title">
+                <Icon icon={Mic01Icon} size={15} />
+                Live 语音
+              </h2>
+              <span className="usage-voice-note">按通话时长计费，与上面的 Token 估算分开</span>
+            </div>
+            {calls.length ? (
+              <div className="usage-voice-body">
+                <dl className="usage-voice-metrics">
+                  <div>
+                    <dt>通话时长</dt>
+                    <dd data-testid="usage-voice-time">
+                      {duration(voice.seconds.value)}
+                      {voice.seconds.value !== null && voiceIncomplete && (
+                        <small className="partial-marker">部分</small>
+                      )}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>通话次数</dt>
+                    <dd data-testid="usage-voice-calls">{voice.calls}</dd>
+                  </div>
+                  <div>
+                    <dt>平均每次</dt>
+                    <dd>
+                      {duration(
+                        voice.seconds.value === null
+                          ? null
+                          : voice.seconds.value / voice.seconds.known,
+                      )}
+                    </dd>
+                  </div>
+                </dl>
+                <div
+                  className="usage-daily-chart usage-voice-chart"
+                  role="group"
+                  aria-label="每日通话时长，最多显示最近 30 个有通话的日期"
+                >
+                  {voiceDays.map((day) => (
+                    <div
+                      key={day.key}
+                      className="usage-day"
+                      role="img"
+                      aria-label={`${day.key}：${day.calls} 次通话，${duration(day.seconds.value)}`}
+                      title={`${day.key} · ${day.calls} 次 · ${duration(day.seconds.value)}`}
+                    >
+                      <span className="usage-day-value">
+                        {day.seconds.value === null
+                          ? '?'
+                          : voiceDays.length < 8
+                            ? duration(day.seconds.value)
+                            : ''}
+                      </span>
+                      <span
+                        className="usage-day-bar"
+                        style={{
+                          height: `${day.seconds.value ? Math.max(1, (day.seconds.value / voicePeak) * 72) : 0}px`,
+                        }}
+                      />
+                      <span className="usage-day-label">{day.key.slice(5)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <p className="usage-voice-empty">
+                {data?.voice?.length
+                  ? '这个时间范围内没有语音通话。'
+                  : '还没有语音通话。在输入框点麦克风，就可以直接和 Athena 说话。'}
+              </p>
+            )}
+            {calls.length > 0 && (
+              <p className="panel-note">
+                时长取自 OpenAI 在通话中报告的计费秒数，静音期间也计时。
+                {voice.seconds.missing > 0 ? `${voice.seconds.missing} 次通话没有报告时长，未计入。` : ''}
+                {voice.partial > 0 ? `${voice.partial} 次通话未正常收尾，只计到最后一次报告。` : ''}
+                这里不估算金额，费用以 OpenAI 账单为准。
+              </p>
+            )}
+          </section>
           <div id="usage-details" className="usage-details">
             <div className="usage-section-heading">
               <h2 ref={detailsHeading} tabIndex={-1}>

@@ -437,3 +437,17 @@ test('syllables become sentences, so a request reads as it was spoken', () => {
     '用户（之前，已处理）：把按钮改成橙色\n语音助手（之前，已处理）：好了。\n用户（本次新增）：旁边那个输入框你看到了吗',
   );
 });
+
+test('a first-run trial talks without a conversation and carries nothing out', async (t) => {
+  const w = await world(t);
+  await w.voice.configure(key);
+  await w.voice.connect('request_t', '', offer, true);
+  const body = JSON.parse(String(w.requests[0].init.body));
+  assert.match(body.session.instructions, /首次引导/);
+  // The same wire format as a real call; the host is what keeps a trial from doing anything.
+  assert.deepEqual(body.session.delegation, { type: 'client' });
+  assert.match(await w.voice.delegate('request_t', 'delegation_t', input, 300), /没有执行任何任务/);
+  assert.equal(w.tasks.length, 0);
+  await w.voice.disconnect('request_t');
+  assert.equal(w.voice.config().active, false);
+});

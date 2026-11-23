@@ -57,8 +57,22 @@ export interface UsageRecord {
   issues: string[];
   apiPricing?: ApiPricing;
 }
+/** One Live voice call. Voice is billed by the second, apart from the Agent's tokens. */
+export interface VoiceUsageRecord {
+  id: string;
+  startedAt: number;
+  endedAt?: number;
+  model: string;
+  /** Billed seconds as the service last reported them; absent when it reported none. */
+  seconds?: number;
+  /** The service closed the call with a final figure; otherwise `seconds` is a lower bound. */
+  final: boolean;
+  status: 'running' | 'completed' | 'interrupted';
+}
 export interface UsageSnapshot {
   records: UsageRecord[];
+  /** Absent in files written before voice calls were recorded. */
+  voice?: VoiceUsageRecord[];
   since: number;
   updatedAt: number;
 }
@@ -97,6 +111,46 @@ export function summarizeUsage(records: UsageRecord[]): UsageSummary {
     amounts,
     cost: summarizeUsageCost(records),
   };
+}
+export interface VoiceUsageSummary {
+  calls: number;
+  /** Seconds across the calls that reported any; `missing` counts those that reported none. */
+  seconds: UsageAmount;
+  /** Calls whose figure is a lower bound, or that are still going. */
+  partial: number;
+  latest?: number;
+}
+export function filterVoice(records: VoiceUsageRecord[], days?: number, now = Date.now()) {
+  const start = new Date(now);
+  start.setHours(0, 0, 0, 0);
+  if (days) start.setDate(start.getDate() - (days - 1));
+  return records.filter(
+    (record) => !days || (record.startedAt >= start.getTime() && record.startedAt <= now),
+  );
+}
+export function summarizeVoice(records: VoiceUsageRecord[]): VoiceUsageSummary {
+  const known = records.filter((record) => record.seconds !== undefined);
+  return {
+    calls: records.length,
+    seconds: {
+      value: known.length ? known.reduce((sum, record) => sum + record.seconds!, 0) : null,
+      known: known.length,
+      missing: records.length - known.length,
+    },
+    partial: known.filter((record) => !record.final).length,
+    latest: records.length ? Math.max(...records.map((record) => record.startedAt)) : undefined,
+  };
+}
+/** Voice calls by local day, oldest first. */
+export function groupVoice(records: VoiceUsageRecord[]) {
+  const groups = new Map<string, VoiceUsageRecord[]>();
+  for (const record of records) {
+    const key = usageDate(record.startedAt);
+    groups.set(key, [...(groups.get(key) ?? []), record]);
+  }
+  return [...groups]
+    .map(([key, values]) => ({ key, ...summarizeVoice(values) }))
+    .sort((a, b) => a.key.localeCompare(b.key));
 }
 export function usageDate(at: number): string {
   const d = new Date(at);

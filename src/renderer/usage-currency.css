@@ -94,6 +94,82 @@
   }
 }
 .usage-panel {
+  /* Visually hidden helpers inside are positioned against the panel, so a long panel never
+     makes the window itself scrollable. */
+  position: relative;
   min-width: 0;
   container-type: inline-size;
+}
+
+/* Live voice: billed by time, so it sits apart from the token figures. */
+.usage-voice {
+  margin: 0 0 28px;
+  padding: 20px;
+  border-radius: 24px;
+  background: var(--surface-secondary);
+}
+.usage-voice .usage-section-heading h2 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.usage-voice-note {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 11px;
+  text-align: end;
+}
+.usage-voice-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+  align-items: end;
+  gap: 28px;
+}
+.usage-voice-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, auto));
+  justify-content: start;
+  gap: 8px 28px;
+  margin: 0;
+}
+.usage-voice-metrics dt {
+  color: var(--muted);
+  font-size: 11px;
+}
+.usage-voice-metrics dd {
+  margin: 6px 0 0;
+  font-size: clamp(18px, 2vw, 25px);
+  letter-spacing: -0.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.usage-voice-metrics > div:not(:first-child) dd {
+  color: var(--secondary);
+  font-size: 15px;
+  letter-spacing: 0;
+  line-height: 30px;
+}
+.usage-voice .usage-voice-chart {
+  min-height: 0;
+  height: 112px;
+}
+.usage-voice-chart .usage-day {
+  cursor: default;
+}
+.usage-voice-empty {
+  margin: 0;
+  color: var(--secondary);
+  font-size: 12px;
+}
+.usage-voice .panel-note {
+  margin: 14px 0 0;
+}
+@container (max-width: 660px) {
+  .usage-voice-body {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+  .usage-voice-note {
+    display: none;
+  }
 }

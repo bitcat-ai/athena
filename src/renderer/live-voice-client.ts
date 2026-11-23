@@ -97,7 +97,8 @@ export class LiveVoiceClient {
     this.changed(this.state);
   }
 
-  async start(conversationId: string) {
+  /** `trial` is the first-run tryout: no conversation, and nothing is carried out. */
+  async start(conversationId: string, trial = false) {
     if (this.call) return;
     let peer: RTCPeerConnection | undefined;
     let channel: RTCDataChannel;
@@ -182,7 +183,7 @@ export class LiveVoiceClient {
       check();
       const answer = await this.bridge.invoke<LiveVoiceConnection>('voice:connect', {
         requestId: call.requestId,
-        conversationId,
+        ...(trial ? { trial: true } : { conversationId }),
         sdp: peer.localDescription?.sdp,
       });
       check();
@@ -471,6 +472,8 @@ export class LiveVoiceClient {
         await this.bridge.invoke('voice:disconnect', {
           requestId: call.requestId,
           finalized: call.finalized,
+          // What the service last said this call has used; the host keeps it with the usage records.
+          seconds: this.state.seconds,
         });
         if (this.call === call) this.call = undefined;
         this.update({ status: 'idle', tasks: 0 });

@@ -85,7 +85,6 @@
   min-height: 0;
   overflow-y: auto;
   padding: 28px clamp(24px, 3vw, 48px) 36px;
-  animation: panel-enter 150ms ease-out;
 }
 .usage-heading {
   display: flex;

@@ -95,6 +95,7 @@ import { ConversationSearch } from './ConversationSearch';
 import { ConversationMenu, DeleteConversationDialog } from './ConversationMenu';
 import { UserMenu, WebContextMenu, useAppearance } from './HomeMenus';
 import { Onboarding } from './Onboarding';
+import './page-transitions.css';
 import type { OnboardingState } from '../shared/onboarding';
 import {
   copyableText,
@@ -1867,6 +1868,21 @@ export default function App() {
     [action, browser.status, showToast],
   );
 
+  // Each arrival at a view flips its marker, which restarts the shared page-enter animation.
+  const viewKey = settingsTab ? 'settings' : showUsage ? 'usage' : `conversation:${conversationId ?? ''}`;
+  const arrival = useRef({ view: viewKey, tab: settingsTab, viewTurn: false, tabTurn: false });
+  if (arrival.current.view !== viewKey) {
+    // A draft that has just been sent gets its id: the same page, not a new one.
+    const sent = arrival.current.view === 'conversation:' && viewKey.startsWith('conversation:');
+    if (!sent) arrival.current.viewTurn = !arrival.current.viewTurn;
+    arrival.current.view = viewKey;
+  }
+  if (arrival.current.tab !== settingsTab) {
+    if (settingsTab) arrival.current.tabTurn = !arrival.current.tabTurn;
+    arrival.current.tab = settingsTab;
+  }
+  const viewEnter = arrival.current.viewTurn ? 'a' : 'b';
+  const tabEnter = arrival.current.tabTurn ? 'a' : 'b';
   const settingsWorkspace = settingsTab ? (
     <section className="settings-workspace" aria-label="设置">
       <Tabs
@@ -1911,7 +1927,7 @@ export default function App() {
             记忆
           </Tabs.Tab>
         </Tabs.List>
-        <div className="settings-body">
+        <div className="settings-body t-page" data-enter={tabEnter}>
           {settingsTab === 'voice' && (
               <Tabs.Panel id="voice"><VoiceSettings managedCall={voiceInCall} /></Tabs.Panel>
           )}
@@ -2803,7 +2819,7 @@ export default function App() {
                         <Icon icon={PanelLeftOpenIcon} size={17} />
                       </ActionButton>
                     )}
-                    <span>
+                    <span className="t-title" data-enter={viewEnter}>
                       {settingsTab ? '设置' : showUsage ? '用量' : conversation?.title || '新对话'}
                     </span>
                   </div>
@@ -2868,7 +2884,7 @@ export default function App() {
                   </div>
                 </header>
                 {settingsWorkspace}
-                {showUsage && !settingsTab && <UsagePanel />}
+                {showUsage && !settingsTab && <UsagePanel enter={viewEnter} />}
                 <div className="conversation-column" hidden={showUsage || Boolean(settingsTab)}>
                   <div
                     className={`chat-panel ${editingElement ? 'is-editing' : ''} ${isHome ? 'is-home' : ''}`}
@@ -2916,13 +2932,13 @@ export default function App() {
                         }}
                       >
                         {!messages.length ? (
-                          <div className="welcome" hidden={voiceVisible}>
+                          <div className="welcome t-page-rise" data-enter={viewEnter} hidden={voiceVisible}>
                             <img className="welcome-symbol" src={athenaLogo} alt="Athena" />
                             <h1>今天想完成什么？</h1>
                             <p>打开网页、调整界面，或把任务交给 Athena。</p>
                           </div>
                         ) : (
-                          <div className="messages">
+                          <div className="messages t-page-rise" data-enter={viewEnter}>
                             {messages.map((message) => (
                               <article
                                 key={message.id}
@@ -3649,7 +3665,7 @@ export default function App() {
               </div>
               <aside
                 hidden={showUsage || Boolean(settingsTab)}
-                className={`browser-drawer t-resize ${browserVisible ? 'is-open' : ''}`}
+                className={`browser-drawer ${browserVisible ? 'is-open' : ''}`}
                 aria-label="浏览器侧栏"
                 aria-hidden={!browserVisible}
                 inert={!browserVisible}

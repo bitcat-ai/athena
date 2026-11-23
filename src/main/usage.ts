@@ -124,6 +124,20 @@ export class UsageStore {
       )
         throw new Error('用量记录格式不正确；原文件已保留');
       this.data = data;
+      // Calls are kept only if they are well formed; a damaged entry never blocks the token records.
+      this.data.voice = (Array.isArray(data.voice) ? data.voice : []).filter(
+        (call: any) =>
+          call &&
+          typeof call.id === 'string' &&
+          Number.isFinite(call.startedAt) &&
+          typeof call.model === 'string' &&
+          (call.seconds === undefined || (Number.isFinite(call.seconds) && call.seconds >= 0)),
+      );
+      for (const call of this.data.voice!)
+        if (call.status === 'running') {
+          call.status = 'interrupted';
+          call.final = false;
+        }
       for (const record of this.data.records) {
         record.tokens = parseTokenCounts(record.tokens);
         if (record.baseline) record.baseline = parseTokenCounts(record.baseline);
@@ -161,6 +175,28 @@ export class UsageStore {
 
   snapshot(): UsageSnapshot {
     return structuredClone(this.data);
+  }
+  /** A Live call the service has accepted: it is billed from here on. */
+  voiceStart(id: string, model: string) {
+    const calls = (this.data.voice ??= []);
+    if (calls.some((call) => call.id === id)) return;
+    calls.push({ id, model, startedAt: Date.now(), final: false, status: 'running' });
+  }
+  /**
+   * `seconds` is what the service last reported for the call, `final` whether that was its
+   * closing figure. Without an id, whichever call is still open is the one that ended.
+   */
+  voiceFinish(id: string | undefined, seconds?: number, final = false): boolean {
+    const call = this.data.voice?.find((item) =>
+      id === undefined ? item.status === 'running' : item.id === id,
+    );
+    if (!call || call.status !== 'running') return false;
+    call.endedAt = Date.now();
+    if (seconds !== undefined && Number.isFinite(seconds) && seconds >= 0 && seconds <= 86_400)
+      call.seconds = seconds;
+    call.final = final && call.seconds !== undefined;
+    call.status = call.final ? 'completed' : 'interrupted';
+    return true;
   }
   start(id: string, agent: AgentId, requestedModel?: string) {
     if (this.data.records.some((record) => record.id === id)) return;

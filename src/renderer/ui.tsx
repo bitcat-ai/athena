@@ -1,9 +1,13 @@
 import { Button, Tooltip } from '@heroui/react';
 import { HugeiconsIcon, type HugeiconsIconProps } from '@hugeicons/react';
-import type { ComponentProps } from 'react';
+import { useRef, type ComponentProps } from 'react';
+import { useIconMotion } from './icon-motion';
 
+/** Icons inside a control move once when it is hovered; which ones, and how, is in icon-motion. */
 export function Icon(props: HugeiconsIconProps) {
-  return <HugeiconsIcon aria-hidden strokeWidth={1.7} {...props} />;
+  const svg = useRef<SVGSVGElement>(null);
+  useIconMotion(svg, props.icon);
+  return <HugeiconsIcon aria-hidden strokeWidth={1.7} {...props} ref={svg} />;
 }
 
 /** Keeps toolbar sizing and accessible tooltips consistent across the workspace. */

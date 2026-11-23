@@ -14,6 +14,8 @@ import { Icon } from './ui';
 import { AgentIcon } from './AgentIcon';
 import { supportsBrowser } from '../shared/agents';
 import athenaLogo from './assets/brand/athena-profile.png';
+import { demos, OnboardingDemo, type DemoId } from './OnboardingDemos';
+import type { LiveVoiceConfig } from '../shared/live-voice';
 import type {
   OnboardingCommandPayloads,
   OnboardingInstallPlan,
@@ -24,6 +26,10 @@ import './onboarding.css';
 type Screen =
   | 'welcome'
   | 'about'
+  | 'demoPage'
+  | 'demoVoice'
+  | 'demoSandbox'
+  | 'demoGuide'
   | 'resume'
   | 'connect'
   | 'detecting'
@@ -109,6 +115,13 @@ const pendingScreens = new Set<Screen>([
   'finishing',
 ]);
 const readyScreens = new Set<Screen>(['ready', 'readyWithoutBrowser']);
+const demoScreens: Record<DemoId, Screen> = {
+  page: 'demoPage',
+  voice: 'demoVoice',
+  sandbox: 'demoSandbox',
+  guide: 'demoGuide',
+};
+const demoOf = (screen: Screen) => demos.find((demo) => demoScreens[demo.id] === screen);
 const activityLabels: Partial<Record<Screen, string>> = {
   detecting: '查看本机 Agent',
   agentConnecting: '核对连接',
@@ -202,7 +215,13 @@ function screenForState(state: OnboardingState, intent: Intent): Screen {
 function content(
   screen: Screen,
   state: OnboardingState,
-  context: { hasDraft: boolean; existingWorkbench: boolean },
+  context: {
+    hasDraft: boolean;
+    existingWorkbench: boolean;
+    voice?: LiveVoiceConfig;
+    /** First time through: the first example is also the message that setup is done. */
+    tour: boolean;
+  },
 ): {
   title: string;
   lines: string[];
@@ -284,6 +303,42 @@ function content(
       return {
         title: '你来决定，我们一起完成。',
         lines: ['写一段代码，调整一个页面，或把网页上的操作交给我。', '先一起把工作的地方准备好。'],
+      };
+    case 'demoPage':
+      return {
+        title: context.tour ? '准备好了，先来试一样。' : '说一句，页面当场就变。',
+        lines: [
+          context.tour
+            ? '说一句，页面当场就变：选中页面上的东西，告诉我想怎么改。'
+            : '选中页面上的东西，告诉我想怎么改，马上就能看到。',
+          '点一句试试，再点一次就撤回。',
+        ],
+        note: '这是一个示例页面。在 Athena 里，右侧打开的任何网页都可以这样改。',
+      };
+    case 'demoVoice':
+      return context.voice && !context.voice.configured
+        ? {
+            title: '这个示例先跳过。',
+            lines: [
+              'Live 语音需要 OpenAI API 密钥，这台 Mac 上还没有保存。',
+              '现在填入就能试，也可以之后在「设置 › 语音」里补上。',
+            ],
+          }
+        : {
+            title: '开口说，就像打电话。',
+            lines: ['边听边说，随时可以打断我。', '这次只聊两句，不会执行任何任务。'],
+          };
+    case 'demoSandbox':
+      return {
+        title: '先在沙箱里跑，不碰你的项目。',
+        lines: ['需要独立环境时，我在沙箱里运行命令、构建和启动预览。', '确认没问题，再决定要不要用到项目里。'],
+        note: '这是一段示例，没有创建真实的沙箱。',
+      };
+    case 'demoGuide':
+      return {
+        title: '想自己动手，我来带你做。',
+        lines: ['我指出该点哪里，点击和输入都由你完成。', '跟着高亮走三步试试。'],
+        note: '你填写的内容不会被读取，我只知道每一步是否完成。',
       };
     case 'resume':
       return {
@@ -543,6 +598,19 @@ export function Onboarding({
   );
   const [leaving, setLeaving] = useState(false);
   const [requestError, setRequestError] = useState('');
+  const [voiceConfig, setVoiceConfig] = useState<LiveVoiceConfig>();
+  useEffect(() => {
+    let current = true;
+    const unset: LiveVoiceConfig = { configured: false, active: false };
+    // A key that cannot be read is treated as not saved: the example is then skipped.
+    void window.workbench
+      .invoke<LiveVoiceConfig>('voice:config')
+      .then((value) => current && setVoiceConfig(value ?? unset))
+      .catch(() => current && setVoiceConfig(unset));
+    return () => {
+      current = false;
+    };
+  }, []);
   const [scrolled, setScrolled] = useState(false);
   const [showLatest, setShowLatest] = useState(false);
   const scroll = useRef<HTMLDivElement>(null);
@@ -569,12 +637,13 @@ export function Onboarding({
   const automaticScroll = useRef(false);
   const userPausedScroll = useRef(false);
   const current = entries.at(-1) as AssistantEntry;
-  const enterAfterReply = useRef<() => void>(() => {});
   useEffect(() => {
     if (reducedMotion) setWelcomeReady(true);
   }, [reducedMotion]);
 
-  const present = useCallback((screen: Screen, snapshot: OnboardingState) => {
+  const present = useCallback((ready: Screen, snapshot: OnboardingState) => {
+    // First time through, setup ends in the first example: there is nothing to choose before it.
+    const screen = initial && readyScreens.has(ready) ? demoScreens[demos[0].id] : ready;
     const phase =
       screen === 'installing' || screen === 'browserPreparing'
         ? snapshot.operation?.phase
@@ -599,7 +668,7 @@ export function Onboarding({
       // the place of the last one.
       return spoke ? [...previous.slice(0, -1), entry] : [...previous, entry];
     });
-  }, []);
+  }, [initial]);
 
   const exitNow = useCallback(
     (snapshot: OnboardingState) => {
@@ -758,7 +827,11 @@ export function Onboarding({
     };
     node.addEventListener('scrollend', settled);
     window.addEventListener('resize', resized);
+    // An example can grow after it is shown (a key is saved, a call reports an error).
+    const grown = new ResizeObserver(resized);
+    if (node.firstElementChild) grown.observe(node.firstElementChild);
     return () => {
+      grown.disconnect();
       node.removeEventListener('scrollend', settled);
       window.removeEventListener('resize', resized);
     };
@@ -821,9 +894,26 @@ export function Onboarding({
     run: (id) =>
       void run('onboarding:complete', undefined, '以后再说', 'browserPreparing', 'complete', id),
   };
+  const enter: Action = {
+    label: '进入 Athena',
+    disabled: !state.coreReady,
+    run: (id) =>
+      state.status === 'complete'
+        ? exitNow(state)
+        : void run(
+            'onboarding:complete',
+            undefined,
+            '进入 Athena',
+            // Leaving from an example, the final check is its own message; the example is not repeated.
+            demoOf(current.screen) ? 'finishing' : current.screen,
+            'complete',
+            id,
+            true,
+          ),
+  };
   const actions = (): Action[] => {
     // Nothing to press during the silent final check; the footer can still leave setup.
-    if (state.operation && readyScreens.has(current.screen)) return [];
+    if (state.operation && (readyScreens.has(current.screen) || demoOf(current.screen))) return [];
     if (state.operation) {
       const result: Action[] = [];
       if (state.operation.kind === 'login' && state.login?.canReopen)
@@ -879,6 +969,24 @@ export function Onboarding({
         ];
       case 'about':
         return [discover];
+      case 'demoPage':
+      case 'demoVoice':
+      case 'demoSandbox':
+      case 'demoGuide': {
+        const seen = new Set(entries.map((entry) => entry.role === 'assistant' && entry.screen));
+        const next = demos.find((demo) => !seen.has(demoScreens[demo.id]));
+        return [
+          ...(next
+            ? [
+                {
+                  label: `下一个：${next.label}`,
+                  run: (id: string) => local(next.ask, demoScreens[next.id], id),
+                },
+              ]
+            : []),
+          next ? { ...enter, label: '跳过示例', ghost: true } : enter,
+        ];
+      }
       case 'connect':
         return [discover];
       case 'agents':
@@ -1077,78 +1185,33 @@ export function Onboarding({
         ];
       case 'ready':
       case 'readyWithoutBrowser':
-        if (initial) return [];
-        return [
-          {
-            label: '进入 Athena',
-            disabled: !state.coreReady,
-            run: (id) =>
-              state.status === 'complete'
-                ? exitNow(state)
-                : void run(
-                    'onboarding:complete',
-                    undefined,
-                    '进入 Athena',
-                    current.screen,
-                    'complete',
-                    id,
-                    true,
-                  ),
-          },
-        ];
+        return initial
+          ? [enter]
+          : [
+              enter,
+              {
+                label: '看看示例',
+                ghost: true,
+                run: (id) => local('看看示例', demoScreens[demos[0].id], id),
+              },
+            ];
       default:
         return [];
     }
   };
-  const viewContext = { hasDraft, existingWorkbench: !initial };
+  const viewContext = {
+    hasDraft,
+    existingWorkbench: !initial,
+    voice: voiceConfig,
+    tour: initial,
+  };
   const currentView = content(current.screen, state, viewContext);
   const currentActions = actions();
   const cancelAction = currentActions.find((action) => action.cancel);
-  enterAfterReply.current = () => {
-    const snapshot = currentState.current;
-    if (pending.current || exiting.current || snapshot.operation || !snapshot.coreReady) return;
-    if (!followLatest.current || userPausedScroll.current) return;
-    if (snapshot.status === 'complete') exitNow(snapshot);
-    else
-      void run(
-        'onboarding:complete',
-        undefined,
-        undefined,
-        'finishing',
-        'complete',
-        undefined,
-        true,
-      );
-  };
-  useEffect(() => {
-    if (
-      !initial ||
-      !['ready', 'readyWithoutBrowser'].includes(current.screen) ||
-      !state.coreReady ||
-      state.operation ||
-      requestPending ||
-      showLatest ||
-      leaving
-    )
-      return;
-    // Browser frame renders must not restart the final reply's handoff timing.
-    const timer = setTimeout(() => enterAfterReply.current(), reducedMotion ? 0 : 900);
-    return () => clearTimeout(timer);
-  }, [
-    initial,
-    current.id,
-    current.screen,
-    state.status,
-    state.coreReady,
-    state.operation?.id,
-    requestPending,
-    showLatest,
-    leaving,
-    reducedMotion,
-  ]);
   const stage = ['welcome', 'about'].includes(current.screen)
     ? 0
     : ['ready', 'readyWithoutBrowser', 'finishing'].includes(current.screen) ||
+        demoOf(current.screen) ||
         (intent.current === 'complete' && state.operation)
       ? 3
       : ['browser', 'browserPreparing', 'browserError'].includes(current.screen)
@@ -1243,6 +1306,7 @@ export function Onboarding({
               const activity = view.cards?.find((card) => card.icon === 'pending');
               const cards = view.cards?.filter((card) => card.icon !== 'pending');
               const welcome = entry.screen === 'welcome';
+              const demo = demoOf(entry.screen);
               return (
                 <motion.article
                   key={entry.id}
@@ -1308,6 +1372,19 @@ export function Onboarding({
                         />
                       ))}
                     </motion.div>
+                    {active && demo && (
+                      <motion.div
+                        initial={reducedMotion ? false : { opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.4, delay: reducedMotion ? 0 : 0.3, ease: easing }}
+                      >
+                        <OnboardingDemo
+                          id={demo.id}
+                          voiceConfig={voiceConfig}
+                          onVoiceConfig={setVoiceConfig}
+                        />
+                      </motion.div>
+                    )}
                     {activity && (
                       <div className="onboarding-activity" data-active={active}>
                         <div className="onboarding-activity-row">

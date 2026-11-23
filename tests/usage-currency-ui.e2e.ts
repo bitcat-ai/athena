@@ -36,8 +36,8 @@ import React from 'react';
 import {createRoot} from 'react-dom/client';
 import {UsagePanel} from '/src/renderer/UsagePanel';
 import '/src/renderer/styles.css';
-const fixture=window.__usageFixture={records:${JSON.stringify(complete)},listeners:[],external:[]};
-window.workbench={async invoke(action,payload){if(action==='usage:snapshot')return {records:fixture.records,since:Date.now(),updatedAt:Date.now()};if(action==='shell:openExternal')fixture.external.push(payload.url);},onEvent(fn){fixture.listeners.push(fn);return()=>{fixture.listeners=fixture.listeners.filter(f=>f!==fn);}}};
+const fixture=window.__usageFixture={records:${JSON.stringify(complete)},voice:undefined,listeners:[],external:[]};
+window.workbench={async invoke(action,payload){if(action==='usage:snapshot')return {records:fixture.records,voice:fixture.voice,since:Date.now(),updatedAt:Date.now()};if(action==='shell:openExternal')fixture.external.push(payload.url);},onEvent(fn){fixture.listeners.push(fn);return()=>{fixture.listeners=fixture.listeners.filter(f=>f!==fn);}}};
 fixture.replace=records=>{fixture.records=records;for(const fn of fixture.listeners)fn({type:'usage:updated'});};
 createRoot(document.getElementById('root')).render(React.createElement(UsagePanel));
 `;
@@ -103,7 +103,47 @@ try {
     'Only clipped, non-focusable autofill helpers may remain native',
   );
   checks.push('USD is primary; token counts are secondary; charts and group amounts use dollars');
-  await page.screenshot({ path: path.join(output, 'desktop.png') });
+
+  // Live voice is its own module: time and calls, never an amount of money.
+  const voice = page.getByRole('region', { name: 'Live 语音' });
+  await expect(voice).toContainText('还没有语音通话');
+  await expect(voice.getByTestId('usage-voice-time')).toHaveCount(0);
+  const now = Date.now();
+  const call = (id: string, daysAgo: number, seconds: number | undefined, final: boolean) => ({
+    id,
+    model: 'gpt-live-1',
+    startedAt: now - daysAgo * 86_400_000,
+    endedAt: now - daysAgo * 86_400_000 + 60_000,
+    seconds,
+    final,
+    status: final ? 'completed' : 'interrupted',
+  });
+  await page.evaluate(
+    (calls) => {
+      const fixture = (window as any).__usageFixture;
+      fixture.voice = calls;
+      for (const listener of fixture.listeners) listener({ type: 'usage:updated' });
+    },
+    [
+      call('a', 0, 95, true),
+      call('b', 0, 40, false),
+      call('c', 2, 600, true),
+      call('d', 3, undefined, false),
+      call('old', 60, 3000, true),
+    ],
+  );
+  await expect(voice.getByTestId('usage-voice-time')).toHaveText('12 分 15 秒部分');
+  await expect(voice.getByTestId('usage-voice-calls')).toHaveText('4');
+  await expect(voice).toContainText('1 次通话没有报告时长，未计入。');
+  await expect(voice).toContainText('1 次通话未正常收尾');
+  await expect(voice).toContainText('这里不估算金额');
+  assert.ok(!(await voice.innerText()).includes('$'), 'voice shows no amount of money');
+  await expect(voice.locator('.usage-day')).toHaveCount(3);
+  // The calls leave the token estimate as it was.
+  await expect(estimate).toHaveText('$11.76');
+  checks.push('Live voice reports billed time and calls for the chosen range, marks what is partial, and estimates no cost');
+  await page.screenshot({ path: path.join(output, 'desktop.png'), fullPage: true });
+  await voice.screenshot({ path: path.join(output, 'voice.png') });
 
   const models = page.locator('button[data-choice-label="按模型筛选"]');
   await models.click();

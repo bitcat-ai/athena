@@ -103,6 +103,8 @@ try {
   await expect.poll(async () => (await snapshot()).web?.status, { timeout: 150000 }).toBe('ready');
   await expect.poll(async () => (await snapshot()).browser.title).toBe('Athena · 从想法开始');
   await page!.screenshot({ path: path.join(output, 'ready.png'), animations: 'disabled' });
+  // Setup ends in the first example; leaving it is the user's own step.
+  await page!.getByRole('button', { name: '跳过示例', exact: true }).click();
   await expect(page!.locator('.onboarding')).toHaveCount(0, { timeout: 30000 });
   await expect(page!.locator('.browser-drawer')).toHaveClass(/is-open/);
   await expect.poll(async () => (await snapshot()).browserFrame?.width ?? 0).toBeGreaterThan(0);
@@ -166,6 +168,7 @@ try {
   await expect.poll(async () => (await snapshot()).onboarding?.workspace.status).toBe('ready');
   assert.equal((await snapshot()).settings.workspaceMode, 'personal');
   await page!.getByRole('button', { name: '以后再说', exact: true }).click();
+  await page!.getByRole('button', { name: '跳过示例', exact: true }).click();
   await expect(page!.locator('.onboarding')).toHaveCount(0, { timeout: 30000 });
   await page!.locator('.new-conversation').click();
   await expect

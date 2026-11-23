@@ -46,6 +46,7 @@ import { isLocalSandboxTool, readOnlySandboxCall, type SandboxArtifact } from '.
 import { SandboxPool, sandboxNames, sandboxPoolTools } from './sandbox-pool';
 import { CoderConnection } from './coder-connection';
 import { LiveVoice } from './live-voice';
+import { LIVE_VOICE_MODEL } from '../shared/live-voice';
 import { voiceIntent } from '../shared/voice-intent';
 import { CoderSandbox, coderCliTransport, coderOwner } from './coder-sandbox';
 import { SandboxPip, pipKey, type PipTarget } from './sandbox-pip';
@@ -2341,13 +2342,24 @@ async function invoke(action: string, payload: unknown) {
   if (action === 'voice:configure') return liveVoice.configure(record(payload).key);
   if (action === 'voice:forget') return liveVoice.forget();
   if (action === 'voice:connect') {
-    assertTaskEnvironment();
     const data = record(payload);
+    // The first-run trial only talks: it needs neither a conversation nor a ready workspace.
+    if (data.trial === true) {
+      const trial = await liveVoice.connect(data.requestId, '', data.sdp, true);
+      // A trial is billed like any other call, so it is counted like one.
+      usage.voiceStart(string(data.requestId, 150), LIVE_VOICE_MODEL);
+      saveUsage();
+      return trial;
+    }
+    assertTaskEnvironment();
     const conversation = getConversation(data.conversationId);
     assertOpenConversation(store.data.conversations, conversation);
     if (conversation.workspace && conversation.workspace !== store.data.settings.workspace)
       throw new Error('请回到当前工作目录的对话后开始语音');
-    return liveVoice.connect(data.requestId, conversation.id, data.sdp);
+    const connection = await liveVoice.connect(data.requestId, conversation.id, data.sdp);
+    usage.voiceStart(string(data.requestId, 150), LIVE_VOICE_MODEL);
+    saveUsage();
+    return connection;
   }
   if (action === 'voice:delegate') {
     const data = record(payload);
@@ -2371,6 +2383,15 @@ async function invoke(action: string, payload: unknown) {
       notice(error instanceof Error ? error.message : '未确认语音通话结束', 'error');
       throw error;
     }
+    // The figure comes from the service's own usage events, relayed by the call's client.
+    if (
+      usage.voiceFinish(
+        data.requestId === undefined ? undefined : string(data.requestId, 150),
+        typeof data.seconds === 'number' ? data.seconds : undefined,
+        data.finalized === true,
+      )
+    )
+      saveUsage();
     return true;
   }
   if (devSupervisor && action === 'dev:unsent-drafts') {
