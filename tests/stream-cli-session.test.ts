@@ -5,6 +5,7 @@ import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promis
 import os from 'node:os';
 import path from 'node:path';
 import { StreamCliSession, type StreamCliId } from '../src/main/stream-cli-session';
+import { athenaPersona, personaBlock } from '../src/main/persona';
 import type { AgentEvent, BrowserTool } from '../src/shared/types';
 
 const cliIds: StreamCliId[] = ['claude', 'gemini', 'cursor'];
@@ -397,9 +398,11 @@ test('Cursor sends selected native skills on stdin and rewrites only known invoc
       skill,
     ]);
     const call = (await f.logs())[0];
+    // The persona travels after the task, so the leading /skill still starts the turn.
     assert.equal(
       call.input,
-      '/review\n\n/review $unknown $hidden $10\n\n<task_context>\n$review context\n</task_context>',
+      '/review\n\n/review $unknown $hidden $10\n\n<task_context>\n$review context\n</task_context>\n\n' +
+        personaBlock('Cursor'),
     );
     assert.ok(!JSON.stringify(call.args).includes('/review'));
     assert.ok(!call.input.includes('PRIVATE_SKILL_BODY'));
@@ -619,7 +622,21 @@ for (const cli of cliIds) {
       const calls = await f.logs();
       assert.equal(calls[0].args.includes('--resume'), false);
       assert.equal(calls[1].args[calls[1].args.indexOf('--resume') + 1], 'native-session');
-      assert.equal(calls[0].input, 'first\n\n<task_context>\ncontext\n</task_context>');
+      const task = 'first\n\n<task_context>\ncontext\n</task_context>';
+      // Claude takes the persona at the system level; Cursor and Gemini have no such entry and receive it with the turn.
+      if (cli === 'claude') {
+        assert.equal(calls[0].input, task);
+        assert.equal(
+          calls[0].args[calls[0].args.indexOf('--append-system-prompt') + 1],
+          athenaPersona('Claude Code'),
+        );
+      } else {
+        assert.equal(
+          calls[0].input,
+          task + '\n\n' + personaBlock(cli === 'gemini' ? 'Gemini CLI' : 'Cursor'),
+        );
+        assert.equal(calls[0].args.includes('--append-system-prompt'), false);
+      }
       assert.equal(calls[0].args[calls[0].args.indexOf('--model') + 1], 'chosen-model');
       assert.equal(calls[0].args.includes('first'), false);
       assert.ok(
@@ -1112,6 +1129,7 @@ test('Claude evidence analysis disables workspace instructions, native tools, MC
   const [{args}] = await f.logs();
   assert.ok(args.includes('--safe-mode'));
   assert.ok(args.includes('--strict-mcp-config'));
+  assert.equal(args.includes('--append-system-prompt'), false);
   assert.ok(args.includes('--disable-slash-commands'));
   assert.equal(args[args.indexOf('--tools')+1], '');
   assert.equal(args[args.indexOf('--allowedTools')+1], '');

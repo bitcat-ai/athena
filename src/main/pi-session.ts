@@ -23,6 +23,7 @@ import {
   type ModelSelection,
   type TokenCounts,
 } from '../shared/usage';
+import { athenaPersona } from './persona';
 
 type RecordValue = Record<string, any>;
 const object = (value: unknown): value is RecordValue =>
@@ -198,6 +199,8 @@ export class PiSession implements AgentSession {
               'ls',
               ...this.options.tools.map((tool) => tool.name),
             ].join(','),
+            '--append-system-prompt',
+            athenaPersona('Pi'),
           ]),
       ...(this.options.sessionDirectory ? ['--session-dir', this.options.sessionDirectory] : []),
       ...(this.id ? ['--session', this.id] : ['--session-id', id]),

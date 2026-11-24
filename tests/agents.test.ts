@@ -13,6 +13,7 @@ import {
   detectAgents,
 } from '../src/main/agents.ts';
 import type { AgentEvent, AgentInfo, ElementDetails, ToolResult } from '../src/shared/types.ts';
+import { athenaPersona } from '../src/main/persona';
 
 async function fixture(
   options: {
@@ -567,6 +568,7 @@ test('selected-element inspection overlaps startup and supplies a fresh snapshot
   const requests = await f.requests();
   const instructions = requests.find((request) => request.method === 'thread/start').params
     .developerInstructions;
+  assert.ok(instructions.startsWith(athenaPersona('Codex')), 'the persona leads, the tool rules follow');
   assert.match(instructions, /without a redundant inspect\/query\/snapshot/);
   assert.match(instructions, /updated element details/);
   const prompt = requests.find((request) => request.method === 'turn/start').params.input[0].text;

@@ -33,6 +33,7 @@ const execFileAsync = promisify(execFile);
 import { cliEnvironment } from './agent-process';
 import { redact } from './sandbox-client';
 import { imageSource, parseImages, type ImageAttachment } from '../shared/images';
+import { athenaPersona } from './persona';
 export { cliEnvironment } from './agent-process';
 export { detectAgents } from './agent-discovery';
 
@@ -792,6 +793,8 @@ export class CodexSession implements AgentSession {
             }
           : {
               developerInstructions:
+                athenaPersona('Codex') +
+                '\n\n' +
                 DEVELOPER_INSTRUCTIONS +
                 (typeof provider?.imageGeneration === 'boolean'
                   ? `\nThe local Codex provider reports native image generation: ${provider.imageGeneration ? 'supported' : 'unavailable'}. Use the tools actually offered by the current turn. Never substitute a billed API script for an unavailable native capability.`

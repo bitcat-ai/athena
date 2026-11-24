@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { PiSession } from '../src/main/pi-session';
 import type { AgentEvent } from '../src/shared/types';
+import { athenaPersona } from '../src/main/persona';
 
 async function fixture(mode = 'normal') {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'athena-pi-test-'));
@@ -249,6 +250,7 @@ test('Pi built-in extension isolation avoids removed flags and retains the host 
     assert.ok(args.includes('--no-extensions'));
     assert.equal(args.includes('--no-skills'), false, 'native Skill discovery must remain enabled');
     assert.ok(args.includes('--no-approve'));
+    assert.equal(args[args.indexOf('--append-system-prompt') + 1], athenaPersona('Pi'));
     assert.equal(
       args[args.indexOf('--extension') + 1],
       path.resolve('resources/cli/pi-permissions.mjs'),

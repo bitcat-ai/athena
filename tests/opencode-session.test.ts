@@ -271,6 +271,8 @@ test('OpenCode empty permission metadata is joined to the matching native tool i
     await pending;
     const prompt = (await f.requests()).find((r) => r.method === 'session/prompt');
     assert.ok(prompt.params.prompt[0].text.startsWith('<user_task>'));
+    // No session directory here, so no instruction file: the persona travels with the turn, after the task.
+    assert.ok(prompt.params.prompt[0].text.endsWith('</athena_persona>'));
   } finally {
     await f.cleanup();
   }

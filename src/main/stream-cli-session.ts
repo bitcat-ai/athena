@@ -26,6 +26,7 @@ import {
   type ModelSelection,
   type TokenCounts,
 } from '../shared/usage';
+import { athenaPersona, personaBlock } from './persona';
 
 export type StreamCliId = 'claude' | 'gemini' | 'cursor';
 export interface StreamCliSessionOptions extends AgentSessionOptions {
@@ -504,6 +505,10 @@ export class StreamCliSession implements AgentSession {
         selectedSnapshot
           ? `<selected_element_snapshot>\n${selectedSnapshot}\n</selected_element_snapshot>`
           : '',
+        // Cursor and Gemini have no entry that adds to their system prompt. Last, so a leading /skill still starts the turn.
+        this.options.cli === 'claude' || this.options.previewOnly || this.options.evidenceOnly
+          ? ''
+          : personaBlock(this.options.cli === 'gemini' ? 'Gemini CLI' : 'Cursor'),
       ]
         .filter(Boolean)
         .join('\n\n'),
@@ -567,6 +572,9 @@ export class StreamCliSession implements AgentSession {
               '--safe-mode',
             ]
           : []),
+        ...(this.options.previewOnly || this.options.evidenceOnly
+          ? []
+          : ['--append-system-prompt', athenaPersona('Claude Code')]),
         ...resume,
         ...model,
         ...(selection?.effort ? ['--effort', selection.effort] : []),

@@ -1,5 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { AgentMcpServer } from './agent-mcp';
 import { cliEnvironment, readCliOutput } from './agent-process';
@@ -19,6 +20,7 @@ import {
 import type { AgentEvent, BrowserTool, ElementRef, ToolCall } from '../shared/types';
 import { parseImages, type ImageAttachment } from '../shared/images';
 import { unknownTokens, zeroTokens, type ModelOption, type ModelSelection } from '../shared/usage';
+import { athenaPersona, personaBlock } from './persona';
 
 type Json = Record<string, any>;
 const object = (value: unknown): value is Json =>
@@ -93,6 +95,7 @@ export class AcpSession implements AgentSession {
   private earlyCatalog?: Json;
   private thinkingId?: string;
   private questionOptions = new Map<string, Map<string, string>>();
+  private personaFile?: string;
   private get name() {
     return this.runtime === 'kimi' ? 'Kimi' : 'OpenCode';
   }
@@ -237,8 +240,22 @@ export class AcpSession implements AgentSession {
       }
       if (!object(config)) throw new Error(`${this.name} 环境配置格式无效`);
     }
+    // OpenCode appends instruction files to its own system prompt. Without a session directory the persona travels with each turn.
+    if (this.options.sessionDirectory) {
+      await mkdir(this.options.sessionDirectory, { recursive: true, mode: 0o700 });
+      this.personaFile = path.join(this.options.sessionDirectory, 'athena-persona.md');
+      await writeFile(this.personaFile, athenaPersona(this.name), { mode: 0o600 });
+    }
     env.OPENCODE_CONFIG_CONTENT = JSON.stringify({
       ...config,
+      ...(this.personaFile
+        ? {
+            instructions: [
+              ...(Array.isArray(config.instructions) ? config.instructions : []),
+              this.personaFile,
+            ],
+          }
+        : {}),
       share: 'disabled',
       agent: {
         ...config.agent,
@@ -541,6 +558,8 @@ export class AcpSession implements AgentSession {
         `<user_task>\n${prompt}\n</user_task>`,
         context ? `<task_context>\n${context}\n</task_context>` : '',
         snapshot ? `<selected_element_snapshot>\n${snapshot}\n</selected_element_snapshot>` : '',
+        // Last, so a leading /skill still starts the turn.
+        this.personaFile ? '' : personaBlock(this.name),
       ]
         .filter(Boolean)
         .join('\n\n');
