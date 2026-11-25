@@ -2707,3 +2707,114 @@ test(
     }
   },
 );
+
+test(
+  'the timeline takes edits back and puts them on again, and a new edit from an earlier point drops the later ones',
+  { skip: !executable },
+  async (t) => {
+    const { page, find, events } = await fixture(t);
+    type State = {
+      position: number;
+      entries: Array<{ id: string; kind: string; name: string; by: string }>;
+      blocked?: string;
+    };
+    const look = () =>
+      page.evaluate(() => ({
+        heading: document.querySelector('#heading')!.textContent,
+        color: (document.querySelector('#leaf') as HTMLElement).style.color,
+        added: document.querySelector('#added')?.textContent ?? null,
+        sheet: getComputedStyle(document.querySelector('#box')!).borderTopWidth,
+      }));
+    const original = await look();
+
+    const heading = await find('#heading');
+    await bridge(page, 'edit', { ref: heading.ref, text: '新标题' });
+    const leaf = await find('#leaf');
+    await bridge(page, 'edit', { ref: leaf.ref, styles: { color: 'rgb(200, 0, 0)' } });
+    const box = await find('#box');
+    await bridge(page, 'edit', {
+      ref: box.ref,
+      insert: { position: 'after', node: { tag: 'p', text: '新增段落', attributes: { id: 'added' } } },
+    });
+    const restyled = await bridge<{ applied: boolean }>(page, 'restyle', {
+      css: '#box{border:7px solid rgb(0,0,0)}',
+      texts: [{ selector: '#added', text: '改过的段落' }],
+    });
+    assert.equal(restyled.applied, true);
+    const latest = await look();
+    assert.deepEqual(latest, {
+      heading: '新标题',
+      color: 'rgb(200, 0, 0)',
+      added: '改过的段落',
+      sheet: '7px',
+    });
+
+    let state = await bridge<State>(page, 'timeline');
+    assert.equal(state.position, 4);
+    assert.deepEqual(
+      state.entries.map((entry) => entry.kind),
+      ['text', 'style', 'insert', 'restyle'],
+    );
+    assert.equal(state.entries[0].by, 'human');
+    await eventually(() => events.some((event) => (event as any).kind === 'timeline'));
+
+    // Back one step at a time: each stop shows the page as it was then.
+    state = await bridge<State>(page, 'scrub', 3);
+    assert.equal(state.position, 3);
+    assert.deepEqual(await look(), { ...latest, added: '新增段落', sheet: original.sheet });
+    state = await bridge<State>(page, 'scrub', 1);
+    assert.deepEqual(await look(), { ...original, heading: '新标题' });
+    state = await bridge<State>(page, 'scrub', 0);
+    assert.equal(state.position, 0);
+    assert.equal(state.entries.length, 4, 'moving along the timeline forgets nothing');
+    assert.deepEqual(await look(), original);
+    assert.equal(
+      await page.evaluate(
+        () => (globalThis as any).originalTextNode === document.querySelector('#leaf')!.firstChild,
+      ),
+      true,
+      'the page keeps its own nodes',
+    );
+
+    // Forward again, in one jump: the very same page as before.
+    state = await bridge<State>(page, 'scrub', 4);
+    assert.equal(state.position, 4);
+    assert.equal(state.blocked, undefined);
+    assert.deepEqual(await look(), latest);
+
+    // An ordinary undo still works on the newest edit after a round trip.
+    await bridge(page, 'scrub', 2);
+    await bridge(page, 'scrub', 4);
+    await bridge(page, 'undo');
+    assert.deepEqual(await look(), { ...latest, added: '新增段落', sheet: original.sheet });
+    state = await bridge<State>(page, 'timeline');
+    assert.equal(state.entries.length, 3);
+
+    // A new edit made from an earlier point replaces everything after that point.
+    await bridge(page, 'scrub', 1);
+    const undone = events.filter((event) => (event as any).kind === 'undo').length;
+    await bridge(page, 'edit', { ref: heading.ref, styles: { color: 'rgb(0, 0, 200)' } });
+    state = await bridge<State>(page, 'timeline');
+    assert.equal(state.position, 2);
+    assert.deepEqual(
+      state.entries.map((entry) => entry.kind),
+      ['text', 'style'],
+    );
+    assert.equal(
+      events.filter((event) => (event as any).kind === 'undo').length,
+      undone + 2,
+      'the host hears that the two later edits are gone',
+    );
+    assert.deepEqual(await look(), { ...original, heading: '新标题' });
+    await assert.rejects(bridge(page, 'scrub', 3), /Invalid timeline position/);
+
+    // When the page itself has changed an edited element since, the timeline stops there and says so.
+    await page.evaluate(() => {
+      (document.querySelector('#heading') as HTMLElement).style.color = 'green';
+    });
+    state = await bridge<State>(page, 'scrub', 0);
+    assert.equal(state.position, 2);
+    assert.match(state.blocked ?? '', /styles changed/);
+  },
+);
+

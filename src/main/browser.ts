@@ -11,7 +11,9 @@ import { promisify } from 'node:util';
 import { createInterface } from 'node:readline';
 import { randomUUID } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { readEditTimeline } from '../shared/types';
 import type {
+  EditTimeline,
   BrowserActor,
   BrowserFrame,
   BrowserViewport,
@@ -552,6 +554,8 @@ interface TabSession {
     /** Who made it: the person in the inspector, or the agent through a tool. */
     source?: 'human' | 'agent';
   }>;
+  /** As last reported by the main document's own script. */
+  timeline?: EditTimeline;
 }
 interface ScopedElement {
   tabId: string;
@@ -1020,6 +1024,7 @@ export class BrowserRuntime {
       ...(tab?.info ?? {}),
       tabs: this.listTabs(),
       activeTabId: tab?.info.id,
+      timeline: tab?.timeline,
       previewEdits:
         tab?.edits.flatMap((edit) => {
           const frame = tab.frames.get(edit.frameId);
@@ -1536,6 +1541,7 @@ export class BrowserRuntime {
     for (const [ref, scope] of this.refs)
       if (scope.tabId === tab.info.id && scope.frameId === frame.id) this.refs.delete(ref);
     tab.edits = tab.edits.filter((edit) => edit.frameId !== frame.id);
+    if (frame.id === tab.mainFrameId) tab.timeline = undefined;
     if (this.activeTabId === tab.info.id && this.state.selectedElement?.frameId === frame.id)
       this.update({ selectedElement: undefined });
     else if (this.activeTabId === tab.info.id) this.update();
@@ -1602,6 +1608,14 @@ export class BrowserRuntime {
           }
           return;
         }
+        if (payload.kind === 'timeline') {
+          if (frame.id === tab.mainFrameId && payload.docId === frame.documentId) {
+            const timeline = readEditTimeline(payload.timeline);
+            tab.timeline = timeline?.entries.length ? timeline : undefined;
+            if (this.activeTabId === tab.info.id) this.update();
+          }
+          return;
+        }
         if (payload.kind === 'cursor-motion') {
           // Keep actual agent animation on the same short high-rate lease as a hand gesture.
           if (
@@ -1660,6 +1674,7 @@ export class BrowserRuntime {
         tab.activation++;
         tab.chooser = undefined;
         tab.edits = [];
+        tab.timeline = undefined;
         tab.outline = undefined;
         tab.remix = undefined;
         tab.info.hints = undefined;
@@ -2888,6 +2903,7 @@ export class BrowserRuntime {
     this.invalidateSurface();
     this.clearTabRefs(tab);
     tab.edits = [];
+    tab.timeline = undefined;
     if (this.activeTabId === tab.info.id)
       this.update({ inspecting: false, selectedElement: undefined });
     this.updateTab(tab, { loading: true });
@@ -4194,7 +4210,10 @@ export class BrowserRuntime {
       const tab = this.tabs.get(this.activeTabId);
       if (!tab) return { url: this.state.url, changes: [] };
       const changes: PageChange[] = [];
+      // Edits the timeline currently holds back are not on the page, so they are not part of its changes.
+      const held = new Set(tab.timeline?.entries.slice(tab.timeline.position).map((e) => e.id));
       for (const edit of tab.edits) {
+        if (edit.frameId === tab.mainFrameId && held.has(edit.localId)) continue;
         const frame = tab.frames.get(edit.frameId);
         if (!frame || !edit.changes || !edit.localRef || edit.transient) continue;
         if (frame.documentId !== edit.documentId) continue;
@@ -4227,6 +4246,28 @@ export class BrowserRuntime {
         });
       }
       return { url: tab.info.url, changes };
+    });
+  }
+  /** Show the page as it was after its first `position` preview edits. Nothing is discarded by moving. */
+  scrubTimeline(position: number): Promise<EditTimeline> {
+    const tab = this.activeTab();
+    if (!Number.isSafeInteger(position) || position < 0)
+      return Promise.reject(new Error('时间线位置无效'));
+    this.humanTakeover('undo');
+    return this.serialize(async () => {
+      const current = this.requireActive(tab.info.id);
+      const frame = current.frames.get(current.mainFrameId);
+      if (!frame) throw new Error('页面尚未就绪');
+      await this.prepareFrame(current, frame);
+      const timeline = readEditTimeline(
+        await this.bridge(current, frame, `globalThis.__workbenchPage.scrub(${position})`),
+      );
+      if (!timeline) throw new Error('页面没有返回有效的时间线');
+      const { blocked: _blocked, ...shown } = timeline;
+      current.timeline = shown.entries.length ? shown : undefined;
+      // An element the page no longer shows cannot stay selected.
+      this.update({ selectedElement: undefined });
+      return timeline;
     });
   }
   undoEdit(editId?: string): Promise<ElementEditResult> {

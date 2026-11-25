@@ -34,6 +34,8 @@ import { RecordingWorkflowPanel, type RecordingDraft } from './RecordingWorkflow
 import { PhaseGlyph } from './PhaseGlyph';
 import { SharePanel } from './SharePanel';
 import type { ShareState } from '../shared/share';
+import { EditTimeline } from './EditTimeline';
+import type { EditTimeline as EditTimelineState } from '../shared/types';
 import './sharing.css';
 
 interface Props {
@@ -979,6 +981,14 @@ export function BrowserPane({
                 {share?.active ? '结束共享并查看' : '结束并查看'}
               </ActionButton>
             </div>
+          )}
+          {state.timeline && !toolsCollapsed && (
+            <EditTimeline
+              key={state.activeTabId}
+              timeline={state.timeline}
+              disabled={!ready || state.loading}
+              onScrub={(position) => onAction<EditTimelineState>('browser:timeline', { position })}
+            />
           )}
           <div className="browser-status" hidden={toolsCollapsed}>
             <span className={`status-dot ${ready ? 'online' : ''}`} />

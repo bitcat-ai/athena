@@ -85,6 +85,11 @@ export async function dispatchBrowserAction(
       const data = record(payload);
       return browser.commitStyles(string(data.ref, 1500), string(data.editId, 1500));
     }
+    case 'browser:timeline': {
+      const position = record(payload).position;
+      if (!Number.isSafeInteger(position)) throw new Error('时间线位置无效');
+      return browser.scrubTimeline(position as number);
+    }
     case 'browser:undo': {
       const data = payload === undefined ? {} : record(payload);
       return browser.undoEdit(data.editId === undefined ? undefined : string(data.editId, 1500));

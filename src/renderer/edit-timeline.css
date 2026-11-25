@@ -1,0 +1,86 @@
+.edit-timeline {
+  min-height: 36px;
+  padding: 0 12px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 11px;
+}
+.edit-timeline-title {
+  flex: none;
+  color: var(--muted);
+  font-size: 11px;
+}
+.edit-timeline .slider__track {
+  flex: 1 1 120px;
+  max-width: 320px;
+  height: 24px;
+  margin-inline: 6px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  cursor: pointer;
+  touch-action: none;
+}
+.edit-timeline .slider__track::before {
+  content: '';
+  position: absolute;
+  inset: 50% 0 auto;
+  height: 1px;
+  background: var(--line);
+}
+.edit-timeline-marks {
+  pointer-events: none;
+  position: absolute;
+  inset: 0 -3px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.edit-timeline-mark {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  border: 1px solid var(--muted);
+  background: var(--surface);
+  opacity: 0.55;
+}
+.edit-timeline-mark[data-shown] {
+  border-color: var(--ink);
+  background: var(--ink);
+  opacity: 1;
+}
+/* Athena's own edits are squares, the user's are dots: who did what stays readable without colour. */
+.edit-timeline-mark[data-agent] {
+  border-radius: 1.5px;
+}
+.edit-timeline .slider__thumb {
+  width: 12px;
+  height: 20px;
+  border: 2px solid var(--overlay);
+  border-radius: 6px;
+  background: var(--ink);
+}
+.edit-timeline .slider__thumb::after {
+  display: none;
+}
+.edit-timeline-count {
+  flex: none;
+  min-width: 34px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.edit-timeline-label {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+}
+.edit-timeline[data-rewound] .edit-timeline-label {
+  color: var(--ink);
+}

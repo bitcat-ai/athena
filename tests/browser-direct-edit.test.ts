@@ -213,3 +213,54 @@ test(
     }
   },
 );
+
+test(
+  'real Chrome: the pane state carries the timeline, scrubbing moves the page, and held-back edits are not page changes',
+  { skip: !binary, timeout: 40_000 },
+  async () => {
+    const f = await fixture();
+    try {
+      await pause(800);
+      f.runtime.allowAgentControl();
+      for (const input of [
+        { selector: 'h1.hero', text: 'First' },
+        { selector: 'h1.hero', styles: { color: 'rgb(200, 0, 0)' } },
+      ]) {
+        const result = await f.runtime.callTool('workbench_browser_edit', input);
+        assert(!result.isError, result.text);
+      }
+      const title = async () =>
+        (await f.runtime.queryElements({ selector: 'h1.hero' })).elements[0].text;
+      await pause(200);
+      let timeline = f.runtime.getState().timeline;
+      assert.equal(timeline?.position, 2);
+      assert.deepEqual(
+        timeline?.entries.map((entry) => [entry.kind, entry.by]),
+        [
+          ['text', 'agent'],
+          ['style', 'agent'],
+        ],
+      );
+      assert.equal((await f.runtime.pageChanges()).changes.length, 2);
+
+      const moved = await f.runtime.scrubTimeline(0);
+      assert.equal(moved.position, 0);
+      assert.notEqual(await title(), 'First');
+      assert.equal(f.runtime.getState().timeline?.entries.length, 2);
+      assert.equal((await f.runtime.pageChanges()).changes.length, 0);
+
+      await f.runtime.scrubTimeline(1);
+      assert.equal(await title(), 'First');
+      assert.equal((await f.runtime.pageChanges()).changes.length, 1);
+      await assert.rejects(f.runtime.scrubTimeline(9), /Invalid timeline position/);
+
+      // Leaving the document leaves its timeline behind.
+      await f.runtime.navigate(f.runtime.getState().url + '?again');
+      await pause(500);
+      assert.equal(f.runtime.getState().timeline, undefined);
+    } finally {
+      await f.close();
+    }
+  },
+);
+

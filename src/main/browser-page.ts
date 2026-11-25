@@ -355,7 +355,114 @@ export const browserPageSource = String.raw`(() => {
   window.addEventListener('pagehide',()=>{guide.clear();globalThis.__workbenchPage?.clearOverlays();});
   function send(payload) {
     if(privateTrial && payload.target) payload={...payload,value:undefined,target:{...payload.target,value:undefined}};
+    if(payload.kind==='edit') { const patch=patches.get(payload.editId); if(patch && !patch.at) {patch.at=Date.now();patch.by=source;} }
     try { globalThis.__workbenchEvent(JSON.stringify({docId,source,actorId,at:Date.now(),recordingId,interaction:feedbackWindow?.interaction,...payload})); } catch {}
+    if(['edit','undo','layout-invalidated'].includes(payload.kind)) reportTimeline();
+  }
+  // The committed preview edits of this document in order, and how many of the newest are held back.
+  // Moving along the timeline only takes edits back and puts them on again; nothing is forgotten until
+  // a new edit is made from an earlier point, which drops what came after it.
+  let rewound=0;
+  const timelineIds=()=>editOrder.filter(id=>!patches.get(id)?.transient);
+  function timelineState() {
+    const ids=timelineIds();
+    return {position:ids.length-rewound,entries:ids.map(id=> {
+      const patch=patches.get(id);
+      let name='';
+      try { if(!patch.sheet && !privateTrial) name=describe(patch.el,true)?.name || ''; } catch {}
+      return {id,kind:patch.inserted ? 'insert' : patch.pairHost ? 'layout' : patch.sheet ? 'restyle' : patch.hasText ? 'text' : patch.hasAnimation && !patch.hasStyles ? 'animation' : 'style',
+        name:clean(name,60),by:patch.by==='agent' ? 'agent' : 'human',at:patch.at || 0};
+    })};
+  }
+  function reportTimeline() {
+    try { globalThis.__workbenchEvent(JSON.stringify({docId,kind:'timeline',timeline:timelineState()})); } catch {}
+  }
+  function dropFuture() {
+    if(!rewound) return;
+    const ids=timelineIds().slice(-rewound).reverse();
+    rewound=0;
+    for(const id of ids) {
+      const patch=patches.get(id);
+      patch.guard?.disconnect();
+      patches.delete(id);editOrder.splice(editOrder.indexOf(id),1);
+      let target;
+      try { target=describe(patch.inserted ? patch.anchor : patch.el,true) || undefined; } catch {}
+      send({kind:'undo',target,editId:id,value:JSON.stringify({editId:id})});
+    }
+  }
+  function rewindPatch(patch) {
+    if(patch.sheet) {
+      patch.guard?.disconnect();
+      document.adoptedStyleSheets=document.adoptedStyleSheets.filter(item=>item!==patch.sheet);
+      // Text the page has rewritten since is newer than this preview and stays.
+      for(const change of [...patch.texts].reverse()) {
+        change.held=!change.node.isConnected || change.node.nodeValue!==change.after;
+        if(change.held) continue;
+        if(change.created) {change.host=change.node.parentNode;change.node.remove();} else change.node.nodeValue=change.before;
+      }
+      return;
+    }
+    const el=patch.el;
+    if(patch.inserted) {
+      const nodes=treeNodes(el);
+      if(el.parentNode!==patch.container || nodes.length!==patch.nodes.length || nodes.some((node,index)=>node!==patch.nodes[index])) throw new Error('Created content changed after this preview');
+      swarm.settle(el);
+      patch.next=el.nextSibling;el.remove();
+      return;
+    }
+    if(resolve(patch.ref)!==el || sensitive(el)) throw new Error('The edited element is no longer safe to restore');
+    if(patch.hasText) {
+      const structure=[...el.childNodes];
+      if(structure.length!==patch.textStructure.length || structure.some((node,index)=>node!==patch.textStructure[index]) || patch.textNodes.some((node,index)=>node.nodeValue!==patch.afterText[index])) throw new Error('Page text changed after this edit');
+    }
+    if(patch.hasStyles && el.style.cssText!==patch.afterCssText) throw new Error('Page styles changed after this edit');
+    if(patch.hasAnimation) {
+      const current=ownedAnimations.get(el);
+      if(current?.token!==patch.afterAnimationToken) throw new Error('Preview animation changed after this edit');
+      checkAnimation(current);
+      patch.afterAnimation=animationSnapshot(current);
+    }
+    swarm.settle(el);
+    if(patch.hasText) {
+      if(patch.created) patch.textNodes[0].remove();
+      else patch.textNodes.forEach((node,index)=> { node.nodeValue=patch.beforeText[index]; });
+    }
+    if(patch.hasStyles) el.style.cssText=patch.beforeCssText;
+    if(patch.hasAnimation) applyAnimation(el,patch.beforeAnimation ? prepareAnimation(el,patch.beforeAnimation.config,patch.beforeAnimation,patch.beforeAnimation.token) : null);
+  }
+  function replayPatch(patch) {
+    if(patch.sheet) {
+      document.adoptedStyleSheets=[...document.adoptedStyleSheets,patch.sheet];
+      if(patch.pairHost) {
+        if(!patch.active()) {
+          document.adoptedStyleSheets=document.adoptedStyleSheets.filter(item=>item!==patch.sheet);
+          throw new Error('The elements this layout arranged have changed');
+        }
+        patch.watch();
+      }
+      for(const change of patch.texts) {
+        if(change.held) continue;
+        if(change.created) { if(change.host?.isConnected) change.host.appendChild(change.node); }
+        else if(change.node.isConnected && change.node.nodeValue===change.before) change.node.nodeValue=change.after;
+      }
+      return;
+    }
+    const el=patch.el;
+    if(patch.inserted) {
+      if(!patch.container.isConnected || (patch.next && patch.next.parentNode!==patch.container)) throw new Error('The place this element was added to has changed');
+      patch.container.insertBefore(el,patch.next || null);
+      return;
+    }
+    if(resolve(patch.ref)!==el || sensitive(el)) throw new Error('The edited element is no longer there');
+    if(patch.hasText && !patch.created && patch.textNodes.some((node,index)=>node.parentNode!==el || node.nodeValue!==patch.beforeText[index])) throw new Error('Page text changed since this edit was taken back');
+    if(patch.hasStyles && el.style.cssText!==patch.beforeCssText) throw new Error('Page styles changed since this edit was taken back');
+    swarm.settle(el);
+    if(patch.hasText) {
+      if(patch.created) el.appendChild(patch.textNodes[0]);
+      patch.textNodes.forEach((node,index)=> { node.nodeValue=patch.afterText[index]; });
+    }
+    if(patch.hasStyles) el.style.cssText=patch.afterCssText;
+    if(patch.hasAnimation) applyAnimation(el,patch.afterAnimation ? prepareAnimation(el,patch.afterAnimation.config,patch.afterAnimation,patch.afterAnimation.token) : null);
   }
   function textEditState(el) {
     if (sensitive(el)) return {editableText:false,editReason:'Sensitive fields cannot be edited.'};
@@ -703,7 +810,7 @@ export const browserPageSource = String.raw`(() => {
     const next=position==='prepend' ? anchor.firstChild : position==='before' ? anchor : position==='after' ? anchor.nextSibling : null;
     container.insertBefore(el,next);
     const element=describe(el), editId=docId+':edit:'+(++nextEditId);
-    patches.set(editId,{ref:element.ref,el,inserted:true,anchor,anchorRef:ref,container,nodes:treeNodes(el),after:el.cloneNode(true),fields:formStates(el)});
+    dropFuture();patches.set(editId,{ref:element.ref,el,inserted:true,anchor,anchorRef:ref,container,nodes:treeNodes(el),after:el.cloneNode(true),fields:formStates(el)});
     editOrder.push(editId);
     send({kind:'edit',target:element,editId,value:JSON.stringify({insert:insertion})});
     if(source==='agent') el.scrollIntoView({block:'nearest',inline:'nearest',behavior:'instant'});
@@ -819,7 +926,7 @@ export const browserPageSource = String.raw`(() => {
       if (!affected && sample.report && unchanged.length<20) unchanged.push(clean(sample.rule.selectorText,120));
     }
     const root=describe(document.documentElement), editId=docId+':edit:'+(++nextEditId);
-    patches.set(editId,{ref:root.ref,el:document.documentElement,sheet,texts:changed,witnesses});
+    dropFuture();patches.set(editId,{ref:root.ref,el:document.documentElement,sheet,texts:changed,witnesses});
     editOrder.push(editId);
     send({kind:'edit',target:root,editId,value:JSON.stringify({sheet:css,...(texts.length ? {texts} : {})})});
     // The cursors only withhold pixels of a page that is already restyled, so the answer does not wait for them.
@@ -914,9 +1021,10 @@ export const browserPageSource = String.raw`(() => {
       const at=editOrder.indexOf(id);if(at>=0)editOrder.splice(at,1);
       send({kind:'layout-invalidated',editId:id});
     });
-    for(const node of [document,host,...parents])guard.observe(node,{childList:true});
+    const watch=()=>{for(const node of [document,host,...parents])guard.observe(node,{childList:true});};
+    watch();
     const pair=[first,second];
-    patches.set(id,{ref:root.ref,el:document.documentElement,sheet,texts:[],pairHost:host,pair,guard,active});
+    dropFuture();patches.set(id,{ref:root.ref,el:document.documentElement,sheet,texts:[],pairHost:host,pair,guard,active,watch});
     editOrder.push(id);
     send({kind:'edit',target:root,editId:id,value:JSON.stringify({sheet:css})});
     feedback(request.ref,'applied');
@@ -1170,7 +1278,7 @@ export const browserPageSource = String.raw`(() => {
       const editId=request.editId || docId+':edit:'+(++nextEditId);
       if (!patch) {
         patch={ref:request.ref,el,hasStyles:true,beforeCssText:el.style.cssText,transient:true,styles:{},firstStyles:new Map()};
-        patches.set(editId,patch);editOrder.push(editId);
+        dropFuture();patches.set(editId,patch);editOrder.push(editId);
       }
       const fresh=Object.keys(styles).filter(name=>!patch.firstStyles.has(name));
       if(fresh.length) readSheetSample(el,fresh).forEach((value,i)=>patch.firstStyles.set(fresh[i],value));
@@ -1228,7 +1336,7 @@ export const browserPageSource = String.raw`(() => {
       const editId=docId+':edit:'+(++nextEditId);
       const afterText=textNodes.map(node=>node.nodeValue),afterCssText=el.style.cssText;
       const changed=textChanged || animationChanged || (beforeCssText!==afterCssText && sheetSampleChanged(el,styleKeys,previousStyles));
-      patches.set(editId,{ref:request.ref,el,textNodes,textStructure:[...el.childNodes],beforeText,created,hasText,afterText,hasStyles:entries.length>0,beforeCssText,afterCssText,hasAnimation,beforeAnimation,afterAnimationToken:prepared?.token,contentChanged:textChanged || animationChanged});
+      dropFuture();patches.set(editId,{ref:request.ref,el,textNodes,textStructure:[...el.childNodes],beforeText,created,hasText,afterText,hasStyles:entries.length>0,beforeCssText,afterCssText,hasAnimation,beforeAnimation,afterAnimationToken:prepared?.token,contentChanged:textChanged || animationChanged});
       editOrder.push(editId);
       send({kind:'edit',target:describe(el),editId,value:JSON.stringify({...(hasText ? {text:request.text} : {}),...(entries.length ? {styles} : {}),...(hasAnimation ? {animation} : {})})});
       if(changed) feedback(request.ref,'applied');
@@ -1238,9 +1346,25 @@ export const browserPageSource = String.raw`(() => {
     },
     restyle,
     layoutPair,
+    timeline: timelineState,
+    scrub(position) {
+      const ids=timelineIds(), target=Math.trunc(Number(position));
+      if(!Number.isFinite(target) || target<0 || target>ids.length) throw new Error('Invalid timeline position');
+      if(ids.length!==editOrder.length) throw new Error('A preview gesture is in progress');
+      let current=ids.length-rewound, blocked;
+      try {
+        while(current>target) { rewindPatch(patches.get(ids[current-1])); current--; }
+        while(current<target) { replayPatch(patches.get(ids[current])); current++; }
+      } catch (error) { blocked=clean(error?.message || error,200); }
+      rewound=ids.length-current;
+      refreshOverlays();
+      reportTimeline();
+      return {...timelineState(),...(blocked ? {blocked} : {})};
+    },
     layoutPairActive(id) { return patches.get(id)?.active?.()===true; },
     digest: limit=>swarm.truth(()=>digest(limit)),
     undo(editId) {
+      dropFuture();
       const id=editId===undefined ? editOrder[editOrder.length-1] : editId;
       const patch=patches.get(id);
       if (!patch) throw new Error('No active edit with this ID exists in the current document');

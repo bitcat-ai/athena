@@ -418,8 +418,53 @@ export interface BrowserState {
   inspecting: boolean;
   selectedElement?: ElementRef;
   previewEdits?: ElementPreview[];
+  /** The preview edits of the active page in order, for moving back and forth through them. */
+  timeline?: EditTimeline;
   elementControls?: ElementControlSurface;
   error?: string;
+}
+export const EDIT_TIMELINE_KINDS = ['text', 'style', 'animation', 'insert', 'restyle', 'layout'] as const;
+export interface EditTimelineEntry {
+  id: string;
+  kind: (typeof EDIT_TIMELINE_KINDS)[number];
+  /** What the edited element is called on the page; empty for a change to the whole page. */
+  name: string;
+  by: 'human' | 'agent';
+  at: number;
+}
+export interface EditTimeline {
+  /** How many of the entries the page currently shows, counted from the oldest. */
+  position: number;
+  entries: EditTimelineEntry[];
+  /** Why the page could not move all the way to the requested position. */
+  blocked?: string;
+}
+/** Page data arrives as text from the page's own script: keep only what the shape allows. */
+export function readEditTimeline(value: unknown): EditTimeline | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const { position, entries, blocked } = value as Record<string, unknown>;
+  if (!Array.isArray(entries) || entries.length > 500) return undefined;
+  const list: EditTimelineEntry[] = [];
+  for (const item of entries) {
+    if (!item || typeof item !== 'object') return undefined;
+    const { id, kind, name, by, at } = item as Record<string, unknown>;
+    if (typeof id !== 'string' || id.length > 200) return undefined;
+    if (!EDIT_TIMELINE_KINDS.includes(kind as EditTimelineEntry['kind'])) return undefined;
+    list.push({
+      id,
+      kind: kind as EditTimelineEntry['kind'],
+      name: typeof name === 'string' ? name.slice(0, 60) : '',
+      by: by === 'agent' ? 'agent' : 'human',
+      at: typeof at === 'number' && Number.isFinite(at) ? at : 0,
+    });
+  }
+  if (!Number.isSafeInteger(position) || (position as number) < 0 || (position as number) > list.length)
+    return undefined;
+  return {
+    position: position as number,
+    entries: list,
+    ...(typeof blocked === 'string' && blocked ? { blocked: blocked.slice(0, 200) } : {}),
+  };
 }
 export interface WebExecutorState {
   status: 'stopped' | 'starting' | 'ready' | 'error';
