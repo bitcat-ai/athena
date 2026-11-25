@@ -46,6 +46,8 @@ export const browserPageSource = String.raw`(() => {
   let hoverElement, selectedElement, feedbackElement, feedbackPhase, feedbackTimer;
   let feedbackAgent = false, agentCursor, cursorTarget, cursorMotion;
   let hoverPoint, overlayMute;
+  // After a person's own edit the frame steps aside so the result is seen as it is; the element stays selected.
+  let selectionResting=false;
   const overlayBoxes = {};
   const clean = (text, limit=180) => String(text ?? '').replace(/Bearer\s+\S+/gi, 'Bearer [hidden]').replace(/(?:sk-|ghp_|github_pat_)[A-Za-z0-9_-]+/g, '[hidden]').replace(/\b(password|secret|token|api[_-]?key)\s*[:=]\s*[^\s,;]+/gi, '$1=[hidden]').slice(0, limit);
   const parent = el => el.parentElement || (el.getRootNode() instanceof ShadowRoot ? el.getRootNode().host : null);
@@ -301,7 +303,7 @@ export const browserPageSource = String.raw`(() => {
     if(hoverElement && !hoverElement.isConnected) hoverElement=null;
     if(selectedElement && !selectedElement.isConnected) selectedElement=null;
     if(feedbackElement && !feedbackElement.isConnected) feedbackElement=null;
-    drawOverlay('selected',selectedElement);
+    drawOverlay('selected',selectionResting ? null : selectedElement);
     drawOverlay('hover',inspecting && hoverElement!==selectedElement ? hoverElement : null);
     drawOverlay('feedback',feedbackElement);
     drawAgentCursor();
@@ -343,6 +345,7 @@ export const browserPageSource = String.raw`(() => {
     else swarm.present({actor:source,targets:[spec.el || spec.near],gone:spec.gone,near:spec.near});
   }
   document.addEventListener('mousemove',event=>{
+    if(selectionResting && selectedElement && event.target instanceof Node && selectedElement.contains(event.target)) {selectionResting=false;refreshOverlays();}
     if(!inspecting) return;
     if(!hoverPoint) send({kind:'hover-frame'});
     hoverPoint={x:event.clientX,y:event.clientY};refreshOverlays();
@@ -1272,6 +1275,7 @@ export const browserPageSource = String.raw`(() => {
       if(feedbackElement===el) { clearTimeout(feedbackTimer);feedbackElement=null;feedbackPhase=null;refreshOverlays(); }
       if (sensitive(el) || blockedEditTags.has(el.localName.toUpperCase())) throw new Error('Sensitive or executable elements cannot be edited');
       const styles=validateStyles(request.styles);
+      if(source==='human' && el===selectedElement && !selectionResting) {selectionResting=true;refreshOverlays();}
       let patch=request.editId ? patches.get(request.editId) : undefined;
       if (request.editId && (!patch || !patch.transient || patch.el!==el || patch.ref!==request.ref || editOrder.at(-1)!==request.editId)) throw new Error('The preview gesture is stale');
       if (patch && el.style.cssText!==patch.afterCssText) throw new Error('Page styles changed during this gesture; refusing to overwrite newer changes');
@@ -1292,6 +1296,7 @@ export const browserPageSource = String.raw`(() => {
       const el=resolve(patch.ref);
       if (el!==patch.el || el.style.cssText!==patch.afterCssText) throw new Error('Page styles changed during this gesture; refusing to overwrite newer changes');
       patch.transient=false;
+      if(source==='human' && el===selectedElement) selectionResting=true;
       send({kind:'edit',target:describe(el),editId,value:JSON.stringify({styles:patch.styles})});
       const result={editId,element:inspect(patch.ref)};
       if(patch.beforeCssText!==patch.afterCssText && sheetSampleChanged(el,[...patch.firstStyles.keys()],[...patch.firstStyles.values()])) swarm.present({actor:source,targets:[el]});
@@ -1340,6 +1345,7 @@ export const browserPageSource = String.raw`(() => {
       editOrder.push(editId);
       send({kind:'edit',target:describe(el),editId,value:JSON.stringify({...(hasText ? {text:request.text} : {}),...(entries.length ? {styles} : {}),...(hasAnimation ? {animation} : {})})});
       if(changed) feedback(request.ref,'applied');
+      if(source==='human' && el===selectedElement) selectionResting=true;
       const result={editId,element:inspect(request.ref)};
       if(changed) presentElement({el,before,text:hasText && request.text ? textNodes[0] : null,was:beforeText[0],animation:!!animation});
       return result;
@@ -1445,7 +1451,9 @@ export const browserPageSource = String.raw`(() => {
       endFields(true);
     },
     outline(ref) {
-      selectedElement=ref ? resolve(ref) : null;refreshOverlays();
+      const next=ref ? resolve(ref) : null;
+      if(next!==selectedElement) selectionResting=false;
+      selectedElement=next;refreshOverlays();
     },
     // Page content for native web tools: readable text, not the accessibility tree.
     read(options={}) {
