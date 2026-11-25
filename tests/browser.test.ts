@@ -4,7 +4,7 @@ import { createServer } from 'node:http';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { BrowserRuntime, normalizeBrowserUrl, redactBrowserText } from '../src/main/browser';
+import { BROWSER_WORLD, BrowserRuntime, normalizeBrowserUrl, redactBrowserText } from '../src/main/browser';
 import type { BrowserFrame, ElementRef, RecordedStep, ElementAnimation } from '../src/shared/types';
 
 function jpegDimensions(frame: BrowserFrame): { width: number; height: number } {
@@ -1938,7 +1938,7 @@ test('frame channel migration discards cached IDs and ignores late events from t
     'A channel-local ID must never be sent to the new owner',
   );
   handlers.get('Runtime.executionContextCreated')!({
-    context: { id: 99, name: 'workbench-browser-observer', auxData: { frameId: 'frame' } },
+    context: { id: 99, name: BROWSER_WORLD, auxData: { frameId: 'frame' } },
   });
   assert.equal(frame.contextId, 99);
   handlers.get('Runtime.executionContextDestroyed')!({ executionContextId: 99 });
@@ -1948,7 +1948,7 @@ test('frame channel migration discards cached IDs and ignores late events from t
     'An old channel must not invalidate the new owner’s same numeric ID',
   );
   handlers.get('Runtime.executionContextCreated')!({
-    context: { id: 77, name: 'workbench-browser-observer', auxData: { frameId: 'frame' } },
+    context: { id: 77, name: BROWSER_WORLD, auxData: { frameId: 'frame' } },
   });
   assert.equal(frame.contextId, 99, 'Late old-world creation cannot replace the cache');
   let recorded = 0;

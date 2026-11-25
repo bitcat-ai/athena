@@ -10,7 +10,7 @@ import { homedir } from 'node:os';
 import { basename, extname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { createInterface } from 'node:readline';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { readEditTimeline } from '../shared/types';
 import type {
@@ -64,7 +64,12 @@ import { BrowserFrameSession, type BrowserChannel } from './browser-frame-sessio
 import { verifyCustomerMaterials, type RecordingVerification } from './recording-verification';
 
 const execFileAsync = promisify(execFile);
-const WORLD = 'workbench-browser-observer';
+// The world is named after the page script it holds. A page that was open while Athena was updated
+// still carries the earlier script in the earlier world; a new name gives it the current one at once.
+export const BROWSER_WORLD =
+  'workbench-browser-observer-' +
+  createHash('sha256').update(browserPageSource).digest('hex').slice(0, 12);
+const WORLD = BROWSER_WORLD;
 const PREVIEW_MAX_EDGE = 2048;
 const PREVIEW_INTERVAL = 1000 / 24;
 /** How long frames stay unpaced after an agent action ends: transitions and late paints. */
