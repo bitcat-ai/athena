@@ -373,7 +373,7 @@ export const browserPageSource = String.raw`(() => {
       const patch=patches.get(id);
       let name='';
       try { if(!patch.sheet && !privateTrial) name=describe(patch.el,true)?.name || ''; } catch {}
-      return {id,kind:patch.inserted ? 'insert' : patch.pairHost ? 'layout' : patch.sheet ? 'restyle' : patch.hasText ? 'text' : patch.hasAnimation && !patch.hasStyles ? 'animation' : 'style',
+      return {id,kind:patch.inserted ? 'insert' : patch.stress ? 'stress' : patch.pairHost ? 'layout' : patch.sheet ? 'restyle' : patch.hasText ? 'text' : patch.hasAnimation && !patch.hasStyles ? 'animation' : 'style',
         name:clean(name,60),by:patch.by==='agent' ? 'agent' : 'human',at:patch.at || 0};
     })};
   }
@@ -396,6 +396,7 @@ export const browserPageSource = String.raw`(() => {
   function rewindPatch(patch) {
     if(patch.sheet) {
       patch.guard?.disconnect();
+      stressMarks(patch,false);
       document.adoptedStyleSheets=document.adoptedStyleSheets.filter(item=>item!==patch.sheet);
       // Text the page has rewritten since is newer than this preview and stays.
       for(const change of [...patch.texts].reverse()) {
@@ -443,6 +444,7 @@ export const browserPageSource = String.raw`(() => {
         }
         patch.watch();
       }
+      stressMarks(patch,true);
       for(const change of patch.texts) {
         if(change.held) continue;
         if(change.created) { if(change.host?.isConnected) change.host.appendChild(change.node); }
@@ -936,6 +938,91 @@ export const browserPageSource = String.raw`(() => {
     if(!swarm.replay(source==='agent') && targets.size) swarm.present({actor:source,targets:[...targets]});
     return {applied:true,editId,element:root,rules:styled.length,matched:reached.size,unmatched,unchanged,dropped,texts:report()};
   }
+  // Extreme content for the page as it stands: every visible text is replaced by a harder case of itself,
+  // and what the layout does with it is measured. One page preview, taken back like any other.
+  const stressSkip=new Set(['SCRIPT','STYLE','NOSCRIPT','TEMPLATE','TEXTAREA','TITLE','OPTION','CODE','PRE']);
+  const stressAccents={a:'á',e:'é',i:'í',o:'ö',u:'ü',c:'ç',n:'ñ',y:'ý',A:'Á',E:'É',I:'Í',O:'Ö',U:'Ü',C:'Ç',N:'Ñ',Y:'Ý'};
+  const stressArabic=['هذا','نص','تجريبي','لاختبار','اتجاه','الصفحة','من','اليمين','إلى','اليسار','عنوان','زر','قائمة','مرحبا','بكم'];
+  const stressWrite={
+    long: text=>/\s/.test(text) || /[㐀-鿿]/.test(text) ? (text+' '+text+' '+text).slice(0,1200) : text+'Wolfeschlegelsteinhausenbergerdorff',
+    empty: ()=>'',
+    numbers: text=>/\d/.test(text) ? text.replace(/\d[\d,.]*\d|\d/g,run=>run.includes('.') ? '9,876,543,210.99' : '9,876,543,210') : null,
+    pseudo: text=>'['+text.replace(/[aeioucnyAEIOUCNY]/g,letter=>stressAccents[letter])+' '+'~'.repeat(Math.max(2,Math.ceil(text.length*0.4)))+']',
+    rtl: text=> { const words=[]; for(let length=0,i=0;length<text.length;i++){const word=stressArabic[(i*7+text.length)%stressArabic.length];words.push(word);length+=word.length+1;} return words.join(' '); },
+  };
+  function stressMeasure(el) {
+    const style=getComputedStyle(el), rect=el.getBoundingClientRect();
+    const host=el.parentElement, hostRect=host?.getBoundingClientRect(), hostStyle=host ? getComputedStyle(host) : null;
+    const next=el.nextElementSibling, nextRect=next && visible(next) && !['absolute','fixed'].includes(getComputedStyle(next).position) ? next.getBoundingClientRect() : null;
+    const cut=axis=>['hidden','clip'].includes(style['overflow'+axis]);
+    return {
+      height:rect.height,
+      clipped:(cut('X') && el.scrollWidth-el.clientWidth>1) || (cut('Y') && el.scrollHeight-el.clientHeight>1),
+      // Content wider than its own box, with nothing to cut it off: it runs over whatever is beside it.
+      spilled:style.overflowX==='visible' && el.clientWidth>0 && el.scrollWidth-el.clientWidth>1,
+      escaped:!!hostRect && hostStyle.overflowX==='visible' && !['absolute','fixed'].includes(style.position) && rect.width>0 && (rect.right>hostRect.right+1 || rect.left<hostRect.left-1),
+      overlap:!!nextRect && Math.min(rect.right,nextRect.right)-Math.max(rect.left,nextRect.left)>2 && Math.min(rect.bottom,nextRect.bottom)-Math.max(rect.top,nextRect.top)>2,
+    };
+  }
+  function stress(request) {
+    const refuse=reason=>({applied:false,reason});
+    const kind=request?.kind;
+    if(!Object.hasOwn(stressWrite,kind)) return refuse('Unknown kind of content');
+    if(!document.body) return refuse('The page has no content yet');
+    const write=stressWrite[kind], slots=[], owners=new Map();
+    const walker=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);
+    for(let node=walker.nextNode(); node && slots.length<1500; node=walker.nextNode()) {
+      const el=node.parentElement, value=node.nodeValue || '', text=value.trim();
+      if(!el || !text || stressSkip.has(el.tagName) || el.isContentEditable || el.closest('svg,[data-athena-stress]') || !visible(el) || sensitive(el)) continue;
+      let hidden=false;
+      for(let up=el; up && !hidden; up=up.parentElement) hidden=overlays.has(up);
+      if(hidden) continue;
+      const next=write(text);
+      if(next===null || next===text) continue;
+      slots.push({node,el,after:value.match(/^\s*/)[0]+next+value.match(/\s*$/)[0]});
+      if(!owners.has(el)) owners.set(el,clean(text,40));
+    }
+    if(!slots.length) return refuse(kind==='numbers' ? 'No numbers were found on this page' : 'No text was found on this page');
+    // The elements that hold the text, then the ones around them: a label breaks its button, a cell its row.
+    const watched=[...owners.keys()];
+    for(const el of [...watched]) { const host=el.parentElement; if(host && host!==document.body && !owners.has(host) && !watched.includes(host) && watched.length<900) watched.push(host); }
+    const before=new Map(watched.map(el=>[el,stressMeasure(el)]));
+    const wide=document.documentElement.scrollWidth-document.documentElement.clientWidth;
+    dropFuture();
+    const sheet=new CSSStyleSheet();
+    sheet.replaceSync('[data-athena-stress]{outline:2px solid #e5484d!important;outline-offset:2px!important}'+(kind==='rtl' ? 'html{direction:rtl!important}' : ''));
+    document.adoptedStyleSheets=[...document.adoptedStyleSheets,sheet];
+    const changed=[];
+    for(const slot of slots) { const prior=slot.node.nodeValue; slot.node.nodeValue=slot.after; changed.push({node:slot.node,before:prior,after:slot.after}); }
+    const issues=[], marks=[], flagged=new Map();
+    const flag=(el,problem)=> {
+      if(marks.length>=40 || flagged.has(el)) return;
+      // A broken label already says why its container looks broken.
+      if(marks.some(mark=>el.contains(mark.el) && mark.problem===problem)) return;
+      flagged.set(el,problem);marks.push({el,problem});
+      let was=owners.get(el);
+      if(was===undefined) for(const [owner,text] of owners) if(el.contains(owner)) { was=text; break; }
+      issues.push({problem,selector:clean(selector(el),160),tag:el.localName,was:was || '',mark:marks.length-1});
+    };
+    for(const el of watched) {
+      if(!el.isConnected) continue;
+      const now=stressMeasure(el), then=before.get(el);
+      if(now.clipped && !then.clipped) flag(el,'clipped');
+      else if((now.escaped && !then.escaped) || (now.spilled && !then.spilled)) flag(el,'overflow');
+      else if(now.overlap && !then.overlap) flag(el,'overlap');
+      else if(kind==='empty' ? then.height>=8 && now.height<2 && owners.has(el) && el.matches('button,a,[role="button"],th,td,li,label,h1,h2,h3,summary')
+        : then.height>0 && now.height>then.height*1.6 && el.matches('button,a,[role="button"],[role="tab"],label,th,summary,nav *')) flag(el,kind==='empty' ? 'collapsed' : 'wrapped');
+    }
+    for(const mark of marks) mark.el.setAttribute('data-athena-stress',mark.problem);
+    const pageWide=document.documentElement.scrollWidth-document.documentElement.clientWidth;
+    if(pageWide>1 && pageWide>wide+1) issues.unshift({problem:'page',selector:'html',tag:'html',was:''});
+    const root=describe(document.documentElement), editId=docId+':edit:'+(++nextEditId);
+    patches.set(editId,{ref:root.ref,el:document.documentElement,sheet,texts:changed,witnesses:[],stress:kind,marks});
+    editOrder.push(editId);
+    send({kind:'edit',target:root,editId,value:JSON.stringify({stress:kind})});
+    return {applied:true,editId,kind,replaced:changed.length,issues};
+  }
+  const stressMarks=(patch,on)=> { for(const mark of patch.marks || []) if(mark.el.isConnected) on ? mark.el.setAttribute('data-athena-stress',mark.problem) : mark.el.removeAttribute('data-athena-stress'); };
   // Place two adjacent business elements without moving their DOM or reflowing the other children into columns.
   function layoutPair(request) {
     const refuse=reason=>({applied:false,reason});
@@ -1044,6 +1131,7 @@ export const browserPageSource = String.raw`(() => {
       if(el) samples.push({el,names:witness.names,pseudo:witness.pseudo,before:readSheetSample(el,witness.names,witness.pseudo)});
     }
     const targets=new Set();
+    stressMarks(patch,false);
     document.adoptedStyleSheets=document.adoptedStyleSheets.filter(item=>item!==patch.sheet);
     // Text the page has rewritten since is newer than this preview and stays.
     let kept=0;
@@ -1056,7 +1144,9 @@ export const browserPageSource = String.raw`(() => {
     editOrder.splice(editOrder.indexOf(id),1);
     const root=describe(document.documentElement);
     send({kind:'undo',target:root,editId:id,value:JSON.stringify({editId:id})});
-    if(patch.pair) {
+    if(patch.stress) {
+      // Hundreds of texts go back at once: nothing to point at.
+    } else if(patch.pair) {
       const moved=patch.pair.some((el,i)=>{
         const rect=el.getBoundingClientRect();
         return ['x','y','width','height'].some(key=>Math.abs(rect[key]-from[i][key])>0.5);
@@ -1352,6 +1442,13 @@ export const browserPageSource = String.raw`(() => {
     },
     restyle,
     layoutPair,
+    stress,
+    stressReveal(editId,index) {
+      const mark=patches.get(editId)?.marks?.[index];
+      if(!mark?.el.isConnected) return false;
+      mark.el.scrollIntoView({block:'center',inline:'nearest',behavior:'instant'});
+      return true;
+    },
     timeline: timelineState,
     scrub(position) {
       const ids=timelineIds(), target=Math.trunc(Number(position));

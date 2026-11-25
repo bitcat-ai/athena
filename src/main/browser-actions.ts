@@ -132,6 +132,15 @@ export async function dispatchBrowserAction(
         pixelRatio: data.pixelRatio as number | undefined,
       });
     }
+    case 'browser:stress': {
+      const kind = record(payload).kind;
+      return browser.stress(kind === null ? null : string(kind, 40));
+    }
+    case 'browser:stress-reveal': {
+      const index = record(payload).index;
+      if (!Number.isSafeInteger(index)) throw new Error('位置无效');
+      return browser.stressReveal(index as number);
+    }
     case 'browser:remix': {
       const preset = record(payload).preset;
       if (preset !== null && typeof preset !== 'string') throw new Error('页面风格不正确');

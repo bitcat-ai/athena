@@ -1,0 +1,81 @@
+.stress-report {
+  min-height: 36px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.stress-report-lead {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink);
+}
+.stress-report[data-clean] .stress-report-lead {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--muted);
+}
+.stress-report-lead strong {
+  font-weight: 600;
+  color: var(--ink);
+}
+/* The findings give way first: the lead and the two actions always stay whole. */
+.stress-report-issues {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+}
+.stress-report .stress-issue {
+  flex: none;
+  height: 22px;
+  min-height: 22px;
+  padding-inline: 8px;
+  border-radius: var(--radius-button);
+  background: var(--surface-secondary);
+  color: var(--ink);
+  font-size: 11px;
+}
+.stress-report-actions {
+  flex: none;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.stress-report-actions button {
+  height: 22px;
+  min-height: 22px;
+  padding-inline: 8px;
+  border-radius: var(--radius-button);
+  font-size: 11px;
+}
+.stress-report .stress-fix {
+  background: var(--ink);
+  color: var(--accent-foreground);
+}
+.stress-report .stress-restore {
+  background: var(--surface-secondary);
+  color: var(--ink);
+}
+.stress-select .choice-select-trigger::before {
+  content: '试穿';
+  color: var(--faint);
+}
+.stress-select.is-original .choice-select-trigger::before {
+  color: inherit;
+}
+/* Until something is tried on, the name of the control is all it needs to show. */
+.stress-select.is-original .select__value {
+  display: none;
+}

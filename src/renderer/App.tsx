@@ -3711,6 +3711,10 @@ export default function App() {
                   }}
                 />
                 <BrowserPane
+                  onDraft={(text) => {
+                    setDraft(text);
+                    focusComposer();
+                  }}
                   immersiveVoice={voiceMode === 'browser'}
                   voiceAnchor={setBrowserVoiceAnchor}
                   state={browser}

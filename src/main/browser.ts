@@ -1,5 +1,6 @@
 import { validateElementControls, controlProperties } from '../shared/element-controls';
 import { PAGE_REMIXES } from '../shared/page-remix';
+import { PAGE_STRESSES, readStressIssues, type StressResult } from '../shared/page-stress';
 import { pageFacts, pageHints } from '../shared/page-hints';
 import type { SelectedLayout } from './selected-layout';
 import { spawn, execFile, type ChildProcess } from 'node:child_process';
@@ -534,6 +535,8 @@ interface TabSession {
   diagnostics: Array<{ time: number; kind: string; text: string }>;
   /** The ready-made look the page is shown in, as one of its preview edits. */
   remix?: { preset: string; editId: string };
+  /** The extreme content the main document is tried on with, as one of its preview edits. */
+  stress?: StressResult;
   /** The page outline read ahead of the next turn, with the document it describes. */
   outline?: { text: string; url: string; activation: number; at: number };
   outlineTimer?: ReturnType<typeof setTimeout>;
@@ -1025,6 +1028,7 @@ export class BrowserRuntime {
       tabs: this.listTabs(),
       activeTabId: tab?.info.id,
       timeline: tab?.timeline,
+      stress: tab && this.shownStress(tab),
       previewEdits:
         tab?.edits.flatMap((edit) => {
           const frame = tab.frames.get(edit.frameId);
@@ -4179,6 +4183,74 @@ export class BrowserRuntime {
     // The page as a whole changed: nothing is selected or outlined for it.
     this.update();
     return { ...evidence, editId };
+  }
+  /** The stress result while its edit is still on the page and the timeline is not holding it back. */
+  private shownStress(tab: TabSession): StressResult | undefined {
+    const edit = tab.stress && tab.edits.find((item) => item.id === tab.stress!.editId);
+    if (!edit) return undefined;
+    const at = tab.timeline?.entries.findIndex((entry) => entry.id === edit.localId) ?? -1;
+    return tab.timeline && at >= tab.timeline.position ? undefined : tab.stress;
+  }
+  /**
+   * Tries the active page on with extreme content, or puts its own content back. Nothing is sent
+   * to a model: the page's script rewrites the text and measures what the layout does with it.
+   */
+  stress(kind: string | null): Promise<StressResult | { kind: null }> {
+    const id = this.activeTab().info.id;
+    const chosen = kind === null ? undefined : PAGE_STRESSES.find((item) => item.id === kind);
+    if (kind !== null && !chosen) return Promise.reject(new Error('没有这种试穿内容'));
+    this.humanTakeover('undo');
+    return this.serialize(async () => {
+      const tab = this.requireActive(id);
+      const current = tab.stress && tab.edits.find((edit) => edit.id === tab.stress!.editId);
+      if (current) await this.undoInternal(tab, current.id, 'human');
+      tab.stress = undefined;
+      if (!chosen) {
+        this.update();
+        return { kind: null };
+      }
+      const frame = tab.frames.get(tab.mainFrameId);
+      if (!frame) throw new Error('页面尚未就绪');
+      await this.prepareFrame(tab, frame);
+      await this.setSource(tab, 'human', frame);
+      const result = await this.bridge(
+        tab,
+        frame,
+        `globalThis.__workbenchPage.stress(${JSON.stringify({ kind: chosen.id })})`,
+      );
+      if (!result.applied || typeof result.editId !== 'string')
+        throw new Error(
+          chosen.id === 'numbers' ? '这个页面上没有可以替换的数字' : '这个页面上没有可以替换的文字',
+        );
+      // No changes are recorded for it: a trial of the layout is not a change to land in source.
+      const editId = this.registerEdit(tab, frame, result.editId);
+      tab.stress = {
+        kind: chosen.id,
+        editId,
+        replaced: Number.isSafeInteger(result.replaced) ? result.replaced : 0,
+        issues: readStressIssues(result.issues),
+      };
+      this.update({ selectedElement: undefined });
+      return tab.stress;
+    });
+  }
+  /** Bring one of the marked weak spots into view. */
+  stressReveal(index: number): Promise<boolean> {
+    const id = this.activeTab().info.id;
+    if (!Number.isSafeInteger(index) || index < 0) return Promise.reject(new Error('位置无效'));
+    return this.serialize(async () => {
+      const tab = this.requireActive(id);
+      const edit = tab.stress && tab.edits.find((item) => item.id === tab.stress!.editId);
+      const frame = edit && tab.frames.get(edit.frameId);
+      if (!edit || !frame) return false;
+      return (
+        (await this.bridge(
+          tab,
+          frame,
+          `globalThis.__workbenchPage.stressReveal(${JSON.stringify(edit.localId)},${index})`,
+        )) === true
+      );
+    });
   }
   /**
    * Shows the active page in one of the ready-made looks, or as it was. A look is an ordinary

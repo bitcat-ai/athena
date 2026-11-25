@@ -35,6 +35,8 @@ import { PhaseGlyph } from './PhaseGlyph';
 import { SharePanel } from './SharePanel';
 import type { ShareState } from '../shared/share';
 import { EditTimeline } from './EditTimeline';
+import { StressReport } from './StressReport';
+import { PAGE_STRESSES, stressPrompt } from '../shared/page-stress';
 import type { EditTimeline as EditTimelineState } from '../shared/types';
 import './sharing.css';
 
@@ -45,6 +47,8 @@ interface Props {
   recordings: Recording[];
   liveSteps: RecordedStep[];
   onAction: <T = unknown>(action: string, payload?: unknown) => Promise<T>;
+  /** Put a request into the composer for the person to send. */
+  onDraft?: (text: string) => void;
   onOpenSettings: () => void;
   onAnalyze: (id: string) => void;
   onClose: () => void;
@@ -77,6 +81,7 @@ export function BrowserPane({
   recordings,
   liveSteps,
   onAction,
+  onDraft,
   onOpenSettings,
   onAnalyze,
   onClose,
@@ -115,6 +120,16 @@ export function BrowserPane({
   // A look is one of the page's preview edits; undoing that edit anywhere ends it here too.
   const [remix, setRemix] = useState<{ tabId: string; preset: string; editId: string }>();
   const [remixBusy, setRemixBusy] = useState(false);
+  const [stressBusy, setStressBusy] = useState(false);
+  const [stressNote, setStressNote] = useState('');
+  const tryOn = (kind: string | null) => {
+    setMode('page');
+    setStressBusy(true);
+    setStressNote('');
+    void onAction('browser:stress', { kind })
+      .catch((error) => setStressNote(error instanceof Error ? error.message : String(error)))
+      .finally(() => setStressBusy(false));
+  };
   const remixed =
     remix &&
     remix.tabId === state.activeTabId &&
@@ -982,6 +997,15 @@ export function BrowserPane({
               </ActionButton>
             </div>
           )}
+          {state.stress && !toolsCollapsed && (
+            <StressReport
+              result={state.stress}
+              disabled={!ready || state.loading || stressBusy}
+              onReveal={(mark) => void onAction('browser:stress-reveal', { index: mark })}
+              onFix={onDraft && (() => onDraft(stressPrompt(state.stress!)))}
+              onRestore={() => tryOn(null)}
+            />
+          )}
           {state.timeline && !toolsCollapsed && (
             <EditTimeline
               key={state.activeTabId}
@@ -999,6 +1023,19 @@ export function BrowserPane({
                   ? '正在连接'
                   : '未连接'}
             </span>
+            <ChoiceSelect
+              className={`viewport-select stress-select ${state.stress ? '' : 'is-original'}`}
+              triggerClassName="viewport-mode"
+              label="内容试穿"
+              title={stressNote || '把页面内容换成极端情况，看布局哪里撑不住；随时可恢复原样'}
+              value={state.stress?.kind ?? 'original'}
+              isDisabled={!ready || state.loading || stressBusy}
+              onChange={(value) => tryOn(value === 'original' ? null : value)}
+              options={[
+                { value: 'original', label: '原样' },
+                ...PAGE_STRESSES.map((item) => ({ value: item.id, label: item.label })),
+              ]}
+            />
             <ChoiceSelect
               className="viewport-select"
               triggerClassName="viewport-mode"

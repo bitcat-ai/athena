@@ -1,5 +1,6 @@
 import type { ElementControlSurface } from './element-controls';
 import type { PageHint } from './page-hints';
+import type { StressResult } from './page-stress';
 import type { WorkspaceSkill } from './skills';
 import type { TaskSelection } from './access';
 import type { RecordingWorkflow } from './recording-workflow';
@@ -420,10 +421,20 @@ export interface BrowserState {
   previewEdits?: ElementPreview[];
   /** The preview edits of the active page in order, for moving back and forth through them. */
   timeline?: EditTimeline;
+  /** The extreme content the active page is being tried on with, and what it broke. */
+  stress?: StressResult;
   elementControls?: ElementControlSurface;
   error?: string;
 }
-export const EDIT_TIMELINE_KINDS = ['text', 'style', 'animation', 'insert', 'restyle', 'layout'] as const;
+export const EDIT_TIMELINE_KINDS = [
+  'text',
+  'style',
+  'animation',
+  'insert',
+  'restyle',
+  'layout',
+  'stress',
+] as const;
 export interface EditTimelineEntry {
   id: string;
   kind: (typeof EDIT_TIMELINE_KINDS)[number];
