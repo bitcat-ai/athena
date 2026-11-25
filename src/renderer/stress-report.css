@@ -69,7 +69,7 @@
   color: var(--ink);
 }
 .stress-select .choice-select-trigger::before {
-  content: '试穿';
+  content: '压测';
   color: var(--faint);
 }
 .stress-select.is-original .choice-select-trigger::before {

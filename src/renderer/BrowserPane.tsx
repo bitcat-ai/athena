@@ -1026,7 +1026,7 @@ export function BrowserPane({
             <ChoiceSelect
               className={`viewport-select stress-select ${state.stress ? '' : 'is-original'}`}
               triggerClassName="viewport-mode"
-              label="内容试穿"
+              label="内容压测"
               title={stressNote || '把页面内容换成极端情况，看布局哪里撑不住；随时可恢复原样'}
               value={state.stress?.kind ?? 'original'}
               isDisabled={!ready || state.loading || stressBusy}

@@ -44,7 +44,7 @@ export function StressReport({
     <div
       className="stress-report"
       role="group"
-      aria-label={`试穿结果：${label}`}
+      aria-label={`压测结果：${label}`}
       data-clean={count === 0 || undefined}
     >
       <span className="stress-report-lead" role="status">

@@ -10,7 +10,7 @@ const kinds: Record<EditTimelineEntry['kind'], string> = {
   insert: '添加元素',
   restyle: '整页换风格',
   layout: '调整排布',
-  stress: '内容试穿',
+  stress: '内容压测',
 };
 const describe = (entry: EditTimelineEntry) =>
   `${entry.by === 'agent' ? 'Athena' : '你'} · ${kinds[entry.kind]}${entry.name ? `「${entry.name}」` : ''}`;

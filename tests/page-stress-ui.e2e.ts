@@ -73,7 +73,7 @@ try {
   await page.locator('button', { hasText: '打开浏览器' }).first().click();
   // The control sits in the status row, which stays one line with everything inside it.
   const tools = page.locator('.browser-status');
-  const picker = page.locator('[data-choice-label="内容试穿"]');
+  const picker = page.locator('[data-choice-label="内容压测"]');
   await expect(picker).toBeVisible();
   const row = (await tools.boundingBox())!;
   assert.ok(row.height <= 40, `the status row is one line (${row.height}px)`);
@@ -99,7 +99,7 @@ try {
   assert.equal((await snapshot()).browser.previewEdits?.length ?? 0, 0, 'a trial is not a change to land');
   const box = (await report.boundingBox())!;
   assert.ok(box.height <= 40, `the findings are one row (${box.height}px)`);
-  await expect(page.locator('.edit-timeline-label')).toContainText('内容试穿');
+  await expect(page.locator('.edit-timeline-label')).toContainText('内容压测');
   await page.waitForTimeout(400);
   await page.screenshot({ path: path.join(output, 'long.png') });
   checks.push('Long content is applied, the weak spots are counted and the timeline names the trial');

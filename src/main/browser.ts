@@ -2004,10 +2004,13 @@ export class BrowserRuntime {
       awaitPromise: true,
     });
     this.assertPreparedContext(tab, frame, prepared);
-    if (result.exceptionDetails)
-      throw new Error(
-        result.exceptionDetails.exception?.description || result.exceptionDetails.text,
-      );
+    if (result.exceptionDetails) {
+      const detail = result.exceptionDetails.exception?.description || result.exceptionDetails.text;
+      // A page opened before Athena was updated still carries the earlier page script.
+      if (/__workbenchPage\.\w+ is not a function/.test(detail))
+        throw new Error('这个页面是在 Athena 更新之前打开的，刷新页面后就可以使用');
+      throw new Error(detail);
+    }
     return result.result.value as T;
   }
   private mainFrame(tab: TabSession): FrameContext {
@@ -4198,7 +4201,7 @@ export class BrowserRuntime {
   stress(kind: string | null): Promise<StressResult | { kind: null }> {
     const id = this.activeTab().info.id;
     const chosen = kind === null ? undefined : PAGE_STRESSES.find((item) => item.id === kind);
-    if (kind !== null && !chosen) return Promise.reject(new Error('没有这种试穿内容'));
+    if (kind !== null && !chosen) return Promise.reject(new Error('没有这种压测内容'));
     this.humanTakeover('undo');
     return this.serialize(async () => {
       const tab = this.requireActive(id);
